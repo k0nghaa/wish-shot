@@ -1,1 +1,56 @@
 @import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Pretendard', sans-serif;
+
+  /* 브랜드 포인트 */
+  --color-primary: #6b8f71; /* Sage Green - 주요 버튼, 활성 상태 */
+  --color-primary-hover: #567260; /* 호버 상태 */
+  --color-primary-light: #ebf2ec; /* 배경 틴트 - 활성 탭 배경 등 */
+  --color-accent: #c4714a; /* Terracotta - 포인트 컬러 */
+
+  /* 실버 그레이 베이스 */
+  --color-bg: #f4f5f7; /* 전체 배경 */
+  --color-bg-card: #ffffff; /* 카드 배경 */
+  --color-silver: #e8eaed; /* 카드 테두리, 구분선 */
+  --color-silver-dark: #c4c8cf; /* 비활성 아이콘, 보조 요소 */
+
+  /* 텍스트 */
+  --color-text-main: #1c1c1e; /* 제목, 주요 텍스트 */
+  --color-text-sub: #6b7280; /* 부제목, 설명 */
+  --color-text-disabled: #9ca3af; /* 비활성 텍스트, placeholder */
+
+  /* 기능성 */
+  --color-success: #22c55e; /* 저장 완료, 분석 성공 */
+  --color-error: #ef4444; /* 에러 인풋 테두리, 에러 메시지 */
+  --color-warning: #f59e0b; /* 로딩 중, 주의 상태 */
+}
+
+@layer base {
+  body {
+    @apply font-sans text-base text-[var(--color-text-main)] bg-[var(--color-bg)];
+  }
+
+  h1 {
+    @apply text-3xl font-bold leading-tight;
+  }
+  h2 {
+    @apply text-2xl font-bold leading-tight;
+  }
+  h3 {
+    @apply text-xl font-semibold leading-snug;
+  }
+  h4 {
+    @apply text-lg font-semibold leading-snug;
+  }
+  p {
+    @apply text-base leading-relaxed;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+  a {
+    @apply cursor-pointer;
+  }
+}
