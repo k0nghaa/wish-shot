@@ -3,6 +3,8 @@
 @theme {
   --font-sans: 'Pretendard', sans-serif;
 
+  --breakpoint-lg: 1024px;
+
   /* 브랜드 포인트 */
   --color-primary: #6b8f71; /* Sage Green - 주요 버튼, 활성 상태 */
   --color-primary-hover: #567260; /* 호버 상태 */
