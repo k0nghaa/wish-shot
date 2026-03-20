@@ -10,7 +10,7 @@ router.get('/', (req, res) => {
       `
     SELECT c.*, COUNT(p.id) as item_count
     FROM categories c
-    INNER JOIN products p ON p.category_id = c.id
+    LEFT JOIN products p ON p.category_id = c.id
     GROUP BY c.id
   `
     )
