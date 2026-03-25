@@ -2,13 +2,15 @@
 
 import { CategoryPage } from './CategoryPage';
 import { ProductPage } from './ProductPage';
+import { UploadPage } from './UploadPage';
 
 export default function TestPage() {
   return (
     <>
       {/* <CategoryPage /> */}
       {/* <ProductPage /> */}
-      <ProductPage categoryId={5} categoryName="전자기기" />
+      <ProductPage categoryId={1} categoryName="뷰티" />
+      {/* <UploadPage /> */}
     </>
   );
 }
