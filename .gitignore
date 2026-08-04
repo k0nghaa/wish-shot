@@ -26,3 +26,7 @@ dist-ssr
 # backend/.gitignore
 uploads/
 *.db
+
+# ouroboros
+.omc/
+!.omc/skills/
