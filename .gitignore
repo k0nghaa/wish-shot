@@ -28,5 +28,6 @@ uploads/
 *.db
 
 # ouroboros
-.omc/
-!.omc/skills/
+.omc/*
+# 추후 해당 스킬 공유 시 활성화
+# !.omc/skills/
