@@ -8,16 +8,27 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "next-dev": "next dev",
+    "next-build": "next build",
+    "next-start": "next start",
+    "migrate": "tsx scripts/migrate.ts",
+    "migrate:check": "tsc --project tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.4.2",
+    "jose": "^6.2.8",
+    "next": "^16.3.0",
+    "postgres": "^3.4.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -27,8 +38,12 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "prettier": "^3.8.1",
+    "tsx": "^4.23.7",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
   }
 }

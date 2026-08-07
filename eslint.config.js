@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', '.next', 'next-env.d.ts']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -22,6 +22,15 @@ export default defineConfig([
     rules: {
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    // Next.js App Router files legitimately export non-component values
+    // (metadata, Server Actions, route config) alongside a default
+    // component export; the Vite Fast Refresh rule doesn't apply here.
+    files: ['app/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ]);

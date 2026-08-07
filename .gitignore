@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Next.js
+.next/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -26,3 +29,13 @@ dist-ssr
 # backend/.gitignore
 uploads/
 *.db
+
+# ouroboros
+.omc/*
+# 추후 해당 스킬 공유 시 활성화
+# !.omc/skills/
+.ouroboros/
+.ouroboros_eval_artifact.md
+
+# claude
+claude-logs/
