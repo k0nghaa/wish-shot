@@ -1,0 +1,159 @@
+# Reconstructed from seed_4e3ecd029267 lineage (interview_20260803_023351).
+# See round-1-migration-auth.yaml for provenance notes.
+#
+# ROUND 2 of 3: builds on Round 1 (Postgres data + owner login). Delivers
+# the three real screens and category-name-uniqueness parity. Image
+# migration (Storage) and full integrity verification are Round 3.
+#
+# Execution policy: efficiency_mode=quality_first, frugality_assurance=off
+# predecessor_execution_id: exec_dc486fce9c5d
+#
+# --- Round 1 launch record (for reference/traceability) ---
+# round1_seed_id: seed_14dbd5bedad9
+# round1_session_id: orch_ea53f76933ee
+# round1_execution_id: exec_dc486fce9c5d
+# round1_status: completed (2/2 AC), manual lint+build verified OK
+#   (ooo evaluate Stage 1 blocked by an environment bug on this machine:
+#   the evaluator spawns `npm` without shell resolution, so it fails with
+#   WinError 2 on Windows even though `npm run lint`/`npm run build` both
+#   pass with exit code 0 when run directly. Not a code issue — just
+#   re-verify manually via Bash if `ooo evaluate` fails identically again.)
+
+goal: >
+  Round 2 of 3 — On top of the Postgres schema/data and owner login gate
+  from Round 1, deliver the three real WishShot screens (CategoryPage,
+  ProductPage, UploadPage equivalents) as Next.js App Router Server
+  Components + a single Server Action for product creation, and enforce
+  category-name-uniqueness parity (Postgres 23505 -> existing Korean 409
+  response). Old Vite hooks and Express routes are removed.
+
+task_type: code
+
+parent_seed:
+  seed_id: seed_4e3ecd029267
+  interview_id: interview_20260803_023351
+  round: 2
+  total_rounds: 3
+  reconstructed: true
+  reconstruction_source: "~/.ouroboros/seed-revisions/interview_20260803_023351.md"
+  depends_on_round: 1
+
+brownfield_context:
+  project_type: brownfield
+  context_references:
+    - path: "C:\\Users\\user\\wish-shot"
+      role: primary
+      summary: >
+        Monorepo containing the Vite SPA frontend (src/) and Express +
+        better-sqlite3 backend (backend/) being migrated; by this round the
+        Next.js app + Postgres data + login gate from Round 1 already exist
+    - path: src/pages/CategoryPage.tsx
+      role: reference
+      summary: Current category list screen (item_count via LEFT JOIN/GROUP BY) to be reimplemented as a Server Component
+    - path: src/pages/ProductPage.tsx
+      role: reference
+      summary: Current product list screen (optional category_id filter) to be reimplemented as a Server Component
+    - path: src/pages/UploadPage.tsx
+      role: reference
+      summary: Current upload screen to be reimplemented as a Server Action-backed form
+    - path: backend/src/routes/products.ts
+      role: reference
+      summary: >
+        Multer upload config (MIME filter image/jpeg,image/png,image/webp,
+        no size limit, Korean error) to be ported into the Server Action's
+        validation logic
+    - path: backend/src/routes/categories.ts
+      role: reference
+      summary: Category creation returning 409 on duplicate name — behavior to preserve via Postgres UNIQUE + 23505 mapping
+  existing_patterns:
+    - Server-mediated data access (frontend never talks to the DB directly)
+    - All user-facing strings (errors, labels) in Korean
+    - Images stored server-side and referenced by path (Storage/signed URLs land in Round 3 — use a placeholder/local path for now if needed)
+    - Category name uniqueness enforced with 409 on duplicate
+    - Upload MIME restricted to jpeg/png/webp with no size limit
+  existing_dependencies:
+    - pg / postgres.js (DB access layer from Round 1, reused here)
+    - Next.js App Router (Server Components + Server Actions)
+    - React 19 + TypeScript
+    - Tailwind CSS v4 with @theme semantic tokens (text-main, text-sub, bg-card, silver, primary, accent, error, etc.) — port from src/index.css, do not reintroduce raw Tailwind palette colors
+
+constraints:
+  - "Data access is server-mediated via Next.js Server Components/Server Actions/Route Handlers using the Supabase service-role key, never client-direct supabase-js"
+  - "Every query applies an explicit server-side WHERE user_id = <owner UID> filter (owner UID established by Round 1's login gate)"
+  - "Old useCategories/useProducts/useImageUpload hooks and all old Express backend routes are fully removed once their Next.js equivalents are in place"
+  - "Image upload MIME validation restricted to image/jpeg,image/png,image/webp with no size limit; rejection returns the Korean error \"JPG, PNG, WEBP 형식만 업로드 가능해요.\""
+  - "Category name uniqueness is enforced at the Postgres layer; a duplicate-name creation attempt (Postgres error 23505) is translated to the existing Korean 409 response"
+  - "All user-facing strings (errors, labels) remain in Korean"
+  - "Design-system consistency: use semantic Tailwind color tokens, not raw Tailwind palette colors"
+  - "Actual image rendering may use a temporary/local reference in this round — signed-URL-based Storage rendering is finalized in Round 3; do not block this round's Server Components on Storage being wired up"
+
+acceptance_criteria:
+  - description: >
+      The three screens (CategoryPage/ProductPage/UploadPage equivalents)
+      render in the Next.js App Router, with list reads served by Server
+      Components (each category displaying its correct item_count) and
+      product creation handled by a single Server Action accepting
+      FormData with image MIME validation restricted to
+      image/jpeg,image/png,image/webp (Korean error on rejection, no size
+      limit); the old useCategories/useProducts/useImageUpload hooks and
+      old Express routes are removed
+    semantic_ac_key: ac_ce5197f79012585b
+    expected_artifacts:
+      - app
+      - package.json
+      - docs/e2e-checklist.md
+  - description: >
+      Category name uniqueness is enforced at the Postgres layer and a
+      duplicate-name creation attempt (Postgres error 23505) is translated
+      to the existing Korean 409 response, matching current behavior
+    semantic_ac_key: ac_30abcb4abce06bd6
+    expected_artifacts:
+      - app
+      - docs/e2e-checklist.md
+
+ontology_schema:
+  name: WishShotMigrationRound2
+  description: >
+    The three-screen UI layer and category-uniqueness behavior built on top
+    of Round 1's data + auth foundation.
+  fields:
+    - name: category
+      type: object
+      description: A wishlist category row with unique name and derived item_count
+      required: true
+    - name: product
+      type: object
+      description: A wishlist product row referencing a category, owner-scoped by user_id
+      required: true
+    - name: server_action_submission
+      type: object
+      description: A FormData submission to the product-creation Server Action, including MIME validation outcome
+      required: true
+
+evaluation_principles:
+  - name: behavior_parity
+    description: Existing user-facing behavior (MIME validation, category 409 uniqueness, Korean error strings) is retained without adding new features
+    weight: 0.9
+  - name: architecture_alignment
+    description: Server-mediated access via Server Components/Server Actions with service-role key and explicit user_id filtering
+    weight: 0.8
+  - name: scope_discipline
+    description: No new features beyond the documented three screens and category constraint; no Storage/signed-URL work (Round 3)
+    weight: 0.7
+
+exit_conditions:
+  - name: round2_verified
+    description: All three screens are browsable end-to-end with real Postgres data, and category uniqueness returns the correct Korean 409
+    criteria: >
+      Manual E2E checklist confirms category list (with item_count),
+      product list/filter, and product creation via the Server Action all
+      work, and creating a duplicate category name returns the Korean 409
+      error
+
+metadata:
+  round: 2
+  total_rounds: 3
+  parent_seed_id: seed_4e3ecd029267
+  interview_id: interview_20260803_023351
+  ambiguity_score: 0.0645
+  reconstructed: true

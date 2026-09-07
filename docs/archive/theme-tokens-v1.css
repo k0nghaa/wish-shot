@@ -1,4 +1,12 @@
-@import 'tailwindcss';
+/*
+ * WishShot v1 디자인 토큰 (보존용)
+ *
+ * 옛 웹(Vite + Tailwind) `src/index.css`의 @theme 팔레트를 삭제 전에 보존한 기록입니다.
+ * Phase 1 Step 2에서 이 값들을 `constants/theme.ts`의 시맨틱 토큰으로 이식합니다.
+ * (세이지 그린 primary / 테라코타 accent / 실버 그레이 뉴트럴)
+ *
+ * 원본: web-v0 태그 `src/index.css`
+ */
 
 @theme {
   --font-sans: 'Pretendard', sans-serif;
@@ -26,33 +34,4 @@
   --color-success: #22c55e; /* 저장 완료, 분석 성공 */
   --color-error: #ef4444; /* 에러 인풋 테두리, 에러 메시지 */
   --color-warning: #f59e0b; /* 로딩 중, 주의 상태 */
-}
-
-@layer base {
-  body {
-    @apply font-sans text-base text-[var(--color-text-main)] bg-[var(--color-bg)];
-  }
-
-  h1 {
-    @apply text-3xl font-bold leading-tight;
-  }
-  h2 {
-    @apply text-2xl font-bold leading-tight;
-  }
-  h3 {
-    @apply text-xl font-semibold leading-snug;
-  }
-  h4 {
-    @apply text-lg font-semibold leading-snug;
-  }
-  p {
-    @apply text-base leading-relaxed;
-  }
-
-  button {
-    @apply cursor-pointer;
-  }
-  a {
-    @apply cursor-pointer;
-  }
 }
