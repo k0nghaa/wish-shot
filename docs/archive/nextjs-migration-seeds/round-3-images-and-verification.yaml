@@ -1,0 +1,139 @@
+# Reconstructed from seed_4e3ecd029267 lineage (interview_20260803_023351).
+# See round-1-migration-auth.yaml for provenance notes.
+#
+# ROUND 3 of 3: builds on Round 1 (data/auth) and Round 2 (screens/category
+# rule). Delivers image migration to Supabase Storage and the combined
+# integrity verification script. Completing this round completes the seed
+# lineage's full goal.
+#
+# Execution policy: efficiency_mode=quality_first, frugality_assurance=off
+# predecessor_execution_id: <fill in with Round 2's execution_id before running>
+
+goal: >
+  Round 3 of 3 — Migrate legacy backend/uploads/ image files byte-for-byte
+  into a private Supabase Storage bucket, serve them via server-minted
+  signed URLs (1-hour TTL), and produce a combined verification script
+  proving row-count parity, bidirectional file-reference integrity, and
+  checksum equality between the source SQLite/uploads/ and the migrated
+  Postgres/Storage data. Completing this round completes the WishShot
+  Next.js + Supabase migration.
+
+task_type: code
+
+parent_seed:
+  seed_id: seed_4e3ecd029267
+  interview_id: interview_20260803_023351
+  round: 3
+  total_rounds: 3
+  reconstructed: true
+  reconstruction_source: "~/.ouroboros/seed-revisions/interview_20260803_023351.md"
+  depends_on_round: 2
+
+brownfield_context:
+  project_type: brownfield
+  context_references:
+    - path: "C:\\Users\\user\\wish-shot"
+      role: primary
+      summary: >
+        Monorepo containing the Vite SPA frontend (src/) and Express +
+        better-sqlite3 backend (backend/) being migrated; by this round the
+        Next.js app, Postgres data, login gate, screens, and category rule
+        from Rounds 1-2 already exist
+    - path: backend/uploads/
+      role: reference
+      summary: Source directory of uploaded images referenced by relative path in products, to be migrated byte-for-byte
+    - path: backend/wishlist.db
+      role: reference
+      summary: Source SQLite database, kept as backup until this round's verification passes
+    - path: docs/architecture-plan.md
+      role: reference
+      summary: Its sharp resize/compression line is explicitly overridden by this Seed lineage — no re-encoding, byte-for-byte only
+  existing_patterns:
+    - Images stored server-side and referenced by path, rendered by prefixing a backend origin (legacy) — replaced by signed URLs in this round
+  existing_dependencies:
+    - supabase-js (Storage-only: signed URL generation and byte-for-byte upload; not used for DB or Auth, per Round 1's constraint)
+    - Next.js <Image> optimization is explicitly out of scope; use unoptimized or a plain <img> tag
+
+constraints:
+  - "Images are migrated and stored byte-for-byte with NO resize/compression pipeline, for both legacy files and new uploads"
+  - "Supabase Storage bucket is PRIVATE; images are served only via server-minted signed URLs with a 1-hour TTL"
+  - "Next.js <Image> optimization is out of scope; images use unoptimized or a plain <img> tag"
+  - "backend/wishlist.db and backend/uploads/ are kept untouched on disk until this round's verification script passes and the user personally reviews any orphan report; deletion waits a minimum 72 hours (3 days) after a clean pass"
+  - "Local Supabase Docker stack must not be wiped (no `supabase db reset` / `supabase stop --no-backup`) during the 72-hour post-success review window — EXCEPT that a wipe-and-retry is allowed if migration fails before a clean verification pass"
+  - "The verification script collects orphans into a report without aborting the run"
+  - "All user-facing strings (errors, labels) remain in Korean"
+
+acceptance_criteria:
+  - description: >
+      Legacy backend/uploads/ image files are migrated byte-for-byte via
+      supabase-js into a PRIVATE Supabase Storage bucket with no
+      re-encoding, and products render their images via server-minted
+      signed URLs (1-hour TTL) using unoptimized/plain img
+    semantic_ac_key: ac_a64aba4d7025d845
+    expected_artifacts:
+      - scripts/migrate.ts
+      - app
+      - docs/e2e-checklist.md
+  - description: >
+      A single combined verification script proves migration correctness —
+      row-count parity for categories/products, bidirectional file-reference
+      check (every product image path has a Storage object and every
+      Storage object has a product row), and checksum comparison between
+      each original file and its migrated counterpart — collecting orphans
+      into a report without aborting
+    semantic_ac_key: ac_bb657146ab2e4b49
+    expected_artifacts:
+      - scripts/verify.ts
+
+ontology_schema:
+  name: WishShotMigrationRound3
+  description: >
+    Image asset migration and end-to-end verification, completing the
+    WishShot migration lineage.
+  fields:
+    - name: image_asset
+      type: object
+      description: An uploaded image file migrated byte-for-byte from disk into a private Supabase Storage bucket
+      required: true
+    - name: signed_url
+      type: string
+      description: A short-lived (1-hour TTL) server-minted URL used to render a private Storage image
+      required: true
+    - name: verification_report
+      type: object
+      description: Combined output of row-count parity, bidirectional reference check, and checksum comparison, including any orphans
+      required: true
+    - name: orphan
+      type: object
+      description: A products row whose image file is missing on disk, or an uploads/ file with no matching product row
+      required: true
+
+evaluation_principles:
+  - name: data_fidelity
+    description: Migrated byte-for-byte Storage files exactly match the uploads/ source, proven by checksums
+    weight: 1.0
+  - name: security_posture
+    description: Private bucket with signed URLs ensures images are never publicly reachable without authentication
+    weight: 0.9
+  - name: safety_of_backups
+    description: Source SQLite DB and uploads/ remain untouched until verification passes and the orphan report is personally reviewed
+    weight: 0.8
+
+exit_conditions:
+  - name: migration_verified
+    description: The combined verification script passes with row-count parity, bidirectional reference match, and checksum equality
+    criteria: Script reports a clean pass and any orphans are captured in the report
+  - name: system_complete
+    description: Login works end-to-end, all three pages render, old hooks/routes are removed, images render via signed URLs
+    criteria: All Round 1-3 acceptance criteria met
+  - name: backups_reviewed
+    description: User has personally reviewed the orphan report (if any) before any backup deletion
+    criteria: Human review recorded and mandatory 72-hour wait period observed
+
+metadata:
+  round: 3
+  total_rounds: 3
+  parent_seed_id: seed_4e3ecd029267
+  interview_id: interview_20260803_023351
+  ambiguity_score: 0.0645
+  reconstructed: true

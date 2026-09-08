@@ -1,50 +1,59 @@
 # CLAUDE.md
 
-이 파일은 이 저장소에서 작업하는 Claude Code (claude.ai/code)에게 제공하는 가이드입니다.
+이 파일은 이 저장소에서 작업하는 Claude Code에게 제공하는 가이드입니다.
+
+> **⚠️ 전환기 문서**: 이 저장소는 웹(Vite + Express + SQLite)에서 **iOS 네이티브 앱(Expo + Supabase)** 으로 전환 중입니다. 아래 내용은 전환 작업 기간 동안의 기준이며, Phase 1이 끝나면 실제 구조를 반영해 다시 씁니다. 아직 존재하지 않는 파일·명령어를 이 문서가 있다고 말하지 않도록 유지하세요.
 
 ## 프로젝트 개요
 
-WishShot(위시샷)은 개인 위시리스트 앱입니다: 사용자가 제품(스크린샷/이미지 포함)을 카테고리별로 저장합니다. 루트에 공유 스크립트가 없는 2개 패키지 모노레포로, 프론트엔드와 백엔드를 각각 독립적으로 실행/빌드합니다.
+WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고리별 개인 위시리스트로 관리하는 **iOS 앱**입니다. 홈 화면 아이콘으로 여는 일반 앱이 본체이며, iOS 공유 시트(Share Extension)에서 스크린샷을 바로 받아 등록하는 진입 경로를 갖습니다. 웹 버전은 목표에서 제외되었습니다.
 
-## 예정된 마이그레이션
+- 제품 요구사항: 노션 「WishShot — 스크린샷으로 시작되는 개인 위시리스트」(v1 PRD, v2 PRD 작성 중)
+- 기술 결정: 노션 「WishShot v2 — 플랫폼·아키텍처 결정 문서 (Expo + Supabase)」
+- 현재 작업 지시서: `docs/phases/phase-1-toolchain.md`
 
-이 프로젝트는 현재 구조(Vite + Express + SQLite)에서 **Next.js + Supabase**로 전환한 뒤, 사용량이 실제로 임계치에 도달하면 **Neon / Cloudflare R2 / Auth.js**로 부분 전환하는 마이그레이션을 계획 중입니다. 아래 "아키텍처" 절은 **마이그레이션 이전, 현재 코드 기준 설명**입니다. 결정 배경, 채택하지 않은 대안, 모니터링 트리거 조건, 마이그레이션 순서는 `docs/architecture-plan.md`를 참고하세요.
+## 현재 상태
+
+- `web-v0` 태그: 옛 웹 코드(Vite SPA + Express + SQLite)의 보존점. 참고가 필요하면 `git show web-v0:<path>`로 읽는다. 이 코드를 되살리거나 수정하지 않는다.
+- `refactor/architecture` 브랜치: 폐기된 Next.js 마이그레이션 시도. 병합하지 않는다.
+- `docs/archive/`: 폐기된 계획(Next.js 아키텍처 문서, seed YAML)과 재사용 예정 자산(`migrate-sqlite-to-supabase.ts`, v1 로고). **참고용이며 지시가 아니다.** 특히 `nextjs-migration-seeds/`의 Round 2·3은 수행 대상이 아니다.
+- 루트: Phase 1 진행에 따라 Expo 프로젝트가 생성된다. 생성 전에는 앱 코드가 없는 것이 정상이다.
+
+## 목표 아키텍처 (Phase 1~4에 걸쳐 도달)
+
+- **앱**: Expo(React Native) + Expo Router + TypeScript. iOS 우선.
+- **백엔드**: 별도 서버 없음. `@supabase/supabase-js`로 Supabase(Postgres + Storage + Auth)를 직접 호출하고, 행 단위 권한은 RLS로 강제. API 키가 필요한 LLM 정제만 Supabase Edge Function 1개.
+- **OCR**: 온디바이스(Google ML Kit). `OcrEngine` 인터페이스 뒤에 캡슐화 (Phase 3).
+- **빌드**: 윈도우 PC에서 EAS 클라우드 빌드 → 아이폰 개발 빌드 → TestFlight. 로컬에 Xcode/Mac 없음.
+
+## 작업 규칙
+
+1. **Next.js·Express·Vite를 도입하지 않는다.** 서버가 필요해 보이면 Supabase Edge Function 또는 DB 함수로 해결하고, 그것도 애매하면 사람에게 묻는다.
+2. **비밀 값은 앱에 넣지 않는다.** 앱에는 Supabase `anon` 키만. `service_role` 키, Claude API 키는 Edge Function 환경 변수에만 존재한다. `.env*`는 커밋 금지, `.env.example`만 커밋.
+3. **네이티브 의존성 변경은 재빌드를 의미한다.** 네이티브 모듈(config plugin이 있는 패키지)을 추가·제거·업그레이드하면 EAS 재빌드가 필요하다. 지시서에 정해진 시점에 모아서 추가하고, 임의로 추가하지 않는다. JS 전용 패키지는 자유.
+4. **모든 사용자 노출 문자열은 한국어.** 에러 메시지, 라벨, 플레이스홀더, 접근성 라벨 포함. 기존 톤("~예요/~해요" 체, 예: "제품명은 필수예요.") 유지.
+5. **디자인 토큰을 쓴다.** 색상은 `constants/theme.ts`의 시맨틱 토큰(`primary`, `accent`, `error`, `textMain`, `textSub`, `textDisabled`, `bgCard`, `silver` 등 — v1 팔레트 승계: 세이지 그린 / 테라코타 / 실버 그레이)만 사용. 컴포넌트에 원시 hex를 직접 쓰지 않는다.
+6. **모르면 만들어내지 않는다.** 패키지 버전·Expo SDK 호환·EAS 설정 필드가 불확실하면 공식 문서를 확인하거나 사람에게 묻는다. 아이폰 설치·공유 시트 동작은 에이전트가 검증할 수 없으므로 "확인해달라"고 명시적으로 요청한다.
+7. **커밋 메시지는 기존 컨벤션**: `feat:`, `fix:`, `chore:`, `docs:`, `style:`, `refactor:`, `test:` + 한국어 요약.
+8. **문서를 현실에 맞춘다.** 구조나 명령어가 바뀌면 이 파일과 `README.md`를 같은 커밋에서 갱신한다.
 
 ## 명령어
 
-### 프론트엔드 (루트 디렉터리)
-- `npm run dev` — Vite 개발 서버 실행 (http://localhost:5173)
-- `npm run build` — 타입 체크(`tsc -b`) 후 Vite로 빌드
-- `npm run lint` — ESLint 실행
-- `npm run format` — 저장소 전체에 Prettier 적용
-- 테스트 러너는 설정되어 있지 않습니다.
+Phase 1 Step 2 이후 사용 가능. 그 전에는 실행할 것이 없다.
 
-### 백엔드 (`backend/`)
-- `npm run dev` — nodemon + ts-node로 API 서버 실행 (http://localhost:4000)
-- `npm run build` — `tsc`로 `backend/dist`에 컴파일
-- `npm start` — 컴파일된 서버 실행 (`node dist/index.js`)
-- 백엔드에는 lint나 테스트 스크립트가 설정되어 있지 않습니다.
+- `npx expo start` — 개발 서버 (Step 4 전까지는 Expo Go로 접속 가능)
+- `npx expo start --dev-client` — 개발 빌드가 설치된 아이폰으로 접속 (Step 5 이후)
+- `npx tsc --noEmit` — 타입 체크
+- `npx expo lint` — ESLint
+- `npx prettier --write .` — 포맷
+- `npx eas build --platform ios --profile development` — 개발 빌드 (Apple 인증 프롬프트가 있으므로 사람이 실행)
 
-두 패키지는 `node_modules`/`package-lock.json`이 각각 독립적입니다. 의존성은 각 디렉터리에서 따로 설치해야 합니다.
+## 데이터 흐름 (목표)
 
-## 아키텍처
+```
+[iOS 공유 시트 / 앱 내 사진 선택]
+  → Expo 앱 → OcrEngine(ML Kit, 온디바이스) → Edge Function(LLM 정제) → 폼 자동채움
+  → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL)
+```
 
-**프론트엔드** (`src/`): React 19 + TypeScript + Vite + Tailwind CSS v4 (설정은 `tailwind.config.js`가 아니라 `src/index.css`의 `@theme`에 인라인으로 존재).
-
-- `src/main.tsx` → `src/App.tsx`: 현재 `App.tsx`는 dev 모드(`import.meta.env.DEV`)에서만 `TestPage`를 렌더링하고 프로덕션에서는 아무것도 렌더링하지 않습니다 — 아직 라우터나 프로덕션 진입점이 구성되어 있지 않습니다. `TestPage`(`src/pages/TestPage.tsx`)는 페이지 컴포넌트를 수동으로 주석 처리/해제하며 수동 테스트하는 임시 하네스입니다.
-- `src/pages/`: `CategoryPage`, `ProductPage`, `UploadPage`가 실제 화면 3개입니다(카테고리 목록, 특정 카테고리의 제품 목록, 새 제품 업로드). 각 페이지는 UI만 담당하고 데이터 fetching/mutation은 대응하는 훅에 위임합니다.
-- `src/hooks/`: `useCategories`, `useProducts`, `useImageUpload`는 각각 독립적으로 백엔드에 `fetch`하고, 자체 `isLoading`/`error`/데이터 상태를 가지며, `API_URL = 'http://localhost:4000'`을 하드코딩하고 있습니다. 공유 API 클라이언트, React Query/SWR, 전역 상태는 없습니다 — 각 훅이 독립적입니다. 새 API 호출을 추가할 때는 별도 요청이 없는 한 공유 클라이언트를 도입하지 말고 이 훅별 fetch 패턴을 따르세요.
-- 스타일링은 `src/index.css`에 정의된 커스텀 테마(세이지 그린 primary, 테라코타 accent, 실버 그레이 뉴트럴)를 사용한 Tailwind 유틸리티 클래스로 이루어집니다. 디자인 시스템 일관성을 위해 원시 Tailwind 팔레트 색상 대신 시맨틱 컬러 토큰(`text-main`, `text-sub`, `text-disabled`, `bg-card`, `silver`, `primary`, `accent`, `error` 등)을 사용하세요.
-
-**백엔드** (`backend/src/`): Express 5 + TypeScript (dev에서는 ts-node/nodemon으로 실행, 프로덕션은 tsc로 컴파일) + better-sqlite3 (동기식 SQLite, ORM 없음).
-
-- `db.ts`: 시작 시 `backend/wishlist.db`를 열거나 생성하고 `categories`, `products` 테이블에 대해 `CREATE TABLE IF NOT EXISTS`를 실행합니다 — 별도의 마이그레이션 파일은 없습니다. 스키마 변경은 `CREATE TABLE` 문을 직접 수정해서 하며, `IF NOT EXISTS`는 기존 테이블에는 아무 효과가 없으므로 기존 DB는 스키마 변경 사항을 자동으로 반영하지 않습니다.
-- `index.ts`: 앱 진입점 — CORS(`http://localhost:5173`로 고정), JSON 바디 파싱, `/uploads`(업로드된 이미지) 정적 파일 서빙, 두 라우터를 마운트합니다.
-- `routes/categories.ts`: 카테고리 목록 조회(`LEFT JOIN`/`GROUP BY`로 제품 `item_count` 포함), 카테고리 생성(이름 unique, 중복 시 409).
-- `routes/products.ts`: 제품 목록 조회(선택적으로 `category_id`로 필터링), 제품 생성(`multer`를 통한 multipart 업로드, 이미지는 타임스탬프+랜덤 파일명으로 `backend/uploads/`에 저장, jpeg/png/webp만 허용), 제품 삭제. `db.prepare(...).run/all()`을 사용한 raw SQL — 새 쿼리를 추가할 때도 이 패턴(prepared statement, 쿼리 빌더 없음)을 따르세요.
-- 사용자에게 노출되는 모든 문자열(에러, 라벨)은 한국어입니다 — 일관성을 위해 새로 추가하는 백엔드 에러 메시지와 프론트엔드 UI 텍스트도 한국어로 작성하세요.
-
-### 데이터 흐름
-프론트엔드 훅 → `http://localhost:4000/<resource>`로 `fetch` → Express 라우터 → `better-sqlite3` prepared statement → SQLite 파일(`backend/wishlist.db`). 업로드된 이미지는 `backend/uploads/` 디스크에 저장되고 `/uploads/<filename>`으로 정적 서빙됩니다. DB에는 상대 경로(예: `/uploads/abc.jpg`)만 저장되며, 프론트엔드에서 `<img>` 태그를 렌더링할 때 하드코딩된 백엔드 origin을 앞에 붙입니다.
-
-프론트엔드와 백엔드가 동시에 실행되어야 앱이 동작합니다(`vite.config.ts`에 프록시 설정이 없어 프론트엔드가 백엔드의 절대 URL을 직접 호출합니다).
+Phase 1에서는 이 중 **Auth 로그인과 공유 시트 수신 확인**까지만 구현한다.

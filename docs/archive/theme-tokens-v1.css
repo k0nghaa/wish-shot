@@ -1,0 +1,37 @@
+/*
+ * WishShot v1 디자인 토큰 (보존용)
+ *
+ * 옛 웹(Vite + Tailwind) `src/index.css`의 @theme 팔레트를 삭제 전에 보존한 기록입니다.
+ * Phase 1 Step 2에서 이 값들을 `constants/theme.ts`의 시맨틱 토큰으로 이식합니다.
+ * (세이지 그린 primary / 테라코타 accent / 실버 그레이 뉴트럴)
+ *
+ * 원본: web-v0 태그 `src/index.css`
+ */
+
+@theme {
+  --font-sans: 'Pretendard', sans-serif;
+
+  --breakpoint-lg: 1024px;
+
+  /* 브랜드 포인트 */
+  --color-primary: #6b8f71; /* Sage Green - 주요 버튼, 활성 상태 */
+  --color-primary-hover: #567260; /* 호버 상태 */
+  --color-primary-light: #ebf2ec; /* 배경 틴트 - 활성 탭 배경 등 */
+  --color-accent: #c4714a; /* Terracotta - 포인트 컬러 */
+
+  /* 실버 그레이 베이스 */
+  --color-bg: #f4f5f7; /* 전체 배경 */
+  --color-bg-card: #ffffff; /* 카드 배경 */
+  --color-silver: #e8eaed; /* 카드 테두리, 구분선 */
+  --color-silver-dark: #c4c8cf; /* 비활성 아이콘, 보조 요소 */
+
+  /* 텍스트 */
+  --color-text-main: #1c1c1e; /* 제목, 주요 텍스트 */
+  --color-text-sub: #6b7280; /* 부제목, 설명 */
+  --color-text-disabled: #9ca3af; /* 비활성 텍스트, placeholder */
+
+  /* 기능성 */
+  --color-success: #22c55e; /* 저장 완료, 분석 성공 */
+  --color-error: #ef4444; /* 에러 인풋 테두리, 에러 메시지 */
+  --color-warning: #f59e0b; /* 로딩 중, 주의 상태 */
+}
