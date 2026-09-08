@@ -1,15 +1,31 @@
 import type { Session } from '@supabase/supabase-js';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { ShareIntentProvider } from 'expo-share-intent';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { colors } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
-// Phase 1 Step 3: 세션 유무에 따른 라우팅 가드.
-// - 세션 없음 → /login 으로
-// - 세션 있는데 /login 에 있음 → / 로
+// Phase 1: 루트 레이아웃.
+// - ShareIntentProvider: iOS 공유 시트 수신 (Step 4)
+// - AuthGate: 세션 유무에 따른 라우팅 가드 (Step 3)
 export default function RootLayout() {
+  const router = useRouter();
+  return (
+    <ShareIntentProvider
+      options={{
+        debug: false,
+        resetOnBackground: true,
+        onResetShareIntent: () => router.replace('/'),
+      }}
+    >
+      <AuthGate />
+    </ShareIntentProvider>
+  );
+}
+
+function AuthGate() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const router = useRouter();
