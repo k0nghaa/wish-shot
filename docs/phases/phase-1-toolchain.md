@@ -57,9 +57,9 @@ WishShot 레포를 웹(Vite + Express + SQLite) 상태에서 **iOS 네이티브 
 6. 커밋: `chore: v2 전환 — 웹 코드 제거 (web-v0 태그로 보존), 문서 아카이브`
 
 **DoD**
-- [ ] `git tag` 에 `web-v0` 존재, 원격에 push됨
-- [ ] `v2/expo` 브랜치에 웹 소스 없음, `docs/archive/` 에 위 파일들 존재
-- [ ] `CLAUDE.md`가 전환기 버전
+- [x] `git tag` 에 `web-v0` 존재, 원격에 push됨
+- [x] `v2/expo` 브랜치에 웹 소스 없음, `docs/archive/` 에 위 파일들 존재
+- [x] `CLAUDE.md`가 전환기 버전 (Step 6에서 실제 구조 반영 버전으로 갱신됨)
 
 ---
 
@@ -88,9 +88,11 @@ WishShot 레포를 웹(Vite + Express + SQLite) 상태에서 **iOS 네이티브 
 7. 커밋: `chore: Expo 프로젝트 초기 세팅 (Expo Router, 디자인 토큰 이식)`
 
 **DoD**
-- [ ] `npx expo start` → Expo Go에서 홈 화면 렌더링
-- [ ] `constants/theme.ts`에 v1 색상 토큰이 이름 그대로 존재
-- [ ] `npx tsc --noEmit` 통과
+- [x] `npx expo start` → Expo Go에서 홈 화면 렌더링 (이 환경은 `--tunnel` 필요)
+- [x] `constants/theme.ts`에 v1 색상 토큰이 이름 그대로 존재 (`src/constants/theme.ts`)
+- [x] `npx tsc --noEmit` 통과
+
+> 참고: SDK 57 기본 템플릿이 `src/` 구조라 라우트를 `src/app/`에 두기로 결정. bundleIdentifier `com.k0nghaa.wishshot`.
 
 ---
 
@@ -111,9 +113,11 @@ WishShot 레포를 웹(Vite + Express + SQLite) 상태에서 **iOS 네이티브 
 7. 커밋: `feat: Supabase Auth 이메일 로그인 + 라우팅 가드`
 
 **DoD**
-- [ ] Expo Go에서 로그인 → 홈(이메일 표시) → 로그아웃 → 로그인 화면 왕복 동작
-- [ ] 앱 재시작 후 세션 유지됨
-- [ ] `.env`는 커밋되지 않았고 `.env.example`은 있음
+- [x] Expo Go에서 로그인 → 홈(이메일 표시) → 로그아웃 → 로그인 화면 왕복 동작
+- [x] 앱 재시작 후 세션 유지됨 (AsyncStorage)
+- [x] `.env`는 커밋되지 않았고 `.env.example`은 있음
+
+> 세션 스토리지 어댑터: `@react-native-async-storage/async-storage` (Supabase 공식 퀵스타트 방식).
 
 ---
 
@@ -129,9 +133,11 @@ WishShot 레포를 웹(Vite + Express + SQLite) 상태에서 **iOS 네이티브 
 5. 커밋: `feat: expo-share-intent 설정 및 수신 화면 스텁`
 
 **DoD**
-- [ ] `app.json` plugins에 `expo-share-intent` 등록, 이미지 수신 규칙 설정
-- [ ] `npx expo prebuild --platform ios --no-install` 오류 없이 완료
-- [ ] 이 시점에서 Expo Go는 더 이상 동작하지 않아도 정상 (Step 5로)
+- [x] `app.json` plugins에 `expo-share-intent` 등록, 이미지 수신 규칙 설정 (`NSExtensionActivationSupportsImageWithMaxCount: 1`)
+- [~] `npx expo prebuild --platform ios --no-install` → **Windows에선 불가**(iOS 생성은 macOS/Linux 전용). 대신 `npx expo config --type introspect`로 config plugin 검증 (ShareExtension·이미지 규칙 주입 확인). 실제 네이티브 생성은 Step 5 EAS 클라우드에서.
+- [x] 이 시점에서 Expo Go는 더 이상 동작하지 않아도 정상 (Step 5로) — `expo-share-intent`는 네이티브 모듈
+
+> 채택 버전: `expo-share-intent` 8.0.1 (SDK 57 호환). ShareExtension bundleId `com.k0nghaa.wishshot.share-extension`, App Group `group.com.k0nghaa.wishshot`.
 
 ---
 
@@ -153,11 +159,11 @@ WishShot 레포를 웹(Vite + Express + SQLite) 상태에서 **iOS 네이티브 
 5. 커밋: `chore: EAS 빌드 설정 (development/preview/production)`
 
 **DoD**
-- [ ] 아이폰에 WishShot 개발 빌드 설치됨 (홈 화면 아이콘)
-- [ ] 개발 서버 접속 후 코드 수정 → 아이폰에 핫 리로드 반영
-- [ ] 로그인/로그아웃 동작 (Step 3와 동일)
-- [ ] **아이폰 사진 앱에서 스크린샷 → 공유 → WishShot 선택 → `share.tsx`에 파일 경로 표시** ← 이 Phase의 핵심 검증
-- [ ] EAS 빌드 소요 시간·남은 무료 크레딧을 기록 (결정 문서 5장 미결 항목)
+- [x] 아이폰에 WishShot 개발 빌드 설치됨 (홈 화면 아이콘)
+- [x] 개발 서버 접속 후 코드 수정 → 아이폰에 핫 리로드 반영
+- [x] 로그인/로그아웃 동작 (Step 3와 동일)
+- [x] **아이폰 사진 앱에서 스크린샷 → 공유 → WishShot 선택 → `share.tsx`에 파일 경로 표시** ← 이 Phase의 핵심 검증 ✅
+- [x] EAS 빌드 소요 시간·남은 무료 크레딧을 기록 (아래 결과 기록)
 
 ---
 
@@ -170,8 +176,8 @@ WishShot 레포를 웹(Vite + Express + SQLite) 상태에서 **iOS 네이티브 
 4. 커밋: `docs: Phase 1 완료 — CLAUDE.md/README 갱신, 결과 기록`
 
 **DoD**
-- [ ] `CLAUDE.md`가 현재 레포 상태를 정확히 설명 (아직 없는 것을 있다고 쓰지 않음)
-- [ ] `v2/expo` 브랜치를 `dev`로 PR (또는 `dev`를 `v2/expo`로 교체 — 사람이 결정)
+- [x] `CLAUDE.md`가 현재 레포 상태를 정확히 설명 (아직 없는 것을 있다고 쓰지 않음)
+- [~] `dev`로 PR: Step 1~2는 PR #8로 이미 머지됨. Step 3~6은 `feat/supabase-auth` 브랜치 → `dev` PR 예정 (사람이 머지)
 
 ---
 
@@ -187,10 +193,14 @@ WishShot 레포를 웹(Vite + Express + SQLite) 상태에서 **iOS 네이티브 
 
 ## 결과 기록 (Phase 완료 시 작성)
 
-- 완료일:
-- bundleIdentifier:
-- Expo SDK / expo-share-intent 버전:
-- 세션 스토리지:
-- EAS 빌드 시간 / 남은 크레딧:
-- 발생한 이슈와 해결:
-- Phase 2로 넘길 것:
+- **완료일**: 2026-09-09
+- **bundleIdentifier**: `com.k0nghaa.wishshot` (ShareExtension: `com.k0nghaa.wishshot.share-extension`, App Group: `group.com.k0nghaa.wishshot`)
+- **Expo SDK / expo-share-intent 버전**: Expo SDK 57 (expo ~57.0.20, React Native 0.86.3, React 19.2.3) / expo-share-intent 8.0.1
+- **세션 스토리지**: `@react-native-async-storage/async-storage` (Supabase 공식 퀵스타트 방식). 참고: 더 민감한 저장이 필요하면 향후 `expo-secure-store` 어댑터로 교체 검토 가능
+- **EAS 빌드 시간 / 남은 크레딧**: iOS development 빌드 약 **5분 12초** (10:05:06→10:10:18, build number 1). 무료 플랜 — 크레딧 소진이 아니라 **월 빌드 횟수 제한** 방식. 이번 달 누적 7회(iOS 6 / Android 1, 타 프로젝트 포함). 남은 횟수는 expo.dev Usage 페이지에서 확인
+- **발생한 이슈와 해결**:
+  - Windows에서 iOS prebuild 불가 → `expo config --type introspect`로 config plugin 검증, 실제 빌드는 EAS 클라우드
+  - 개발 서버 LAN 접속 실패("Could not connect to the server") → `npx expo start --tunnel` 필수 (`@expo/ngrok` 로컬 설치로 해결)
+  - SDK 57 기본 템플릿이 `src/` 디렉터리 구조 → 라우트를 `src/app/`에 두기로 결정
+  - `.env` 변경은 `--clear` 재시작 필요
+- **Phase 2로 넘길 것**: DB 스키마("계약") 확정 + 마이그레이션 SQL(RLS 정책·grant 포함), 실제 화면(카테고리/목록/상세/업로드), 공유로 받은 이미지의 실제 등록 플로우(현재는 경로 표시 스텁), OCR(Phase 3)·LLM 정제 Edge Function(Phase 3), 앱 아이콘을 v1 로고 기반으로 교체(현재 Expo 기본)
