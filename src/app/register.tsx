@@ -186,12 +186,8 @@ export default function RegisterScreen() {
   function handleViewExisting() {
     const existing = dupItem;
     setDupVisible(false);
-    // Step 5 에서 아이템 상세(/item/[id])로 변경. 지금은 아이템이 있는 목록으로 보낸다.
     if (existing) {
-      router.replace({
-        pathname: '/category/[id]',
-        params: { id: existing.category_id ?? 'uncategorized' },
-      });
+      router.replace({ pathname: '/item/[id]', params: { id: existing.id } });
     }
   }
 

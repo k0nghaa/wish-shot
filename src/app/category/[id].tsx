@@ -68,6 +68,7 @@ export default function CategoryItemsScreen() {
               brand={item.brand}
               savedDate={formatSavedDate(item.created_at)}
               thumbnailUrl={urls[item.image_key] ?? null}
+              onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
             />
           )}
         />

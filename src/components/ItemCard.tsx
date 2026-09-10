@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { colors, spacing } from '@/constants/theme';
 
@@ -6,21 +6,30 @@ import { Thumbnail } from './Thumbnail';
 
 /**
  * 목록 그리드의 아이템 카드: 썸네일 + 제품명 + 브랜드 + 저장일.
- * Step 3 에서는 표시 전용(탭 → 상세는 Step 5 에서 연결).
+ * onPress 가 있으면 눌러서 상세로 이동한다.
  */
 export function ItemCard({
   productName,
   brand,
   savedDate,
   thumbnailUrl,
+  onPress,
 }: {
   productName: string;
   brand: string | null;
   savedDate: string;
   thumbnailUrl: string | null;
+  onPress?: () => void;
 }) {
   return (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={onPress}
+      activeOpacity={0.8}
+      disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={productName}
+    >
       <Thumbnail url={thumbnailUrl} style={styles.thumb} />
       <View style={styles.body}>
         <Text style={styles.name} numberOfLines={1}>
@@ -33,7 +42,7 @@ export function ItemCard({
         ) : null}
         <Text style={styles.date}>{savedDate}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
