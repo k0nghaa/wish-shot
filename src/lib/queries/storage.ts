@@ -44,6 +44,25 @@ export async function getItemImageSignedUrl(
   return data.signedUrl;
 }
 
+/**
+ * 여러 객체의 signed URL 을 한 번에 발급한다(목록/홈 썸네일용). 키 → URL 맵을 반환.
+ * 실패한 개별 키는 맵에서 빠진다(그 자리 썸네일은 플레이스홀더로 표시됨).
+ */
+export async function getItemImageSignedUrls(
+  imageKeys: string[],
+  expiresInSec: number = SIGNED_URL_TTL_SEC,
+): Promise<Record<string, string>> {
+  const unique = [...new Set(imageKeys)];
+  if (unique.length === 0) return {};
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrls(unique, expiresInSec);
+  if (error) throw new Error(`이미지 주소를 만들지 못했어요: ${error.message}`);
+  const map: Record<string, string> = {};
+  for (const row of data ?? []) {
+    if (row.path && row.signedUrl) map[row.path] = row.signedUrl;
+  }
+  return map;
+}
+
 /** Storage 객체 삭제(Step 5 아이템 삭제 시 행과 함께 지운다). */
 export async function deleteItemImage(imageKey: string): Promise<void> {
   const { error } = await supabase.storage.from(BUCKET).remove([imageKey]);
