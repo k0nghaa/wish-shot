@@ -1,5 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useShareIntentContext } from 'expo-share-intent';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -23,6 +24,7 @@ import {
   listItems,
   renameCategory,
 } from '@/lib/queries';
+import { toFileUri } from '@/lib/imageBytes';
 import { supabase } from '@/lib/supabase';
 
 type Row = {
@@ -35,8 +37,25 @@ type Row = {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const shareHandled = useRef(false);
   const [rows, setRows] = useState<Row[] | null>(null); // null = 로딩 중
   const [hasAnyItem, setHasAnyItem] = useState(false);
+
+  // 공유 시트로 이미지가 들어오면 등록 화면으로 넘긴다(미로그인 진입은 로그인 후 여기로 복귀 → 유지, FR-1b).
+  useEffect(() => {
+    if (!hasShareIntent) {
+      shareHandled.current = false;
+      return;
+    }
+    const file = shareIntent?.files?.[0];
+    if (!file?.path || shareHandled.current) return;
+    shareHandled.current = true;
+    const imageUri = toFileUri(file.path);
+    const imageMime = file.mimeType ?? 'image/jpeg';
+    resetShareIntent();
+    router.push({ pathname: '/register', params: { imageUri, imageMime } });
+  }, [hasShareIntent, shareIntent, resetShareIntent, router]);
 
   const load = useCallback(async () => {
     try {
@@ -93,8 +112,7 @@ export default function HomeScreen() {
   }
 
   function handleUpload() {
-    // 등록(저장) 화면은 Step 4 에서 붙는다. 지금은 안내만.
-    Alert.alert('준비 중', '등록 화면은 다음 단계에서 연결돼요.');
+    router.push('/register');
   }
 
   function handleCreateCategory() {

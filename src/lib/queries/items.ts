@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/types/database';
 
 import { getCurrentUserId } from './auth';
+import { DuplicateItemError } from './errors';
 
 export type Item = Tables<'items'>;
 
@@ -80,7 +81,64 @@ export async function createItem(input: NewItemInput): Promise<Item> {
     })
     .select()
     .single();
-  if (error) throw new Error(`아이템을 저장하지 못했어요: ${error.message}`);
+  if (error) {
+    // 사전조회를 놓친 중복(경합)은 23505 로 잡아 덮어쓰기 모달로 폴백한다.
+    if (error.code === '23505') throw new DuplicateItemError();
+    throw new Error(`아이템을 저장하지 못했어요: ${error.message}`);
+  }
+  return data;
+}
+
+/** 아이템 수정 입력. `normalized_name` 은 brand+product_name 으로 재계산한다. 이미지는 건드리지 않는다. */
+export interface UpdateItemInput {
+  categoryId: string | null;
+  productName: string;
+  brand?: string | null;
+  price?: number | null;
+  sourceLink?: string | null;
+  memo?: string | null;
+  tags?: string[] | null;
+}
+
+/**
+ * 아이템 수정(덮어쓰기 저장에서 사용). 필드와 normalized_name 을 갱신하고 updated_at 은
+ * 트리거가 자동 갱신한다. 이미지(image_key)는 그대로 두고, 필요하면 같은 키에 새로 업로드한다.
+ */
+export async function updateItem(id: string, input: UpdateItemInput): Promise<Item> {
+  const { data, error } = await supabase
+    .from('items')
+    .update({
+      category_id: input.categoryId,
+      product_name: input.productName,
+      brand: input.brand ?? null,
+      normalized_name: normalizeName(input.brand, input.productName),
+      price: input.price ?? null,
+      source_link: input.sourceLink ?? null,
+      memo: input.memo ?? null,
+      tags: input.tags ?? null,
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(`아이템을 수정하지 못했어요: ${error.message}`);
+  return data;
+}
+
+/**
+ * 같은 (본인, brand+제품명 정규화) 아이템이 이미 있는지 사전 조회한다. 저장 전 중복 판정용.
+ * 저장과 반드시 같은 normalizeName 을 써서 판정 소스를 일치시킨다.
+ */
+export async function findDuplicateItem(
+  brand: string | null | undefined,
+  productName: string,
+): Promise<Item | null> {
+  const normalized = normalizeName(brand, productName);
+  const { data, error } = await supabase
+    .from('items')
+    .select('*')
+    .eq('normalized_name', normalized)
+    .maybeSingle();
+  if (error) throw new Error(`중복 확인에 실패했어요: ${error.message}`);
   return data;
 }
 
