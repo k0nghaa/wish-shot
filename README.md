@@ -40,6 +40,32 @@ npx expo start --dev-client --tunnel  # 개발 빌드가 설치된 아이폰으�
 | `npx expo-doctor` | 설정·의존성 정합성 점검 |
 | `npx eas-cli build --platform ios --profile development` | 개발 빌드 (Apple 인증 필요, 사람이 실행) |
 
+## 데이터베이스 (Supabase)
+
+스키마 계약은 `supabase/migrations/0001_init.sql` 한 파일에 모여 있습니다 — 테이블
+(`categories`/`items`/`analysis_logs`), GRANT, RLS 정책, Storage private 버킷(`item-images`)·정책.
+
+**마이그레이션 적용** (둘 중 하나):
+
+```bash
+# 방법 A: 대시보드 SQL Editor 에 0001_init.sql 전체를 붙여넣고 Run (링크 불필요, 권장)
+# 방법 B: CLI
+npx supabase link --project-ref <project-ref>   # DB 비밀번호 입력
+npx supabase db push
+```
+
+**타입 재생성** (스키마를 바꿀 때마다):
+
+```bash
+npx supabase login   # 최초 1회 (브라우저 인증)
+npx supabase gen types typescript --project-id <project-ref> > src/types/database.ts
+npx tsc --noEmit
+```
+
+- 스키마 변경은 기존 파일을 고치지 말고 **새 `000N_*.sql`** 을 추가합니다.
+- RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다.
+- `src/types/database.ts` 는 자동 생성 파일이라 직접 수정하지 않습니다.
+
 ## 문서
 
 - 아키텍처·플랫폼 결정: 노션 「WishShot v2 — 플랫폼·아키텍처 결정 문서 (Expo + Supabase)」

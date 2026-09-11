@@ -25,7 +25,7 @@ Phase 1의 빈 앱(로그인 + 공유 수신 스텁) 위에, **데이터 계약�
 
 - [x] Phase 1 완료: Supabase Auth 로그인, `expo-share-intent` 수신(경로 표시), EAS 개발 빌드 설치
 - [x] Supabase 프로젝트 (URL·anon 키는 `.env`에 있음)
-- [ ] Supabase 대시보드 접근 (SQL 실행·Storage 버킷 생성용) 또는 Supabase CLI 로그인
+- [x] Supabase 대시보드 접근 (SQL 실행·Storage 버킷 생성용) 또는 Supabase CLI 로그인
 
 ---
 
@@ -61,10 +61,10 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 7. 커밋: `feat: DB 스키마 + RLS 정책 + 타입 (Phase 2 계약)`
 
 **DoD**
-- [ ] `categories`/`items`/`analysis_logs` + RLS 정책 + Storage private 버킷/정책 생성됨
-- [ ] (사람) 대시보드에서 테이블·정책 확인. RLS 검증: 다른 유저 컨텍스트로 접근 시 0행
-- [ ] `src/types/database.ts` 생성, `npx tsc --noEmit` 통과
-- [ ] `.env`/비밀값 커밋 없음
+- [x] `categories`/`items`/`analysis_logs` + RLS 정책 + Storage private 버킷/정책 생성됨
+- [x] (사람) 대시보드에서 테이블·정책 확인. RLS 검증: 다른 유저 컨텍스트로 접근 시 0행 (rls.sql 테스트 1·2 통과)
+- [x] `src/types/database.ts` 생성, `npx tsc --noEmit` 통과
+- [x] `.env`/비밀값 커밋 없음
 
 ---
 
@@ -76,8 +76,8 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 3. 커밋: `feat: Supabase 데이터 레이어 (categories/items/storage 쿼리)`
 
 **DoD**
-- [ ] 각 쿼리 함수 존재, `tsc --noEmit` 통과
-- [ ] (선택) 로그인 상태에서 카테고리 1개 생성/조회가 실제 Supabase에 반영되는지 사람 확인
+- [x] 각 쿼리 함수 존재, `tsc --noEmit` 통과
+- [x] (선택) 로그인 상태에서 카테고리 1개 생성/조회가 실제 Supabase에 반영되는지 사람 확인 (Step 3 화면에서 검증)
 
 ---
 
@@ -91,9 +91,9 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 5. 커밋: `feat: 홈(카테고리) + 아이템 목록 + 카테고리 생성/이름변경/삭제`
 
 **DoD**
-- [ ] (사람) 실기기에서 홈 → 카테고리 → 목록 탐색. 빈 상태 문구 확인
-- [ ] (사람) 카테고리 삭제 → 안의 아이템이 미분류로 이동(삭제 안 됨) 확인
-- [ ] 디자인 토큰만 사용(원시 hex 없음), 문자열 한국어
+- [x] (사람) 실기기에서 홈 → 카테고리 → 목록 탐색. 빈 상태 문구 확인
+- [x] (사람) 카테고리 삭제 → 안의 아이템이 미분류로 이동(삭제 안 됨) 확인
+- [x] 디자인 토큰만 사용(원시 hex 없음), 문자열 한국어
 
 ---
 
@@ -114,11 +114,11 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 6. 커밋: `feat: 등록 화면 + 이미지 업로드/저장 + 중복 차단(덮어쓰기)`
 
 **DoD**
-- [ ] (사람) **앱 내 사진 선택 → 저장 → 목록 확인**
-- [ ] (사람) **공유 시트 → WishShot → 등록 화면(이미지 채워짐) → 저장 → 목록 확인** ← Phase 2 핵심
-- [ ] (사람) **같은 브랜드+제품명 재저장 → 덮어쓰기/기존보기/취소 모달** → 덮어쓰기 시 기존 아이템 이미지·필드 갱신(새 행 안 생김), 브랜드만 다르면 정상 저장
-- [ ] 다른 계정으로는 안 보임(RLS). 제품명 빈 값 저장 차단
-- [ ] `tsc --noEmit` 통과
+- [x] (사람) **앱 내 사진 선택 → 저장 → 목록 확인**
+- [x] (사람) **공유 시트 → WishShot → 등록 화면(이미지 채워짐) → 저장 → 목록 확인** ← Phase 2 핵심 (공유 콜드스타트 시 dev client의 "Finding Dev Servers"는 개발 빌드 특성 — 프로덕션에선 바로 진입)
+- [x] (사람) **같은 브랜드+제품명 재저장 → 덮어쓰기/기존보기/취소 모달** → 덮어쓰기 시 기존 아이템 이미지·필드 갱신(새 행 안 생김), 브랜드만 다르면 정상 저장
+- [x] 다른 계정으로는 안 보임(RLS). 제품명 빈 값 저장 차단
+- [x] `tsc --noEmit` 통과
 
 ---
 
@@ -131,7 +131,7 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 4. 커밋: `feat: 상세 화면 + 삭제`
 
 **DoD**
-- [ ] (사람) 목록 → 상세 → 삭제 → 목록/Storage에서 사라짐 확인
+- [x] (사람) 목록 → 상세 → 삭제 → 목록/Storage에서 사라짐 확인
 
 ---
 
@@ -144,8 +144,8 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 4. 커밋: `docs: Phase 2 완료 — 문서 갱신, 결과 기록`. `dev`로 PR.
 
 **DoD**
-- [ ] `CLAUDE.md`가 현재 구조를 정확히 설명
-- [ ] `dev`로 PR (사람이 머지)
+- [x] `CLAUDE.md`가 현재 구조를 정확히 설명
+- [x] `dev`로 PR (열림 — 사람이 머지)
 
 ---
 
@@ -164,10 +164,21 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 
 ## 결과 기록 (Phase 완료 시 작성)
 
-- 완료일:
-- 확정된 스키마(테이블/주요 제약):
-- price 타입 / 통화:
-- 추가한 네이티브 의존성(expo-image-picker 버전) / EAS 재빌드:
-- Storage 버킷명 / 정책:
-- 발생한 이슈와 해결:
-- Phase 3로 넘길 것(OCR·LLM 자동채움, Edge Function):
+- **완료일**: 2026-09-11
+- **확정된 스키마(테이블/주요 제약)**:
+  - `categories`: `UNIQUE(user_id, name)`
+  - `items`: `UNIQUE(user_id, normalized_name)`(하드 중복 차단), `category_id` FK→categories `ON DELETE SET NULL`(미분류로), `updated_at` 자동 트리거
+  - `analysis_logs`: 테이블만 생성(Phase 3에서 사용)
+  - 세 테이블 모두 RLS(`user_id = (select auth.uid())`, 성능 위해 select 래핑) + **`authenticated` GRANT 명시**
+- **price 타입 / 통화**: `numeric` nullable / KRW 고정
+- **추가한 네이티브 의존성 / EAS 재빌드**: `expo-image-picker ~57.0.16`, `expo-file-system ~57.0.6` → 개발 빌드 **1회 재빌드**. 아이템 id 는 `expo-modules-core`의 `uuid.v4()`로 생성(신규 네이티브 아님). 이미지 바이트는 `File.arrayBuffer()`.
+- **Storage 버킷명 / 정책**: `item-images`(private). 경로 `{user_id}/{item_id}.jpg`, 첫 세그먼트가 `auth.uid()`인 객체만 select/insert/update/delete. signed URL TTL 1시간(잠정).
+- **발생한 이슈와 해결**:
+  1. 이 프로젝트는 `public` 테이블 **GRANT 자동부여가 안 됨** → 마이그레이션에 `grant ... to authenticated` 명시(안 하면 `permission denied`).
+  2. 마이그레이션 부분 적용/재실행 문제 → 초기화 스니펫 제공 + Storage 정책 `drop policy if exists`로 멱등화.
+  3. `storage.buckets` 직접 DELETE는 트리거(`protect_delete`)로 차단 → 초기화에서 버킷 삭제 제외(멱등 insert 재사용).
+  4. 공유로 받은 파일 경로가 스킴 없는 절대경로일 수 있어 `file://` 정규화(`toFileUri`).
+  5. Expo Router 타입 라우트는 `expo start`로 재생성해야 `tsc` 통과.
+  6. `expo` 코어 패치 미스매치는 기존 드리프트(Step 4 무관) → 현재 버전 고정 + `expo.install.exclude`로 자동 변경 차단.
+- **덮어쓰기 갱신 범위(미결 해소)**: 이미지 + 입력필드 전체로 기존 아이템 UPDATE(같은 Storage 키에 upsert), 새 행 생성 아님.
+- **Phase 3로 넘길 것**: OCR(온디바이스 ML Kit) + LLM 정제(Edge Function) 자동채움, `analysis_logs` 사용, 등록 화면의 "AI 자동 채움" 자리 채우기, 중복 모달 "기존 보기" 이후 UX 다듬기.
