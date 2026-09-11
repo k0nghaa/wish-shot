@@ -1,0 +1,7 @@
+{
+  "name": "expo-vision-ocr",
+  "version": "1.0.0",
+  "description": "WishShot 로컬 온디바이스 OCR 모듈 (Apple Vision, ko-KR/en-US)",
+  "main": "index.ts",
+  "license": "MIT"
+}
