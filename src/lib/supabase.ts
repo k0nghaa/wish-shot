@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
+import type { Database } from '@/types/database';
+
 // URL/키는 .env의 EXPO_PUBLIC_* 에서 읽는다. anon 키만 사용하며 service_role 키는
 // 앱에 절대 넣지 않는다. (CLAUDE.md 규칙 2)
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -15,7 +17,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage, // 세션을 기기에 저장 → 앱 재시작 후에도 로그인 유지
     autoRefreshToken: true,

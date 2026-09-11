@@ -45,6 +45,12 @@
             "NSExtensionActivationSupportsImageWithMaxCount": 1
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "저장한 스크린샷을 위시리스트에 담으려면 사진 접근 권한이 필요해요."
+        }
       ]
     ],
     "experiments": {

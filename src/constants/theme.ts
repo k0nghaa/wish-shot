@@ -31,6 +31,9 @@ export const colors = {
   success: '#22c55e', // 저장 완료, 분석 성공
   error: '#ef4444', // 에러 인풋 테두리, 에러 메시지
   warning: '#f59e0b', // 로딩 중, 주의 상태
+
+  // 오버레이 (모달 배경 딤) — textMain(#1c1c1e) 기반
+  overlay: 'rgba(28,28,30,0.45)',
 } as const;
 
 export type ColorToken = keyof typeof colors;
