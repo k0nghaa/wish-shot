@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { colors, spacing } from '@/constants/theme';
 import { readImageBytes } from '@/lib/imageBytes';
+import { ocrEngine } from '@/lib/ocr'; // [임시 검증용 — Step 1 OCR 확인. Step 4에서 제거]
 import {
   createCategory,
   createItem,
@@ -72,6 +73,16 @@ export default function RegisterScreen() {
         /* 카테고리 로드 실패는 저장을 막지 않는다(미분류로 저장 가능) */
       });
   }, []);
+
+  // [임시 검증용 — Step 1 OCR 실기기 확인. Step 4 자동채움 통합 때 이 블록 전체 제거]
+  // 이미지가 정해지면(공유 인텐트/사진 선택) OcrEngine.recognize 결과를 콘솔에 찍는다.
+  useEffect(() => {
+    if (!imageUri) return;
+    ocrEngine
+      .recognize(imageUri)
+      .then((r) => console.log('[OCR 검증] 인식 텍스트:\n' + r.text))
+      .catch((e) => console.log('[OCR 검증] 실패:', e));
+  }, [imageUri]);
 
   const canSave = Boolean(imageUri) && productName.trim().length > 0 && !saving;
 
