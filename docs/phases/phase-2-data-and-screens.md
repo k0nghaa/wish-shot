@@ -160,7 +160,7 @@ Phase 1 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, �
 **이 문서에서 확정한 결정:**
 - 카테고리 삭제 → **Phase 2 포함** (Step 3). 스키마 `ON DELETE SET NULL`로 아이템은 미분류로.
 - 타입 → **`supabase gen types` 자동 생성 채택** (드리프트 방지).
-- `normalized_name` → **UNIQUE(user_id, normalized_name)로 하드 차단**(중복 허용 안 함). 값 = 정규화(brand+'|'+product_name), 서버 전용 숨김 컬럼(화면엔 product_name·brand만). 중복 시 **덮어쓰기(기존 UPDATE)/기존 보기/취소**. → **중복 차단이 PRD 원안(Phase 4)에서 Phase 2로 이동**. (PRD FR-9/10·S3·§11 수정 필요)
+- `normalized_name` → **UNIQUE(user_id, normalized_name)로 하드 차단**(중복 허용 안 함). 값 = 정규화(brand+'|'+product_name), 서버 전용 숨김 컬럼(화면엔 product_name·brand만). 중복 시 **덮어쓰기(기존 UPDATE)/기존 보기/취소**. → **중복 차단이 PRD 원안(Phase 4)에서 Phase 2로 이동**. (PRD §7·FR-9/10·S3·§11에 반영 완료 — 2026-09-11)
 
 ## 결과 기록 (Phase 완료 시 작성)
 
