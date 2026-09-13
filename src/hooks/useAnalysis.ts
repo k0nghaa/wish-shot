@@ -38,6 +38,7 @@ type Action =
   | { type: 'parsing' }
   | { type: 'filled'; result: ParseResult }
   | { type: 'error'; kind: AnalysisErrorKind; rawText: string | null }
+  | { type: 'reparse' }
   | { type: 'submitted' };
 
 const initialState: AnalysisState = {
@@ -69,6 +70,9 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
       // 진행 중(ocrRunning/parsing 등)에만 error 로. idle/submitted 에선 무시.
       if (state.phase === 'idle' || state.phase === 'submitted') return state;
       return { ...state, phase: 'error', errorKind: action.kind, rawText: action.rawText };
+    case 'reparse':
+      // E-2 재시도: OCR 원문이 남아 있을 때만 error → parsing 으로 되돌린다.
+      return state.phase === 'error' && state.rawText ? { ...state, phase: 'parsing', errorKind: null } : state;
     case 'submitted':
       return state.phase === 'filled' ? { ...state, phase: 'submitted' } : state;
     default:
@@ -122,6 +126,21 @@ export function useAnalysis() {
     }
   }, []);
 
+  // E-2 재시도: OCR 은 성공했으나 정제가 실패한 경우, OCR 을 다시 돌리지 않고 정제만 재시도한다.
+  const reparse = useCallback(async (rawText: string) => {
+    const run = ++runRef.current;
+    const isCurrent = () => runRef.current === run;
+    dispatch({ type: 'reparse' });
+    try {
+      const result = await parseScreenshotText(rawText);
+      if (!isCurrent()) return;
+      dispatch({ type: 'filled', result });
+    } catch {
+      if (!isCurrent()) return;
+      dispatch({ type: 'error', kind: 'parse_failed', rawText });
+    }
+  }, []);
+
   const markSubmitted = useCallback(() => dispatch({ type: 'submitted' }), []);
   const reset = useCallback(() => dispatch({ type: 'reset' }), []);
 
@@ -130,5 +149,5 @@ export function useAnalysis() {
     state.result != null &&
     state.result.confidence < LOW_CONFIDENCE_THRESHOLD;
 
-  return { state, analyze, markSubmitted, reset, needsConfirmation };
+  return { state, analyze, reparse, markSubmitted, reset, needsConfirmation };
 }

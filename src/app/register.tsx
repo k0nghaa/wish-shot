@@ -1,8 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { uuid } from 'expo-modules-core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -39,6 +40,9 @@ import {
 import type { Json } from '@/types/database';
 
 const emptyToNull = (s: string): string | null => (s.trim() ? s.trim() : null);
+
+// 개인정보 고지(NFR-3)를 최초 1회만 보여주기 위한 플래그.
+const PRIVACY_NOTICE_KEY = 'wishshot.privacyNoticeShown';
 
 function parsePrice(text: string): number | null {
   const digits = text.replace(/[^\d]/g, '');
@@ -108,11 +112,42 @@ export default function RegisterScreen() {
   }, []);
 
   // 분석(OCR → LLM 정제) 상태머신. 이미지가 들어오면 즉시 시작한다.
-  const { analyze, state: analysisState, needsConfirmation, markSubmitted } = useAnalysis();
+  const { analyze, reparse, state: analysisState, needsConfirmation, markSubmitted } = useAnalysis();
+  const productNameRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (imageUri) analyze(imageUri);
   }, [imageUri, analyze]);
+
+  // 개인정보 고지(NFR-3): 첫 이미지 업로드 시 1회만. 플래그를 먼저 세워 중복 노출을 막는다.
+  useEffect(() => {
+    if (!imageUri) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (await AsyncStorage.getItem(PRIVACY_NOTICE_KEY)) return;
+        await AsyncStorage.setItem(PRIVACY_NOTICE_KEY, '1');
+        if (cancelled) return;
+        Alert.alert(
+          '이미지 분석 안내',
+          '이미지는 기기에서 분석되고 비공개 저장소에만 저장돼요. AI 정제에는 인식한 텍스트만 전송돼요.',
+          [{ text: '확인' }],
+        );
+      } catch {
+        /* 고지 실패는 저장 흐름을 막지 않는다 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUri]);
+
+  // E-3(제품명 미인식): 정제는 됐으나 제품명이 없고 사용자가 아직 입력 안 했으면 입력란에 포커스.
+  useEffect(() => {
+    if (analysisState.phase === 'filled' && !analysisState.result?.productName && productNameEdit === null) {
+      productNameRef.current?.focus();
+    }
+  }, [analysisState, productNameEdit]);
 
   // 자동채움은 "복사"가 아니라 "파생"으로 처리한다(effect·setState 불필요):
   // 손대지 않은 필드(*Edit === null)는 AI 값을, 손댄 필드는 사용자 값을 보여준다.
@@ -146,6 +181,15 @@ export default function RegisterScreen() {
       status,
       itemId,
     });
+  }
+
+  // 재시도: 정제 실패(E-2, OCR 원문 있음)면 정제만 다시, 그 외(E-1)엔 처음부터 다시.
+  function retryAnalysis() {
+    if (analysisState.errorKind === 'parse_failed' && analysisState.rawText) {
+      reparse(analysisState.rawText);
+    } else if (imageUri) {
+      analyze(imageUri);
+    }
   }
 
   const canSave = Boolean(imageUri) && productName.trim().length > 0 && !saving;
@@ -308,9 +352,32 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
+          {/* 실패(E-1/E-2) 상세: E-2 는 인식한 원문을 보여주고, 둘 다 재시도 버튼 제공 */}
+          {analysisState.phase === 'error' ? (
+            <View style={styles.errorBox}>
+              {analysisState.errorKind === 'parse_failed' && analysisState.rawText ? (
+                <>
+                  <Text style={styles.errorHint}>인식한 원문(참고용)</Text>
+                  <Text style={styles.errorRaw} numberOfLines={4}>
+                    {analysisState.rawText}
+                  </Text>
+                </>
+              ) : null}
+              <TouchableOpacity
+                onPress={retryAnalysis}
+                style={styles.retryBtn}
+                accessibilityRole="button"
+                accessibilityLabel="AI 분석 다시 시도"
+              >
+                <Text style={styles.retryBtnText}>다시 시도</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {/* 폼 */}
           <Field label="제품명" required ai={aiFilled.productName}>
             <TextInput
+              ref={productNameRef}
               style={styles.input}
               placeholder="예: 무선 이어폰"
               placeholderTextColor={colors.textDisabled}
@@ -382,7 +449,11 @@ export default function RegisterScreen() {
               <Text style={styles.saveText}>저장</Text>
             )}
           </TouchableOpacity>
-          {!imageUri ? <Text style={styles.saveNote}>사진을 선택해야 저장할 수 있어요.</Text> : null}
+          {!imageUri ? (
+            <Text style={styles.saveNote}>사진을 선택해야 저장할 수 있어요.</Text>
+          ) : productName.trim().length === 0 ? (
+            <Text style={styles.saveNote}>제품명을 입력해주세요.</Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -488,6 +559,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.three,
   },
   statusText: { flex: 1, fontSize: 13, fontWeight: '500' },
+  errorBox: {
+    gap: spacing.two,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.error,
+    padding: spacing.three,
+  },
+  errorHint: { fontSize: 12, color: colors.textSub },
+  errorRaw: { fontSize: 13, color: colors.textMain },
+  retryBtn: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingVertical: spacing.two,
+    paddingHorizontal: spacing.three,
+  },
+  retryBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
   field: { gap: spacing.one },
   fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.textMain },
