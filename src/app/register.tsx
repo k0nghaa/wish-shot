@@ -19,9 +19,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { colors, spacing } from '@/constants/theme';
-import { useAnalysis } from '@/hooks/useAnalysis'; // [임시 검증용 — Step 3 상태머신 확인. Step 4에서 제거]
+import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { readImageBytes } from '@/lib/imageBytes';
 import {
+  createAnalysisLog,
   createCategory,
   createItem,
   DuplicateItemError,
@@ -31,15 +32,46 @@ import {
   listCategories,
   updateItem,
   uploadItemImage,
+  type AnalysisStatus,
   type Category,
   type Item,
 } from '@/lib/queries';
+import type { Json } from '@/types/database';
 
 const emptyToNull = (s: string): string | null => (s.trim() ? s.trim() : null);
 
 function parsePrice(text: string): number | null {
   const digits = text.replace(/[^\d]/g, '');
   return digits ? Number(digits) : null;
+}
+
+/** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
+function analysisStatusInfo(
+  state: AnalysisState,
+  needsConfirmation: boolean,
+): { text: string; color: string; loading: boolean } | null {
+  switch (state.phase) {
+    case 'imageReceived':
+    case 'ocrRunning':
+      return { text: '이미지에서 글자를 읽고 있어요…', color: colors.textSub, loading: true };
+    case 'parsing':
+      return { text: 'AI가 제품 정보를 정리하고 있어요…', color: colors.textSub, loading: true };
+    case 'filled':
+      return needsConfirmation
+        ? { text: '확인이 필요해요 — AI가 채운 값을 확인해 주세요.', color: colors.accent, loading: false }
+        : { text: 'AI가 제품 정보를 채웠어요. 확인해 주세요.', color: colors.primary, loading: false };
+    case 'error':
+      return {
+        text:
+          state.errorKind === 'ocr_empty'
+            ? '글자를 인식하지 못했어요. 직접 입력해 주세요.'
+            : '정보를 정리하지 못했어요. 직접 입력해 주세요.',
+        color: colors.error,
+        loading: false,
+      };
+    default:
+      return null;
+  }
 }
 
 export default function RegisterScreen() {
@@ -49,9 +81,10 @@ export default function RegisterScreen() {
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
 
-  const [productName, setProductName] = useState('');
-  const [brand, setBrand] = useState('');
-  const [price, setPrice] = useState('');
+  // 자동채움과 공존시키기 위해 "사용자 편집분"만 상태로 둔다. null = 아직 손대지 않음.
+  const [productNameEdit, setProductNameEdit] = useState<string | null>(null);
+  const [brandEdit, setBrandEdit] = useState<string | null>(null);
+  const [priceEdit, setPriceEdit] = useState<string | null>(null);
   const [sourceLink, setSourceLink] = useState('');
   const [memo, setMemo] = useState('');
 
@@ -74,21 +107,49 @@ export default function RegisterScreen() {
       });
   }, []);
 
-  // [임시 검증용 — Step 3 분석 상태머신 확인. Step 4 자동채움 통합 때 이 블록 전체 제거]
-  // 이미지가 정해지면 분석(OCR→정제)을 시작하고 상태 전이를 콘솔에 찍는다.
-  const { analyze: runAnalyze, state: analysisState, needsConfirmation } = useAnalysis();
+  // 분석(OCR → LLM 정제) 상태머신. 이미지가 들어오면 즉시 시작한다.
+  const { analyze, state: analysisState, needsConfirmation, markSubmitted } = useAnalysis();
+
   useEffect(() => {
-    if (imageUri) runAnalyze(imageUri);
-  }, [imageUri, runAnalyze]);
-  useEffect(() => {
-    console.log('[분석]', analysisState.phase, {
-      result: analysisState.result,
-      errorKind: analysisState.errorKind,
-      needsConfirmation,
+    if (imageUri) analyze(imageUri);
+  }, [imageUri, analyze]);
+
+  // 자동채움은 "복사"가 아니라 "파생"으로 처리한다(effect·setState 불필요):
+  // 손대지 않은 필드(*Edit === null)는 AI 값을, 손댄 필드는 사용자 값을 보여준다.
+  // 사용자가 편집하면 *Edit 이 채워져 자연히 "AI가 채움" 표시가 사라진다.
+  const aiResult = analysisState.phase === 'filled' ? analysisState.result : null;
+  const productName = productNameEdit ?? aiResult?.productName ?? '';
+  const brand = brandEdit ?? aiResult?.brand ?? '';
+  const price = priceEdit ?? (aiResult?.price != null ? String(aiResult.price) : '');
+  const aiFilled = {
+    productName: productNameEdit === null && !!aiResult?.productName,
+    brand: brandEdit === null && !!aiResult?.brand,
+    price: priceEdit === null && aiResult?.price != null,
+  };
+
+  // 이번 분석 결과의 로그 상태(4종). 분석이 없었으면 null.
+  function analysisLogStatus(): AnalysisStatus | null {
+    if (analysisState.phase === 'error') {
+      return analysisState.errorKind === 'ocr_empty' ? 'ocr_empty' : 'parse_failed';
+    }
+    if (analysisState.result) return needsConfirmation ? 'low_confidence' : 'parsed';
+    return null;
+  }
+
+  // 저장 성공 후 분석 로그를 남기고 item_id 를 연결한다. 실패는 삼켜져 저장 흐름을 막지 않는다.
+  function recordAnalysisLog(itemId: string) {
+    const status = analysisLogStatus();
+    if (!status) return;
+    void createAnalysisLog({
+      rawText: analysisState.rawText,
+      parsed: (analysisState.result as unknown as Json) ?? null,
+      status,
+      itemId,
     });
-  }, [analysisState, needsConfirmation]);
+  }
 
   const canSave = Boolean(imageUri) && productName.trim().length > 0 && !saving;
+  const analysisStatus = imageUri ? analysisStatusInfo(analysisState, needsConfirmation) : null;
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -168,6 +229,8 @@ export default function RegisterScreen() {
       }
       throw e;
     }
+    recordAnalysisLog(id);
+    markSubmitted();
     setSaving(false);
     router.replace('/');
   }
@@ -189,6 +252,8 @@ export default function RegisterScreen() {
         sourceLink: emptyToNull(sourceLink),
         memo: emptyToNull(memo),
       });
+      recordAnalysisLog(existing.id);
+      markSubmitted();
       setDupVisible(false);
       setOverwriteBusy(false);
       router.replace('/');
@@ -235,38 +300,41 @@ export default function RegisterScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {/* Phase 3 자리: OCR 자동 채움 */}
-          <View style={styles.ocrHint}>
-            <Text style={styles.ocrHintText}>AI 자동 채움은 다음 업데이트에서 붙어요(Phase 3).</Text>
-          </View>
+          {/* 분석 상태 인디케이터 (인식 중 / 정리 중 / 완료 / 확인 필요 / 실패) */}
+          {analysisStatus ? (
+            <View style={styles.status} accessibilityLiveRegion="polite">
+              {analysisStatus.loading ? <ActivityIndicator size="small" color={colors.textSub} /> : null}
+              <Text style={[styles.statusText, { color: analysisStatus.color }]}>{analysisStatus.text}</Text>
+            </View>
+          ) : null}
 
           {/* 폼 */}
-          <Field label="제품명" required>
+          <Field label="제품명" required ai={aiFilled.productName}>
             <TextInput
               style={styles.input}
               placeholder="예: 무선 이어폰"
               placeholderTextColor={colors.textDisabled}
               value={productName}
-              onChangeText={setProductName}
+              onChangeText={setProductNameEdit}
             />
           </Field>
-          <Field label="브랜드">
+          <Field label="브랜드" ai={aiFilled.brand}>
             <TextInput
               style={styles.input}
               placeholder="예: 소니"
               placeholderTextColor={colors.textDisabled}
               value={brand}
-              onChangeText={setBrand}
+              onChangeText={setBrandEdit}
             />
           </Field>
-          <Field label="가격 (원)">
+          <Field label="가격 (원)" ai={aiFilled.price}>
             <TextInput
               style={styles.input}
               placeholder="예: 189000"
               placeholderTextColor={colors.textDisabled}
               keyboardType="number-pad"
               value={price}
-              onChangeText={setPrice}
+              onChangeText={setPriceEdit}
             />
           </Field>
           <Field label="링크">
@@ -331,13 +399,30 @@ export default function RegisterScreen() {
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  ai,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  ai?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>
-        {label}
-        {required ? <Text style={styles.required}> *</Text> : null}
-      </Text>
+      <View style={styles.fieldLabelRow}>
+        <Text style={styles.fieldLabel}>
+          {label}
+          {required ? <Text style={styles.required}> *</Text> : null}
+        </Text>
+        {ai ? (
+          <View style={styles.aiBadge} accessibilityLabel="AI가 채운 값이에요">
+            <Text style={styles.aiBadgeText}>AI가 채움</Text>
+          </View>
+        ) : null}
+      </View>
       {children}
     </View>
   );
@@ -393,15 +478,26 @@ const styles = StyleSheet.create({
   imagePlaceholderText: { fontSize: 16, fontWeight: '600', color: colors.primary },
   imageHint: { fontSize: 13, color: colors.textSub },
   changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
-  ocrHint: {
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.two,
     borderRadius: 10,
     backgroundColor: colors.primaryLight,
     paddingVertical: spacing.two,
     paddingHorizontal: spacing.three,
   },
-  ocrHintText: { fontSize: 12, color: colors.textSub },
+  statusText: { flex: 1, fontSize: 13, fontWeight: '500' },
   field: { gap: spacing.one },
+  fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.textMain },
+  aiBadge: {
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.two,
+  },
+  aiBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bgCard },
   required: { color: colors.error },
   input: {
     backgroundColor: colors.bgCard,
