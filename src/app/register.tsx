@@ -61,6 +61,10 @@ function analysisStatusInfo(
     case 'parsing':
       return { text: 'AI가 제품 정보를 정리하고 있어요…', color: colors.textSub, loading: true };
     case 'filled':
+      // E-3(부분 성공): 정제는 됐으나 제품명을 못 뽑음 → 제품명 입력을 명시적으로 안내.
+      if (state.result && !state.result.productName) {
+        return { text: '제품명을 인식하지 못했어요. 직접 입력해 주세요.', color: colors.accent, loading: false };
+      }
       return needsConfirmation
         ? { text: '확인이 필요해요 — AI가 채운 값을 확인해 주세요.', color: colors.accent, loading: false }
         : { text: 'AI가 제품 정보를 채웠어요. 확인해 주세요.', color: colors.primary, loading: false };
@@ -357,10 +361,12 @@ export default function RegisterScreen() {
             <View style={styles.errorBox}>
               {analysisState.errorKind === 'parse_failed' && analysisState.rawText ? (
                 <>
-                  <Text style={styles.errorHint}>인식한 원문(참고용)</Text>
-                  <Text style={styles.errorRaw} numberOfLines={4}>
-                    {analysisState.rawText}
-                  </Text>
+                  <Text style={styles.errorHint}>인식한 원문(참고용) — 아래에서 복사해 입력할 수 있어요</Text>
+                  <ScrollView style={styles.errorRawBox} nestedScrollEnabled>
+                    <Text style={styles.errorRaw} selectable>
+                      {analysisState.rawText}
+                    </Text>
+                  </ScrollView>
                 </>
               ) : null}
               <TouchableOpacity
@@ -567,6 +573,7 @@ const styles = StyleSheet.create({
     padding: spacing.three,
   },
   errorHint: { fontSize: 12, color: colors.textSub },
+  errorRawBox: { maxHeight: 140, borderRadius: 8, backgroundColor: colors.bgCard, padding: spacing.two },
   errorRaw: { fontSize: 13, color: colors.textMain },
   retryBtn: {
     alignSelf: 'flex-start',
