@@ -23,10 +23,10 @@ Phase 2까지 **수동 입력**으로 저장하던 등록 화면 위에, **온�
 
 ## 사전 조건 (사람이 준비)
 
-- [ ] Phase 2 완료: 데이터 계약(`categories`/`items`/`analysis_logs` + RLS + Storage), 등록/목록/상세/삭제 화면, 공유 시트 수신 → 수동 저장.
-- [ ] Supabase 대시보드 접근 (Edge Function 배포·시크릿 설정용) 또는 Supabase CLI 로그인.
-- [ ] **Claude API 키** (Anthropic Console에서 발급). 이 키는 **앱에 넣지 않고** Edge Function 시크릿으로만 등록한다. (사람이 발급·보관)
-- [ ] `analysis_logs` 테이블은 Phase 2에서 이미 생성됨(GRANT·RLS 포함). 이 Phase는 **테이블을 만들지 않고 쓰기만** 한다 — 스키마 변경 없음(변경이 필요하면 `0002_*.sql` 추가 규칙을 따른다).
+- [x] Phase 2 완료: 데이터 계약(`categories`/`items`/`analysis_logs` + RLS + Storage), 등록/목록/상세/삭제 화면, 공유 시트 수신 → 수동 저장.
+- [x] Supabase 대시보드 접근 (Edge Function 배포·시크릿 설정용) 또는 Supabase CLI 로그인.
+- [x] **Claude API 키** (Anthropic Console에서 발급). 이 키는 **앱에 넣지 않고** Edge Function 시크릿으로만 등록한다. (사람이 발급·보관)
+- [x] `analysis_logs` 테이블은 Phase 2에서 이미 생성됨(GRANT·RLS 포함). 이 Phase는 **테이블을 만들지 않고 쓰기만** 한다 — 스키마 변경 없음(변경이 필요하면 `0002_*.sql` 추가 규칙을 따른다).
 
 ---
 
@@ -81,10 +81,10 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 5. 커밋: `feat: OcrEngine 인터페이스 + MlKit/Mock 엔진 + ML Kit 네이티브 추가`
 
 **DoD**
-- [ ] `OcrEngine` 인터페이스 + `MlKitOcrEngine`·`MockOcrEngine` 존재, `npx tsc --noEmit` 통과
-- [ ] `app.json`/introspect에 ML Kit config plugin(있다면) 반영 확인
-- [ ] (사람) EAS 재빌드 → 아이폰 재설치 → 앱 정상 실행(기존 Phase 2 기능 회귀 없음)
-- [ ] (사람) 실기기에서 이미지 1장에 대해 `MlKitOcrEngine.recognize`가 텍스트를 반환(콘솔/임시 표시로 확인)
+- [x] `OcrEngine` 인터페이스 + `MlKitOcrEngine`·`MockOcrEngine` 존재, `npx tsc --noEmit` 통과
+- [x] `app.json`/introspect에 ML Kit config plugin(있다면) 반영 확인
+- [x] (사람) EAS 재빌드 → 아이폰 재설치 → 앱 정상 실행(기존 Phase 2 기능 회귀 없음)
+- [x] (사람) 실기기에서 이미지 1장에 대해 `MlKitOcrEngine.recognize`가 텍스트를 반환(콘솔/임시 표시로 확인)
 
 ---
 
@@ -107,10 +107,10 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 5. 커밋: `feat: parse-screenshot-text Edge Function (Claude Haiku 정제)`
 
 **DoD**
-- [ ] 함수 배포됨. (사람) 샘플 텍스트로 호출 → 기대 형태 JSON 반환(예: `{"productName":"무선 이어폰","price":189000,"brand":"소니","confidence":0.8}`)
-- [ ] `ANTHROPIC_API_KEY`가 앱 번들·`.env`·커밋 어디에도 없음(Edge Function 시크릿에만)
-- [ ] 익명(미로그인) 호출 거부 확인
-- [ ] LLM 실패/타임아웃 시 앱이 구분할 수 있는 실패 응답 반환
+- [x] 함수 배포됨. (사람) 샘플 텍스트로 호출 → 기대 형태 JSON 반환(예: `{"productName":"무선 이어폰","price":189000,"brand":"소니","confidence":0.8}`)
+- [x] `ANTHROPIC_API_KEY`가 앱 번들·`.env`·커밋 어디에도 없음(Edge Function 시크릿에만)
+- [x] 익명(미로그인) 호출 거부 확인
+- [x] LLM 실패/타임아웃 시 앱이 구분할 수 있는 실패 응답 반환
 
 ---
 
@@ -128,9 +128,9 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 3. 커밋: `feat: 분석 상태머신 훅 + analysis_logs 데이터 레이어`
 
 **DoD**
-- [ ] `useAnalysis`(useReducer) 존재, 상태 전이·에러 폴백 구현. `tsc --noEmit` 통과
-- [ ] `analysisLogs` 쿼리(`@/lib/queries`) 존재, `status` 4종 사용
-- [ ] `MockOcrEngine` + 배포된 Edge Function으로 상태머신이 `idle→…→filled` / `→error`를 정상 순회(개발 서버에서 확인)
+- [x] `useAnalysis`(useReducer) 존재, 상태 전이·에러 폴백 구현. `tsc --noEmit` 통과
+- [x] `analysisLogs` 쿼리(`@/lib/queries`) 존재, `status` 4종 사용
+- [x] `MockOcrEngine` + 배포된 Edge Function으로 상태머신이 `idle→…→filled` / `→error`를 정상 순회(개발 서버에서 확인)
 
 ---
 
@@ -147,12 +147,12 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 6. 커밋: `feat: 등록 화면 OCR 자동채움 + 상태 인디케이터 + "AI가 채움" 표시`
 
 **DoD**
-- [ ] (사람) **공유 시트 → WishShot → 등록 화면 진입 시 OCR 자동 시작 → 제품명/가격 자동채움 확인** ← Phase 3 핵심(PRD S1)
-- [ ] (사람) **앱 내 사진 선택 → 자동채움** 동일 동작(S2)
-- [ ] 자동채운 필드에 "AI가 채움" 표시, 편집 시 표시 사라짐(FR-4)
-- [ ] 저신뢰 시 "확인이 필요해요" 노출(FR-7a)
-- [ ] 저장 후 `analysis_logs`에 `item_id` 연결 확인(대시보드)
-- [ ] 디자인 토큰만 사용(원시 hex 없음), 문자열 한국어. `tsc --noEmit` 통과
+- [x] (사람) **공유 시트 → WishShot → 등록 화면 진입 시 OCR 자동 시작 → 제품명/가격 자동채움 확인** ← Phase 3 핵심(PRD S1)
+- [x] (사람) **앱 내 사진 선택 → 자동채움** 동일 동작(S2)
+- [x] 자동채운 필드에 "AI가 채움" 표시, 편집 시 표시 사라짐(FR-4)
+- [x] 저신뢰 시 "확인이 필요해요" 노출(FR-7a)
+- [x] 저장 후 `analysis_logs`에 `item_id` 연결 확인(대시보드)
+- [x] 디자인 토큰만 사용(원시 hex 없음), 문자열 한국어. `tsc --noEmit` 통과
 
 ---
 
@@ -169,10 +169,10 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 4. 커밋: `feat: OCR 예외 처리 + 개인정보 고지(NFR-3) + 접근성`
 
 **DoD**
-- [ ] (사람) **예외 3종 이상 확인**: 빈 OCR(E-1) / 정제 실패·재시도(E-2) / 제품명 미인식(E-3) — 각각 수동 입력으로 폴백되고 저장 흐름이 깨지지 않음
-- [ ] (사람) 첫 업로드 시 개인정보 고지 1회 노출, 이후 미노출
-- [ ] (사람) VoiceOver로 자동채움·상태 변화 인지 가능
-- [ ] `analysis_logs.status`가 상황별로(`ocr_empty`/`parsed`/`parse_failed`/`low_confidence`) 기록됨
+- [x] (사람) **예외 3종 이상 확인**: 빈 OCR(E-1) / 정제 실패·재시도(E-2) / 제품명 미인식(E-3) — 각각 수동 입력으로 폴백되고 저장 흐름이 깨지지 않음
+- [x] (사람) 첫 업로드 시 개인정보 고지 1회 노출, 이후 미노출
+- [x] (사람) VoiceOver로 자동채움·상태 변화 인지 가능
+- [x] `analysis_logs.status`가 상황별로(`ocr_empty`/`parsed`/`parse_failed`/`low_confidence`) 기록됨
 
 ---
 
@@ -185,8 +185,8 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 4. 커밋: `docs: Phase 3 완료 — 문서 갱신, 결과 기록`. `dev`로 PR.
 
 **DoD**
-- [ ] `CLAUDE.md`가 현재 구조를 정확히 설명(아직 없는 것을 있다고 쓰지 않음)
-- [ ] `dev`로 PR (열림 — 사람이 머지)
+- [x] `CLAUDE.md`가 현재 구조를 정확히 설명(아직 없는 것을 있다고 쓰지 않음)
+- [x] `dev`로 PR (열림 — 사람이 머지)
 
 ---
 
@@ -209,10 +209,18 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 
 ## 결과 기록 (Phase 완료 시 작성)
 
-- **완료일**: (작성)
-- **ML Kit 래퍼 / 버전 / 재빌드**: (작성 — 패키지명, Expo SDK 57 호환 버전, config plugin 유무, EAS 재빌드 횟수/시간)
-- **채택 모델 / 파라미터 / 구조화 출력**: (작성 — 모델 ID, max_tokens, json_schema)
-- **confidence 임계값**: (작성)
-- **Edge Function 배포 / 시크릿**: (작성 — 함수 URL, `ANTHROPIC_API_KEY` 시크릿 등록 확인)
-- **발생한 이슈와 해결**: (작성)
+- **완료일**: 2026-09-14
+- **OCR 엔진 / 버전 / 재빌드**: **Google ML Kit 대신 Apple Vision 채택.** 서드파티 래퍼 조사 결과 어떤 것도 Expo SDK 57 / RN 0.86 / New Architecture 호환을 공식 확인 못 함(`@react-native-ml-kit/text-recognition@2.0.0`은 New Arch open issue #85, `@infinitered/...`는 SDK 56용 6.0.0이 npm 미발행). iOS 전용이라 Apple Vision이 ML Kit iOS CocoaPods/arm64 문제를 회피. 처음엔 `expo-text-extractor@2.0.0`을 썼으나 `recognitionLanguages` 미설정으로 **영어만 인식(한국어 누락)** + 언어 옵션 미노출 → 제거하고 **자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr`**로 전환(`recognitionLanguages=["ko-KR","en-US"]`, `.accurate`, `usesLanguageCorrection`). config plugin 없이 autolinking(`modules/`는 expo가 자동 인식, introspect로 확인). **EAS 개발 빌드 2회**(① expo-text-extractor 추가 ② 로컬 모듈 전환·서드파티 제거). 이후 Step은 JS 전용이라 추가 재빌드 없음.
+- **채택 모델 / 파라미터 / 구조화 출력**: `claude-haiku-4-5`, `max_tokens: 400`, thinking 미사용, **구조화 출력** `output_config.format` = `json_schema`(nullable은 `anyOf`). 호출은 Deno에서 REST 직접 `fetch`(설치 SDK의 `output_config` 지원 불확실 회피). 프롬프트: 한/영 공존 시 **한국어 제품명 우선** + 수량/구성 노이즈 제거, 가격은 원 단위 정수(할인가 우선).
+- **confidence 임계값**: `0.5`(`LOW_CONFIDENCE_THRESHOLD`, `src/hooks/useAnalysis.ts`). 미만이면 "확인이 필요해요"(FR-7a). 실사용 관찰 후 조정 가능.
+- **Edge Function 배포 / 시크릿**: `parse-screenshot-text` 배포됨(project `vcvzuiyxcmvrkxscgvwp`). `ANTHROPIC_API_KEY`는 함수 시크릿에만(`supabase secrets set`) — 앱·`.env`·커밋에 없음. `supabase.auth.getUser()`로 로그인 사용자만 통과(익명 401 확인). 실패는 `llm_timeout`/`llm_error`/`llm_refusal` 등 구분 응답 → 앱이 E-2 폴백.
+- **엔진 선택 로직**: `src/lib/ocr/index.ts` — `isVisionAvailable()`(네이티브 모듈 존재)면 `VisionOcrEngine`, 아니면 `MockOcrEngine`(Expo Go·시뮬레이터·개발 서버). `FORCE_MOCK` 플래그로 강제 가능.
+- **analysis_logs 기록 시점**: 저장 성공 시 `createAnalysisLog`로 기록 + `item_id` 연결(`recordAnalysisLog`). `parsed`에는 AI 원본 정제값(실제 저장값은 `items`). `status` 4종 사용. 로그 실패는 삼켜 저장을 막지 않음.
+- **개인정보 고지 위치**: 첫 이미지 업로드 시 1회 모달(AsyncStorage `wishshot.privacyNoticeShown`). 설정 화면은 아직 없음(Phase 4 여지).
+- **발생한 이슈와 해결**:
+  - 한국어 미인식 → Apple Vision `recognitionLanguages`에 `ko-KR` 명시(자작 모듈로 제어).
+  - curl 테스트 시 Windows Git Bash가 한국어를 mojibake로 전송 → `--data-binary @UTF-8파일`로 검증(실제 앱은 supabase-js가 UTF-8 전송이라 무관).
+  - E-2 원문이 `numberOfLines=4`로 상태바 잡텍스트만 보임 → 스크롤·복사 가능한 전체 표시로 수정.
+  - E-3(제품명 null) 시 상태 문구가 일반 "확인이 필요해요"였음 → "제품명을 인식하지 못했어요…"로 명시.
+  - **중복 판정 한계(알려진 한계, Phase 3 범위 밖)**: 같은 제품이라도 스크린샷 소스가 다르면(공홈 한국어명 vs 인증샷 영어 라벨) OCR 텍스트가 달라 `normalized_name`이 달라짐 → 크로스-소스 중복은 못 잡음. `normalized_name`은 "동일 재저장 하드 차단" 용도 유지. 이미지·카탈로그 기반 중복/후보 선택 UX는 Phase 4 백로그.
 - **Phase 4로 넘길 것**: 저장 후 편집(FR-14)·카테고리 이동(FR-15)·메모/태그, 기존 SQLite/uploads 데이터 이관(`docs/archive/migrate-sqlite-to-supabase.ts` 개조), TestFlight 내부 테스트, 카테고리 자동 추천(FR-8)은 그 이후.
