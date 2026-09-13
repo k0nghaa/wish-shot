@@ -41,7 +41,9 @@ const OUTPUT_SCHEMA = {
 const SYSTEM_PROMPT = [
   'You extract product info from the raw OCR text of a shopping screenshot (Korean or English).',
   'Return only these fields via the structured format:',
-  '- productName: the product name. If you cannot identify one, use null.',
+  '- productName: the product name. If the name appears in both Korean and English, PREFER the Korean name.',
+  '  Give the core product name only — strip quantity/bundle/option/size noise (e.g. "1EA", "+클린솝", "세트", "2개", "470g", "UP TO 33%").',
+  '  If you cannot identify one, use null.',
   '- brand: the brand or store name if identifiable, else null.',
   '- price: the actual selling price as an integer in Korean won (KRW), digits only (no "원", no commas, no symbols).',
   '  If both an original and a discounted price are shown, choose the price the customer actually pays (the discounted/current price).',
