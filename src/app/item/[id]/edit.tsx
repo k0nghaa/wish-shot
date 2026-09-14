@@ -28,6 +28,7 @@ import {
   getCurrentUserId,
   getItem,
   getItemImageSignedUrl,
+  listAllTags,
   listCategories,
   updateItem,
   uploadItemImage,
@@ -50,6 +51,7 @@ export default function ItemEditScreen() {
   // 새로 고른 교체 이미지(로컬 uri). null 이면 기존 이미지 유지.
   const [newImage, setNewImage] = useState<{ uri: string; contentType: string } | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]); // 기존 태그(선택 칩용)
 
   const [productName, setProductName] = useState('');
   const [brand, setBrand] = useState('');
@@ -67,7 +69,11 @@ export default function ItemEditScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const [item, cats] = await Promise.all([getItem(id), listCategories().catch(() => [])]);
+        const [item, cats, allTagList] = await Promise.all([
+          getItem(id),
+          listCategories().catch(() => []),
+          listAllTags().catch(() => [] as string[]),
+        ]);
         if (cancelled) return;
         setProductName(item.product_name);
         setBrand(item.brand ?? '');
@@ -78,6 +84,7 @@ export default function ItemEditScreen() {
         setCategoryId(item.category_id);
         setInitialCategoryId(item.category_id);
         setCategories(cats);
+        setAllTags(allTagList);
         setLoading(false);
         getItemImageSignedUrl(item.image_key)
           .then((url) => {
@@ -255,7 +262,7 @@ export default function ItemEditScreen() {
               />
             </FormField>
 
-            <TagInput tags={tags} onChange={setTags} />
+            <TagInput tags={tags} onChange={setTags} suggestions={allTags} />
 
             <CategoryPicker
               categories={categories}

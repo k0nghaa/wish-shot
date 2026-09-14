@@ -252,9 +252,15 @@ export default function ItemDetailScreen() {
               <Text style={styles.blockLabel}>태그</Text>
               <View style={styles.tags}>
                 {item.tags.map((tag) => (
-                  <View key={tag} style={styles.tag}>
+                  <TouchableOpacity
+                    key={tag}
+                    style={styles.tag}
+                    onPress={() => router.push({ pathname: '/tag/[name]', params: { name: tag } })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`태그로 모아보기: ${tag}`}
+                  >
                     <Text style={styles.tagText}>{tag}</Text>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>

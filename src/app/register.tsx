@@ -34,6 +34,7 @@ import {
   findDuplicateItem,
   getCurrentUserId,
   getItemImageSignedUrl,
+  listAllTags,
   listCategories,
   updateItem,
   uploadItemImage,
@@ -100,6 +101,7 @@ export default function RegisterScreen() {
   const [sourceLink, setSourceLink] = useState('');
   const [memo, setMemo] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]); // 기존 태그(선택 칩용)
 
   const [categories, setCategories] = useState<Category[]>([]);
   // 카테고리도 자동채움처럼 "파생"으로 다룬다(FR-8 추천 미리선택).
@@ -119,6 +121,11 @@ export default function RegisterScreen() {
       .then(setCategories)
       .catch(() => {
         /* 카테고리 로드 실패는 저장을 막지 않는다(미분류로 저장 가능) */
+      });
+    listAllTags()
+      .then(setAllTags)
+      .catch(() => {
+        /* 기존 태그 로드 실패는 태그 선택 칩만 비운다 */
       });
   }, []);
 
@@ -474,7 +481,7 @@ export default function RegisterScreen() {
             />
           </FormField>
 
-          <TagInput tags={tags} onChange={setTags} />
+          <TagInput tags={tags} onChange={setTags} suggestions={allTags} />
 
           {/* 카테고리 선택 (FR-8: AI 추천이 있으면 미리 선택되고 힌트 표시. 다른 걸 고르면 덮인다) */}
           <CategoryPicker

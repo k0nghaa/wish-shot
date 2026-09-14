@@ -7,30 +7,40 @@ import { formInput } from './FormField';
 
 /**
  * 자유 입력 태그 칩. 입력 후 완료(Enter)를 누르면 칩으로 추가되고, 칩을 탭하면 제거된다.
+ * `suggestions`(내가 이미 쓴 태그)를 넘기면 입력 밑에 선택 칩으로 보여주고, 탭하면 추가된다(FR-15a).
  * 값은 `string[]` 이며 `items.tags` 에 그대로 저장된다(빈 배열은 호출부가 null 로 변환).
  * 중복 태그·공백은 무시한다.
  */
 export function TagInput({
   tags,
   onChange,
+  suggestions = [],
   label = '태그',
 }: {
   tags: string[];
   onChange: (tags: string[]) => void;
+  suggestions?: string[];
   label?: string;
 }) {
   const [text, setText] = useState('');
 
-  function addTag() {
-    const t = text.trim();
+  function addTag(tag: string) {
+    const t = tag.trim();
     if (!t) return;
     if (!tags.includes(t)) onChange([...tags, t]);
+  }
+
+  function submitInput() {
+    addTag(text);
     setText('');
   }
 
   function removeTag(tag: string) {
     onChange(tags.filter((x) => x !== tag));
   }
+
+  // 아직 안 단 기존 태그만 선택지로 보여준다.
+  const pickable = suggestions.filter((s) => !tags.includes(s));
 
   return (
     <View style={styles.wrap}>
@@ -41,7 +51,7 @@ export function TagInput({
         placeholderTextColor={colors.textDisabled}
         value={text}
         onChangeText={setText}
-        onSubmitEditing={addTag}
+        onSubmitEditing={submitInput}
         returnKeyType="done"
         blurOnSubmit={false}
         autoCapitalize="none"
@@ -62,6 +72,24 @@ export function TagInput({
           ))}
         </View>
       ) : null}
+      {pickable.length > 0 ? (
+        <>
+          <Text style={styles.pickHint}>이전에 쓴 태그</Text>
+          <View style={styles.tags}>
+            {pickable.map((tag) => (
+              <TouchableOpacity
+                key={tag}
+                style={styles.pick}
+                onPress={() => addTag(tag)}
+                accessibilityRole="button"
+                accessibilityLabel={`태그 추가: ${tag}`}
+              >
+                <Text style={styles.pickText}>{tag}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -81,4 +109,14 @@ const styles = StyleSheet.create({
   },
   tagText: { fontSize: 13, color: colors.primaryHover },
   tagRemove: { fontSize: 12, color: colors.primaryHover, fontWeight: '700' },
+  pickHint: { fontSize: 12, color: colors.textSub },
+  pick: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.silver,
+    backgroundColor: colors.bgCard,
+    paddingVertical: spacing.one,
+    paddingHorizontal: spacing.three,
+  },
+  pickText: { fontSize: 13, color: colors.textSub },
 });

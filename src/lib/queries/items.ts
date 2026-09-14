@@ -50,6 +50,33 @@ export async function listItemsByCategory(categoryId: string | null): Promise<It
   return data ?? [];
 }
 
+/**
+ * 내가 쓴 모든 태그를 빈도 내림차순(동률은 가나다순)으로 반환한다.
+ * 등록·편집 화면의 "기존 태그 선택" 칩에 쓴다. RLS로 본인 아이템만 집계된다.
+ */
+export async function listAllTags(): Promise<string[]> {
+  const { data, error } = await supabase.from('items').select('tags');
+  if (error) throw new Error(`태그를 불러오지 못했어요: ${error.message}`);
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    for (const t of row.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
+    .map(([tag]) => tag);
+}
+
+/** 특정 태그가 달린 아이템(최신순). 카테고리와 무관하게 모아 본다(FR-15a 태그 필터 보기). */
+export async function listItemsByTag(tag: string): Promise<Item[]> {
+  const { data, error } = await supabase
+    .from('items')
+    .select('*')
+    .contains('tags', [tag])
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(`아이템을 불러오지 못했어요: ${error.message}`);
+  return data ?? [];
+}
+
 /** 단건 조회. */
 export async function getItem(id: string): Promise<Item> {
   const { data, error } = await supabase.from('items').select('*').eq('id', id).single();
