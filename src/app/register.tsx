@@ -22,6 +22,7 @@ import { CategoryPicker } from '@/components/CategoryPicker';
 import { FormField, formInput } from '@/components/FormField';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { TagInput } from '@/components/TagInput';
+import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { readImageBytes } from '@/lib/imageBytes';
@@ -138,11 +139,7 @@ export default function RegisterScreen() {
         if (await AsyncStorage.getItem(PRIVACY_NOTICE_KEY)) return;
         await AsyncStorage.setItem(PRIVACY_NOTICE_KEY, '1');
         if (cancelled) return;
-        Alert.alert(
-          '이미지 분석 안내',
-          '이미지는 기기에서 분석되고 비공개 저장소에만 저장돼요. AI 정제에는 인식한 텍스트만 전송돼요.',
-          [{ text: '확인' }],
-        );
+        Alert.alert(PRIVACY_NOTICE.title, PRIVACY_NOTICE.body, [{ text: '확인' }]);
       } catch {
         /* 고지 실패는 저장 흐름을 막지 않는다 */
       }

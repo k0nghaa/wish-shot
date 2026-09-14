@@ -25,7 +25,6 @@ import {
   renameCategory,
 } from '@/lib/queries';
 import { toFileUri } from '@/lib/imageBytes';
-import { supabase } from '@/lib/supabase';
 
 type Row = {
   id: string; // 카테고리 id, 또는 미분류는 'uncategorized'
@@ -178,16 +177,17 @@ export default function HomeScreen() {
     ]);
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-  }
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>WishShot</Text>
-        <TouchableOpacity onPress={handleLogout} hitSlop={8} accessibilityRole="button">
-          <Text style={styles.logout}>로그아웃</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/settings')}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="설정"
+        >
+          <Text style={styles.settings}>설정</Text>
         </TouchableOpacity>
       </View>
 
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textMain,
   },
-  logout: {
+  settings: {
     fontSize: 14,
     color: colors.textSub,
   },

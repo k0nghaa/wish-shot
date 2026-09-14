@@ -14,3 +14,15 @@ export async function getCurrentUserId(): Promise<string> {
   if (!userId) throw new Error('로그인이 필요해요.');
   return userId;
 }
+
+/** 현재 로그인한 사용자의 이메일. 설정 화면 표시용. 없으면 null. */
+export async function getCurrentUserEmail(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.email ?? null;
+}
+
+/** 로그아웃. 세션이 사라지면 _layout 의 AuthGate 가 onAuthStateChange 로 로그인 화면으로 보낸다. */
+export async function signOut(): Promise<void> {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw new Error(`로그아웃하지 못했어요: ${error.message}`);
+}
