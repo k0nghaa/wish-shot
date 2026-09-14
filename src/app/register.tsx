@@ -361,15 +361,30 @@ export default function RegisterScreen() {
             <View style={styles.errorBox}>
               {analysisState.errorKind === 'parse_failed' && analysisState.rawText ? (
                 <>
-                  <Text style={styles.errorHint}>인식한 원문(참고용) — 줄을 길게 눌러 선택·복사할 수 있어요</Text>
-                  <ScrollView style={styles.errorRawBox} nestedScrollEnabled>
-                    {analysisState.rawText.split('\n').map((line, i) =>
-                      line.trim() ? (
-                        <Text key={`${i}-${line}`} style={styles.errorRawLine} selectable>
-                          {line}
-                        </Text>
-                      ) : null,
-                    )}
+                  <Text style={styles.errorHint}>인식한 원문 — 제품명인 줄을 탭하면 제품명 칸에 들어가요</Text>
+                  <ScrollView
+                    style={styles.errorRawBox}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {analysisState.rawText.split('\n').map((line, i) => {
+                      const t = line.trim();
+                      if (!t) return null;
+                      const picked = t === productName.trim() && productName.trim().length > 0;
+                      return (
+                        <TouchableOpacity
+                          key={`${i}-${t}`}
+                          onPress={() => setProductNameEdit(t)}
+                          style={[styles.errorRawLine, picked && styles.errorRawLinePicked]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`제품명에 넣기: ${t}`}
+                        >
+                          <Text style={styles.errorRawText} selectable>
+                            {t}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </ScrollView>
                 </>
               ) : null}
@@ -578,7 +593,9 @@ const styles = StyleSheet.create({
   },
   errorHint: { fontSize: 12, color: colors.textSub },
   errorRawBox: { maxHeight: 140, borderRadius: 8, backgroundColor: colors.bgCard, padding: spacing.two },
-  errorRawLine: { fontSize: 13, color: colors.textMain, paddingVertical: 2 },
+  errorRawLine: { paddingVertical: spacing.one, paddingHorizontal: spacing.two, borderRadius: 6 },
+  errorRawLinePicked: { backgroundColor: colors.primaryLight },
+  errorRawText: { fontSize: 13, color: colors.textMain },
   retryBtn: {
     alignSelf: 'flex-start',
     borderRadius: 8,
