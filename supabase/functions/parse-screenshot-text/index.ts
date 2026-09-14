@@ -1,13 +1,15 @@
 // parse-screenshot-text — 온디바이스 OCR 원문을 Claude Haiku로 정제해
 // { productName, price, brand, confidence } 를 돌려주는 Edge Function (Deno).
 //
-// 계약(Phase 3 지시서):
-//   입력:  { "text": string }            OCR 원문(여러 줄 가능)
-//   출력:  { productName, price, brand, confidence }
+// 계약(Phase 3 + Phase 4 FR-8):
+//   입력:  { "text": string, "categories"?: string[] }   OCR 원문 + 사용자의 기존 카테고리 이름들
+//   출력:  { productName, price, brand, confidence, suggestedCategory }
 //     - productName: string | null       못 뽑으면 null (앱에서 E-3 수동 입력)
 //     - price:       number | null       원 단위 정수(KRW). 없으면 null
 //     - brand:       string | null       없으면 null
 //     - confidence:  number              0~1. 낮으면 앱에서 "확인이 필요해요"
+//     - suggestedCategory: string | null 입력 categories 중 하나거나 null(FR-8 경량 추천)
+//                                        categories 가 비면 항상 null(하위호환)
 //
 // 규칙:
 //   - Claude API 키(ANTHROPIC_API_KEY)는 이 함수의 시크릿에만 존재. 앱엔 없음.
@@ -33,8 +35,9 @@ const OUTPUT_SCHEMA = {
     price: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
     brand: { anyOf: [{ type: 'string' }, { type: 'null' }] },
     confidence: { type: 'number' },
+    suggestedCategory: { anyOf: [{ type: 'string' }, { type: 'null' }] },
   },
-  required: ['productName', 'price', 'brand', 'confidence'],
+  required: ['productName', 'price', 'brand', 'confidence', 'suggestedCategory'],
   additionalProperties: false,
 } as const;
 
@@ -52,11 +55,25 @@ const SYSTEM_PROMPT = [
   'Ignore UI noise: clock/time, carrier/battery, buttons (구매하기, 후기, 팔로우, Follow, Add comment), banners, view/like counts, URLs.',
 ].join('\n');
 
+/** categories 유무에 따라 suggestedCategory 지침을 덧붙인다(FR-8). 목록 밖 값·새 이름 금지. */
+function buildSystemPrompt(categories: string[]): string {
+  if (categories.length === 0) {
+    return `${SYSTEM_PROMPT}\n- suggestedCategory: always null (no categories were provided).`;
+  }
+  return [
+    SYSTEM_PROMPT,
+    '- suggestedCategory: pick the ONE category from the user\'s existing list below that best fits this product.',
+    '  You MUST copy one of these strings VERBATIM, or use null if none clearly fits. Never invent a new category name.',
+    `  Existing categories: ${JSON.stringify(categories)}`,
+  ].join('\n');
+}
+
 type ParsedResult = {
   productName: string | null;
   price: number | null;
   brand: string | null;
   confidence: number;
+  suggestedCategory: string | null;
 };
 
 const CORS_HEADERS: Record<string, string> = {
@@ -93,16 +110,21 @@ Deno.serve(async (req) => {
   } = await supabase.auth.getUser();
   if (authError || !user) return json({ error: 'unauthorized' }, 401);
 
-  // 2) 입력 검증: { text: string }
-  let text: unknown;
+  // 2) 입력 검증: { text: string, categories?: string[] }
+  let body: { text?: unknown; categories?: unknown };
   try {
-    ({ text } = await req.json());
+    body = await req.json();
   } catch {
     return json({ error: 'invalid_json' }, 400);
   }
+  const text = body?.text;
   if (typeof text !== 'string' || text.trim().length === 0) {
     return json({ error: 'invalid_text' }, 400);
   }
+  // categories: 문자열만 추리고, 빈 값·중복 제거. 없으면 추천을 건너뛴다(하위호환).
+  const categories = Array.isArray(body?.categories)
+    ? [...new Set(body.categories.filter((c: unknown): c is string => typeof c === 'string' && c.trim().length > 0))]
+    : [];
 
   // 3) Claude Haiku 호출 (구조화 출력). Deno에 설치될 SDK 버전이 output_config를
   //    지원하는지 확신할 수 없어, 문서화된 REST 바디를 fetch로 직접 호출한다.
@@ -121,7 +143,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 400,
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt(categories),
         output_config: { format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
         messages: [{ role: 'user', content: text }],
       }),
@@ -163,10 +185,17 @@ Deno.serve(async (req) => {
       ? Math.round(parsed.price)
       : null;
 
+  // suggestedCategory 화이트리스트: 반드시 입력 categories 안의 값이어야 한다(할루시네이션·새 이름 차단).
+  const suggestedCategory =
+    typeof parsed.suggestedCategory === 'string' && categories.includes(parsed.suggestedCategory)
+      ? parsed.suggestedCategory
+      : null;
+
   return json({
     productName: parsed.productName ?? null,
     price,
     brand: parsed.brand ?? null,
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+    suggestedCategory,
   });
 });

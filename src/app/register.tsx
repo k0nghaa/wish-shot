@@ -101,7 +101,9 @@ export default function RegisterScreen() {
   const [tags, setTags] = useState<string[]>([]);
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryId, setCategoryId] = useState<string | null>(null); // null = 미분류
+  // 카테고리도 자동채움처럼 "파생"으로 다룬다(FR-8 추천 미리선택).
+  // undefined = 사용자가 아직 안 고름(추천을 따름), null = 사용자가 미분류 선택, id = 특정 카테고리.
+  const [categoryIdEdit, setCategoryIdEdit] = useState<string | null | undefined>(undefined);
 
   const [saving, setSaving] = useState(false);
 
@@ -170,6 +172,13 @@ export default function RegisterScreen() {
     price: priceEdit === null && aiResult?.price != null,
   };
 
+  // FR-8: AI가 추천한 카테고리(목록 내 이름)를 id 로 환산. 사용자가 아직 안 골랐으면 추천을 미리선택한다.
+  const suggestedCategoryId = aiResult?.suggestedCategory
+    ? (categories.find((c) => c.name === aiResult.suggestedCategory)?.id ?? null)
+    : null;
+  const categoryId = categoryIdEdit !== undefined ? categoryIdEdit : suggestedCategoryId; // null = 미분류
+  const categoryIsSuggested = categoryIdEdit === undefined && suggestedCategoryId != null;
+
   // 이번 분석 결과의 로그 상태(4종). 분석이 없었으면 null.
   function analysisLogStatus(): AnalysisStatus | null {
     if (analysisState.phase === 'error') {
@@ -223,7 +232,7 @@ export default function RegisterScreen() {
       try {
         const created = await createCategory(name);
         setCategories((prev) => [...prev, created]);
-        setCategoryId(created.id);
+        setCategoryIdEdit(created.id);
       } catch (e) {
         Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했어요.');
       }
@@ -470,13 +479,18 @@ export default function RegisterScreen() {
 
           <TagInput tags={tags} onChange={setTags} />
 
-          {/* 카테고리 선택 */}
+          {/* 카테고리 선택 (FR-8: AI 추천이 있으면 미리 선택되고 힌트 표시. 다른 걸 고르면 덮인다) */}
           <CategoryPicker
             categories={categories}
             selectedId={categoryId}
-            onSelect={setCategoryId}
+            onSelect={setCategoryIdEdit}
             onCreate={handleCreateCategory}
           />
+          {categoryIsSuggested ? (
+            <Text style={styles.suggestHint} accessibilityLabel="AI가 추천한 카테고리예요">
+              AI가 추천한 카테고리예요. 바꾸려면 다른 걸 눌러요.
+            </Text>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.save, !canSave && styles.saveDisabled]}
@@ -591,4 +605,5 @@ const styles = StyleSheet.create({
   saveDisabled: { opacity: 0.5 },
   saveText: { fontSize: 16, fontWeight: '600', color: colors.bgCard },
   saveNote: { fontSize: 12, color: colors.textSub, textAlign: 'center' },
+  suggestHint: { fontSize: 12, color: colors.primary, marginTop: -spacing.two },
 });
