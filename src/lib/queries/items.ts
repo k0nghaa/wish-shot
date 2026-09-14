@@ -101,8 +101,14 @@ export interface UpdateItemInput {
 }
 
 /**
- * 아이템 수정(덮어쓰기 저장에서 사용). 필드와 normalized_name 을 갱신하고 updated_at 은
- * 트리거가 자동 갱신한다. 이미지(image_key)는 그대로 두고, 필요하면 같은 키에 새로 업로드한다.
+ * 아이템 수정(덮어쓰기 저장·편집 화면에서 사용). 필드와 normalized_name 을 갱신하고
+ * updated_at 은 트리거가 자동 갱신한다. 이미지(image_key)는 그대로 두고, 필요하면 같은 키에
+ * 새로 업로드한다.
+ *
+ * 편집으로 brand/product_name 을 **다른 아이템**과 같은 정규화명이 되게 바꾸면
+ * UNIQUE(user_id, normalized_name) 위반(23505)이 난다 → `DuplicateItemError` 로 변환해
+ * 던진다(편집 화면은 이를 잡아 덮어쓰기 없이 안내·차단한다). 값이 그대로면(자기 자신)
+ * 위반이 나지 않는다.
  */
 export async function updateItem(id: string, input: UpdateItemInput): Promise<Item> {
   const { data, error } = await supabase
@@ -120,7 +126,10 @@ export async function updateItem(id: string, input: UpdateItemInput): Promise<It
     .eq('id', id)
     .select()
     .single();
-  if (error) throw new Error(`아이템을 수정하지 못했어요: ${error.message}`);
+  if (error) {
+    if (error.code === '23505') throw new DuplicateItemError();
+    throw new Error(`아이템을 수정하지 못했어요: ${error.message}`);
+  }
   return data;
 }
 

@@ -18,6 +18,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CategoryPicker } from '@/components/CategoryPicker';
+import { FormField, formInput } from '@/components/FormField';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { colors, spacing } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
@@ -400,38 +402,38 @@ export default function RegisterScreen() {
           ) : null}
 
           {/* 폼 */}
-          <Field label="제품명" required ai={aiFilled.productName}>
+          <FormField label="제품명" required ai={aiFilled.productName}>
             <TextInput
               ref={productNameRef}
-              style={styles.input}
+              style={formInput.input}
               placeholder="예: 무선 이어폰"
               placeholderTextColor={colors.textDisabled}
               value={productName}
               onChangeText={setProductNameEdit}
             />
-          </Field>
-          <Field label="브랜드" ai={aiFilled.brand}>
+          </FormField>
+          <FormField label="브랜드" ai={aiFilled.brand}>
             <TextInput
-              style={styles.input}
+              style={formInput.input}
               placeholder="예: 소니"
               placeholderTextColor={colors.textDisabled}
               value={brand}
               onChangeText={setBrandEdit}
             />
-          </Field>
-          <Field label="가격 (원)" ai={aiFilled.price}>
+          </FormField>
+          <FormField label="가격 (원)" ai={aiFilled.price}>
             <TextInput
-              style={styles.input}
+              style={formInput.input}
               placeholder="예: 189000"
               placeholderTextColor={colors.textDisabled}
               keyboardType="number-pad"
               value={price}
               onChangeText={setPriceEdit}
             />
-          </Field>
-          <Field label="링크">
+          </FormField>
+          <FormField label="링크">
             <TextInput
-              style={styles.input}
+              style={formInput.input}
               placeholder="https://"
               placeholderTextColor={colors.textDisabled}
               autoCapitalize="none"
@@ -440,27 +442,25 @@ export default function RegisterScreen() {
               value={sourceLink}
               onChangeText={setSourceLink}
             />
-          </Field>
-          <Field label="메모">
+          </FormField>
+          <FormField label="메모">
             <TextInput
-              style={[styles.input, styles.memo]}
+              style={[formInput.input, formInput.memo]}
               placeholder="메모를 남겨요"
               placeholderTextColor={colors.textDisabled}
               multiline
               value={memo}
               onChangeText={setMemo}
             />
-          </Field>
+          </FormField>
 
           {/* 카테고리 선택 */}
-          <Text style={styles.fieldLabel}>카테고리</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-            <Chip label="미분류" selected={categoryId === null} onPress={() => setCategoryId(null)} />
-            {categories.map((c) => (
-              <Chip key={c.id} label={c.name} selected={categoryId === c.id} onPress={() => setCategoryId(c.id)} />
-            ))}
-            <Chip label="+ 새 카테고리" selected={false} onPress={handleCreateCategory} />
-          </ScrollView>
+          <CategoryPicker
+            categories={categories}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+            onCreate={handleCreateCategory}
+          />
 
           <TouchableOpacity
             style={[styles.save, !canSave && styles.saveDisabled]}
@@ -492,47 +492,6 @@ export default function RegisterScreen() {
         onCancel={() => setDupVisible(false)}
       />
     </SafeAreaView>
-  );
-}
-
-function Field({
-  label,
-  required,
-  ai,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  ai?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.field}>
-      <View style={styles.fieldLabelRow}>
-        <Text style={styles.fieldLabel}>
-          {label}
-          {required ? <Text style={styles.required}> *</Text> : null}
-        </Text>
-        {ai ? (
-          <View style={styles.aiBadge} accessibilityLabel="AI가 채운 값이에요">
-            <Text style={styles.aiBadgeText}>AI가 채움</Text>
-          </View>
-        ) : null}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity
-      style={[styles.chip, selected && styles.chipSelected]}
-      onPress={onPress}
-      accessibilityRole="button"
-    >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </TouchableOpacity>
   );
 }
 
@@ -605,40 +564,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.three,
   },
   retryBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  field: { gap: spacing.one },
-  fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
-  fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.textMain },
-  aiBadge: {
-    borderRadius: 999,
-    backgroundColor: colors.accent,
-    paddingVertical: 2,
-    paddingHorizontal: spacing.two,
-  },
-  aiBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bgCard },
-  required: { color: colors.error },
-  input: {
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.silver,
-    borderRadius: 10,
-    paddingVertical: spacing.three,
-    paddingHorizontal: spacing.three,
-    fontSize: 16,
-    color: colors.textMain,
-  },
-  memo: { minHeight: 80, textAlignVertical: 'top' },
-  chips: { gap: spacing.two, paddingVertical: spacing.one },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.silver,
-    backgroundColor: colors.bgCard,
-    paddingVertical: spacing.two,
-    paddingHorizontal: spacing.three,
-  },
-  chipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontSize: 14, color: colors.textSub },
-  chipTextSelected: { color: colors.bgCard, fontWeight: '600' },
   save: {
     marginTop: spacing.two,
     backgroundColor: colors.primary,

@@ -95,15 +95,26 @@ export default function ItemDetailScreen() {
           <Text style={styles.back}>‹ 뒤로</Text>
         </TouchableOpacity>
         <View style={styles.headerSpacer} />
-        <TouchableOpacity
-          onPress={confirmDelete}
-          hitSlop={8}
-          disabled={!item || deleting}
-          accessibilityRole="button"
-          accessibilityLabel="삭제"
-        >
-          {deleting ? <ActivityIndicator color={colors.error} /> : <Text style={styles.delete}>삭제</Text>}
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/item/[id]/edit', params: { id } })}
+            hitSlop={8}
+            disabled={!item || deleting}
+            accessibilityRole="button"
+            accessibilityLabel="편집"
+          >
+            <Text style={styles.edit}>편집</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={confirmDelete}
+            hitSlop={8}
+            disabled={!item || deleting}
+            accessibilityRole="button"
+            accessibilityLabel="삭제"
+          >
+            {deleting ? <ActivityIndicator color={colors.error} /> : <Text style={styles.delete}>삭제</Text>}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {item === null ? (
@@ -190,6 +201,8 @@ const styles = StyleSheet.create({
   },
   back: { fontSize: 16, color: colors.primary },
   headerSpacer: { flex: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.four },
+  edit: { fontSize: 16, color: colors.primary, fontWeight: '600' },
   delete: { fontSize: 16, color: colors.error, fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: spacing.three, gap: spacing.three, paddingBottom: spacing.six },
