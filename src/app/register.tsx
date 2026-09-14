@@ -361,11 +361,15 @@ export default function RegisterScreen() {
             <View style={styles.errorBox}>
               {analysisState.errorKind === 'parse_failed' && analysisState.rawText ? (
                 <>
-                  <Text style={styles.errorHint}>인식한 원문(참고용) — 아래에서 복사해 입력할 수 있어요</Text>
+                  <Text style={styles.errorHint}>인식한 원문(참고용) — 줄을 길게 눌러 선택·복사할 수 있어요</Text>
                   <ScrollView style={styles.errorRawBox} nestedScrollEnabled>
-                    <Text style={styles.errorRaw} selectable>
-                      {analysisState.rawText}
-                    </Text>
+                    {analysisState.rawText.split('\n').map((line, i) =>
+                      line.trim() ? (
+                        <Text key={`${i}-${line}`} style={styles.errorRawLine} selectable>
+                          {line}
+                        </Text>
+                      ) : null,
+                    )}
                   </ScrollView>
                 </>
               ) : null}
@@ -574,7 +578,7 @@ const styles = StyleSheet.create({
   },
   errorHint: { fontSize: 12, color: colors.textSub },
   errorRawBox: { maxHeight: 140, borderRadius: 8, backgroundColor: colors.bgCard, padding: spacing.two },
-  errorRaw: { fontSize: 13, color: colors.textMain },
+  errorRawLine: { fontSize: 13, color: colors.textMain, paddingVertical: 2 },
   retryBtn: {
     alignSelf: 'flex-start',
     borderRadius: 8,
