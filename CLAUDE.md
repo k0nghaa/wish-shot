@@ -2,7 +2,7 @@
 
 이 파일은 이 저장소에서 작업하는 Claude Code에게 제공하는 가이드입니다.
 
-> 상태: **Phase 3 완료** (OCR + LLM 정제 자동채움). 이미지가 들어오면 온디바이스 OCR(Apple Vision)이 텍스트를 읽고, Edge Function이 Claude Haiku로 정제해 제품명·가격·브랜드를 폼에 자동채움합니다("AI가 채움" 표시·상태 인디케이터·예외 폴백·개인정보 고지 포함). 저장 후 편집·데이터 이관은 Phase 4. 이 문서는 현재 저장소 상태를 반영합니다.
+> 상태: **Phase 4 완료** (저장 후 관리 + 경량 카테고리 추천 + 설정). Phase 3까지의 등록·OCR 자동채움 위에, 저장한 위시를 **편집**(모든 필드·메모·**태그**·이미지 교체)하고 **다른 카테고리로 이동**(빠른 이동 시트, 미분류 포함)할 수 있습니다. 등록 시 기존 카테고리 중 맞는 것을 **자동 미리선택**(FR-8 경량판 — `parse-screenshot-text` 계약에 얹음, 추가 LLM 왕복 없음)하고, **설정 화면**에서 로그아웃·개인정보 안내를 봅니다. **이 Phase는 네이티브 추가·EAS 재빌드 없음**(전부 JS + Edge Function 서버 측). 이 문서는 현재 저장소 상태를 반영합니다.
 
 ## 프로젝트 개요
 
@@ -12,6 +12,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - 기술 결정: 노션 「WishShot v2 — 플랫폼·아키텍처 결정 문서 (Expo + Supabase)」
 - Phase 1 작업 기록: `docs/phases/phase-1-toolchain.md`
 - Phase 3 작업 지시·결과: `docs/phases/phase-3-ocr-and-autofill.md`
+- Phase 4 작업 지시·결과: `docs/phases/phase-4-edit-and-manage.md`
 
 ## 기술 스택 (현재)
 
@@ -21,7 +22,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - **공유 시트**: `expo-share-intent`(iOS Share Extension, 이미지 1개 수신).
 - **이미지**: `expo-image-picker`(앱 내 사진 선택), `expo-file-system`(선택/공유 이미지 uri → 바이트 읽기, `File.arrayBuffer()`). 둘 다 네이티브.
 - **OCR**: 온디바이스 **Apple Vision**(iOS 내장). 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr/`가 `recognitionLanguages=["ko-KR","en-US"]`로 한국어+영어를 인식. `OcrEngine` 인터페이스(`src/lib/ocr/`) 뒤에 캡슐화해 교체 가능. **엔진 결정**: 지시서의 Google ML Kit 대신 Apple Vision 채택 — iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, 어떤 RN용 ML Kit 래퍼도 Expo SDK 57/New Architecture 호환을 확인하지 못했기 때문. 온디바이스라 NFR-3(텍스트만 서버로)는 동일 만족.
-- **LLM 정제**: Edge Function `parse-screenshot-text`(Deno)가 Claude Haiku(`claude-haiku-4-5`)로 OCR 원문을 정제해 `{productName, price, brand, confidence}` 반환. 구조화 출력(json_schema) 사용. Claude 키는 함수 시크릿에만.
+- **LLM 정제 + 카테고리 추천(FR-8)**: Edge Function `parse-screenshot-text`(Deno)가 Claude Haiku(`claude-haiku-4-5`)로 OCR 원문을 정제해 `{productName, price, brand, confidence, suggestedCategory}` 반환. 입력에 `categories?: string[]`(사용자 기존 카테고리 이름)을 받으면 그중 하나를 추천(`suggestedCategory`), 없거나 빈 배열이면 `null`(하위호환). 목록 밖 값은 서버·앱 양쪽에서 무시. 구조화 출력(json_schema) 사용. Claude 키는 함수 시크릿에만.
 - **빌드**: 윈도우 PC에서 EAS 클라우드 빌드 → 아이폰 개발 빌드 → TestFlight. 로컬에 Xcode/Mac 없음.
 
 ## 디렉터리 구조
@@ -29,24 +30,30 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 ```
 src/
   app/                  # Expo Router 라우트 (파일 기반)
-    _layout.tsx         # ShareIntentProvider + 세션 라우팅 가드
-    index.tsx           # 홈: 카테고리 목록(개수·썸네일)·미분류·업로드 FAB. 공유 인텐트 소비 → /register
+    _layout.tsx         # ShareIntentProvider + 세션 라우팅 가드(로그아웃 리다이렉트 중엔 보호 화면 대신 스피너 — anon 조회 방지)
+    index.tsx           # 홈: 카테고리 목록(개수·썸네일, 빈 카테고리도 노출)·미분류·업로드 FAB·설정 진입. 공유 인텐트 소비 → /register
     login.tsx           # 이메일 로그인
-    register.tsx        # 등록(저장): 이미지 선택/미리보기 + OCR 자동채움("AI가 채움"·상태 인디케이터·예외 폴백) + 수동 입력 + 카테고리 선택·생성 + 중복 덮어쓰기 + 개인정보 고지(NFR-3)
-    category/[id].tsx   # 카테고리별 아이템 목록(2열 그리드, 최신순). id='uncategorized'=미분류
-    item/[id].tsx       # 아이템 상세 + 삭제(행 + Storage 객체)
+    register.tsx        # 등록(저장): 이미지 선택/미리보기 + OCR 자동채움("AI가 채움") + 수동 입력 + 카테고리 선택·생성·**FR-8 추천 미리선택** + 메모/**태그(기존 태그 선택)** + 중복 덮어쓰기 + 개인정보 고지(NFR-3). 저장 후 담은 카테고리 목록으로 이동
+    settings.tsx        # 설정: 로그인 이메일 표시 + 로그아웃 + 개인정보 안내(NFR-3) 열람
+    category/[id].tsx   # 카테고리별 아이템 목록(2열 그리드, 최신순). id='uncategorized'=미분류. 삭제된 카테고리 진입 시 홈으로 리다이렉트
+    tag/[name].tsx      # 태그별 모아보기(FR-15a): 그 태그가 달린 아이템만(카테고리 무관, 2열 그리드, 최신순)
+    item/[id]/index.tsx # 아이템 상세 + 삭제(행 + Storage 객체) + 편집 진입 + 카테고리 이동 시트(빈 카테고리 삭제 안내) + 태그 칩 탭 → 태그별 모아보기
+    item/[id]/edit.tsx  # 편집(FR-14): 제품명/브랜드/가격/링크/메모/태그(기존 태그 선택)/카테고리 + 이미지 교체. OCR·분석 없음. 중복 시 차단·안내
     +native-intent.ts   # 공유 딥링크 → / (홈이 인텐트 처리)
-  components/           # CategoryCard, ItemCard, Thumbnail, EmptyState, OverwriteDialog
-  constants/theme.ts    # 디자인 토큰 (v1 팔레트 승계) + overlay
+  components/           # CategoryCard, ItemCard, Thumbnail, EmptyState, OverwriteDialog, FormField, CategoryPicker, TagInput (뒤 3개는 등록·편집 공용 폼)
+  constants/
+    theme.ts            # 디자인 토큰 (v1 팔레트 승계) + overlay
+    privacy.ts          # 개인정보 안내 문구 단일 소스(register 최초 고지 + 설정 열람 공유)
   hooks/
     useAnalysis.ts      # 분석 상태머신(useReducer): idle→imageReceived→ocrRunning→parsing→filled→submitted, 실패 시 error. reparse(E-2 재시도)·needsConfirmation 제공
   lib/
     supabase.ts         # createClient<Database> (타입 클라이언트)
     normalize.ts        # normalizeName(brand,productName) — 중복 판정 정규화(단일 소스)
     imageBytes.ts       # uri → ArrayBuffer(File.arrayBuffer) + file:// 정규화
+    emptyCategory.ts    # promptDeleteIfCategoryEmpty — 이동·편집·삭제로 카테고리가 0이 되면 삭제/유지 안내(응답 대기 후 반환)
     formatDate.ts / formatPrice.ts
     ocr/                # OcrEngine 인터페이스 + VisionOcrEngine(Apple Vision)·MockOcrEngine + index(환경별 엔진 선택). 화면은 @/lib/ocr만 import
-    queries/            # 데이터 레이어: auth, categories, items, storage, errors, analysisLogs, parse (+ index 배럴)
+    queries/            # 데이터 레이어: auth(getCurrentUserId·getCurrentUserEmail·signOut), categories, items(updateItem·moveItemCategory·findDuplicateItem), storage, errors(DuplicateItemError·DuplicateCategoryError), analysisLogs, parse (+ index 배럴)
   types/database.ts     # supabase gen types 자동 생성 (직접 수정 금지)
 modules/
   expo-vision-ocr/      # 자작 로컬 Expo 네이티브 모듈(iOS/Apple Vision). ko-KR+en-US 인식. 네이티브라 변경 시 EAS 재빌드
@@ -98,7 +105,9 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 
 ## 데이터 레이어 · Supabase 접근
 
-- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름변경/삭제), `items`(전체·카테고리별 최신순/단건/생성/수정/삭제/중복조회), `storage`(업로드/서명URL/배치 서명URL/삭제), `auth`(getCurrentUserId), `errors`(DuplicateItemError), `analysisLogs`(분석 로그 기록·item_id 연결 — 실패는 삼켜 저장을 막지 않음), `parse`(parseScreenshotText — Edge Function 호출, 텍스트만 전송). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
+- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름변경/삭제), `items`(전체·카테고리별·**태그별 listItemsByTag**/**전체 태그 listAllTags**/단건/생성/**수정 updateItem**/**카테고리 이동 moveItemCategory**/삭제/중복조회), `storage`(업로드/서명URL/배치 서명URL/삭제), `auth`(getCurrentUserId·getCurrentUserEmail·signOut), `errors`(DuplicateItemError·DuplicateCategoryError), `analysisLogs`(분석 로그 기록·item_id 연결 — 실패는 삼켜 저장을 막지 않음), `parse`(parseScreenshotText — Edge Function 호출, **텍스트 + 카테고리 이름 목록만** 전송, 이미지 아님). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
+- **편집·이동의 중복 판정.** `updateItem`은 `normalizeName`을 재계산하고, 편집으로 **다른 아이템**과 정규화명이 겹치면 23505 → `DuplicateItemError`로 변환해 화면이 **차단·안내**(덮어쓰기 없음). `moveItemCategory`는 `category_id`만 바꿔(정규화명 불변) 중복 위험이 없다. 카테고리 생성/이름변경 중복은 `DuplicateCategoryError`("동일한 이름의 카테고리가 있어요")로 변환(원본 메시지는 콘솔).
+- **빈 카테고리 표시(Phase 4 UX 결정).** 홈은 개수 0인 카테고리도 노출한다(Phase 2의 "빈 카테고리 비노출" 규칙을 뒤집음 — 삭제 여부를 사용자가 인지하도록). 대신 이동·편집·삭제로 카테고리가 0이 되면 `promptDeleteIfCategoryEmpty`로 삭제/유지를 묻는다.
 - **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`(hooks)로만 다룬다. `analysis_logs`는 Phase 2에서 만든 테이블을 **쓰기만** 한다(스키마 변경 없음). `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문).
 - **RLS가 최종 방어선.** 세 테이블 모두 `user_id = (select auth.uid())`로 SELECT/INSERT/UPDATE/DELETE 강제. `anon`은 권한 없음. 검증 쿼리는 `supabase/tests/rls.sql`.
 - **`normalized_name`은 서버 전용 중복 판정 컬럼.** 값 = `normalizeName(brand, product_name)`(NFC·소문자·문자/숫자만). `UNIQUE(user_id, normalized_name)`로 재저장을 하드 차단. 저장·사전조회·수정이 **모두 `src/lib/normalize.ts` 한 곳**을 써야 판정이 일치한다. 화면엔 `product_name`·`brand`만 노출.
@@ -125,4 +134,4 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
   → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL)
 ```
 
-Phase 3까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR(이미지는 기기를 안 떠남) → 텍스트만 Edge Function으로 전송해 정제 → 폼 자동채움(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). **저장 후 편집·데이터 이관은 Phase 4.**
+Phase 4까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR(이미지는 기기를 안 떠남) → 텍스트(+카테고리 이름)만 Edge Function으로 전송해 정제·**카테고리 추천(FR-8)** → 폼 자동채움·추천 미리선택(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). 저장 후에는 **편집(필드·메모·태그·이미지 교체)·카테고리 이동**과 **설정(로그아웃·개인정보 열람)** 이 가능하다. **기존 v1 데이터 이관은 범위에서 제외**(archive 보존만). Phase 4는 네이티브 추가·재빌드 없음.

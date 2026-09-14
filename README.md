@@ -10,8 +10,10 @@
 - **백엔드**: Supabase (Postgres + Storage + Auth), `@supabase/supabase-js`로 직접 호출 + RLS
 - **공유 시트**: `expo-share-intent` (iOS Share Extension)
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
-- **LLM 정제**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku
+- **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`)
 - **빌드**: EAS 클라우드 빌드 (Windows PC + Mac 없이 iOS 개발)
+
+주요 화면: 홈(카테고리 목록·설정 진입) · 등록(OCR 자동채움·카테고리 추천·메모/태그) · 상세(편집·카테고리 이동·삭제) · 편집 · 설정(로그아웃·개인정보 안내).
 
 ## 로컬 실행
 
@@ -83,7 +85,7 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 ```
 
 - Docker가 없어도 클라우드 번들로 배포됩니다 (`WARNING: Docker is not running`은 무시).
-- 정제 프롬프트/로직만 바꿀 땐 **재배포만** 하면 됩니다(앱 재빌드 불필요).
+- 정제 프롬프트/로직·**입출력 계약**만 바꿀 땐 **재배포만** 하면 됩니다(앱 재빌드 불필요). 예: Phase 4에서 입력 `categories?`·출력 `suggestedCategory`를 하위호환으로 추가.
 - 로그인 사용자만 호출 가능(익명 거부). 회귀 케이스: `supabase/functions/parse-screenshot-text/samples/`.
 
 **OCR 엔진 참고**: 지시서의 Google ML Kit 대신 **Apple Vision**(로컬 모듈 `modules/expo-vision-ocr`)을
@@ -95,4 +97,5 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 - 아키텍처·플랫폼 결정: 노션 「WishShot v2 — 플랫폼·아키텍처 결정 문서 (Expo + Supabase)」
 - Phase 1 작업 기록: [`docs/phases/phase-1-toolchain.md`](docs/phases/phase-1-toolchain.md)
 - Phase 3 작업 지시·결과: [`docs/phases/phase-3-ocr-and-autofill.md`](docs/phases/phase-3-ocr-and-autofill.md)
+- Phase 4 작업 지시·결과: [`docs/phases/phase-4-edit-and-manage.md`](docs/phases/phase-4-edit-and-manage.md)
 - 저장소 작업 규칙: [`CLAUDE.md`](CLAUDE.md)
