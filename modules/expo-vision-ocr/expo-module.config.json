@@ -1,0 +1,5 @@
+{
+  "name": "expo-vision-ocr",
+  "platforms": ["apple"],
+  "apple": { "modules": ["ExpoVisionOcrModule"] }
+}

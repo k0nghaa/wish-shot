@@ -1,8 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { uuid } from 'expo-modules-core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,8 +20,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { colors, spacing } from '@/constants/theme';
+import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { readImageBytes } from '@/lib/imageBytes';
 import {
+  createAnalysisLog,
   createCategory,
   createItem,
   DuplicateItemError,
@@ -30,15 +33,53 @@ import {
   listCategories,
   updateItem,
   uploadItemImage,
+  type AnalysisStatus,
   type Category,
   type Item,
 } from '@/lib/queries';
+import type { Json } from '@/types/database';
 
 const emptyToNull = (s: string): string | null => (s.trim() ? s.trim() : null);
+
+// 개인정보 고지(NFR-3)를 최초 1회만 보여주기 위한 플래그.
+const PRIVACY_NOTICE_KEY = 'wishshot.privacyNoticeShown';
 
 function parsePrice(text: string): number | null {
   const digits = text.replace(/[^\d]/g, '');
   return digits ? Number(digits) : null;
+}
+
+/** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
+function analysisStatusInfo(
+  state: AnalysisState,
+  needsConfirmation: boolean,
+): { text: string; color: string; loading: boolean } | null {
+  switch (state.phase) {
+    case 'imageReceived':
+    case 'ocrRunning':
+      return { text: '이미지에서 글자를 읽고 있어요…', color: colors.textSub, loading: true };
+    case 'parsing':
+      return { text: 'AI가 제품 정보를 정리하고 있어요…', color: colors.textSub, loading: true };
+    case 'filled':
+      // E-3(부분 성공): 정제는 됐으나 제품명을 못 뽑음 → 제품명 입력을 명시적으로 안내.
+      if (state.result && !state.result.productName) {
+        return { text: '제품명을 인식하지 못했어요. 직접 입력해 주세요.', color: colors.accent, loading: false };
+      }
+      return needsConfirmation
+        ? { text: '확인이 필요해요 — AI가 채운 값을 확인해 주세요.', color: colors.accent, loading: false }
+        : { text: 'AI가 제품 정보를 채웠어요. 확인해 주세요.', color: colors.primary, loading: false };
+    case 'error':
+      return {
+        text:
+          state.errorKind === 'ocr_empty'
+            ? '글자를 인식하지 못했어요. 직접 입력해 주세요.'
+            : '정보를 정리하지 못했어요. 직접 입력해 주세요.',
+        color: colors.error,
+        loading: false,
+      };
+    default:
+      return null;
+  }
 }
 
 export default function RegisterScreen() {
@@ -48,9 +89,10 @@ export default function RegisterScreen() {
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
 
-  const [productName, setProductName] = useState('');
-  const [brand, setBrand] = useState('');
-  const [price, setPrice] = useState('');
+  // 자동채움과 공존시키기 위해 "사용자 편집분"만 상태로 둔다. null = 아직 손대지 않음.
+  const [productNameEdit, setProductNameEdit] = useState<string | null>(null);
+  const [brandEdit, setBrandEdit] = useState<string | null>(null);
+  const [priceEdit, setPriceEdit] = useState<string | null>(null);
   const [sourceLink, setSourceLink] = useState('');
   const [memo, setMemo] = useState('');
 
@@ -73,7 +115,89 @@ export default function RegisterScreen() {
       });
   }, []);
 
+  // 분석(OCR → LLM 정제) 상태머신. 이미지가 들어오면 즉시 시작한다.
+  const { analyze, reparse, state: analysisState, needsConfirmation, markSubmitted } = useAnalysis();
+  const productNameRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (imageUri) analyze(imageUri);
+  }, [imageUri, analyze]);
+
+  // 개인정보 고지(NFR-3): 첫 이미지 업로드 시 1회만. 플래그를 먼저 세워 중복 노출을 막는다.
+  useEffect(() => {
+    if (!imageUri) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (await AsyncStorage.getItem(PRIVACY_NOTICE_KEY)) return;
+        await AsyncStorage.setItem(PRIVACY_NOTICE_KEY, '1');
+        if (cancelled) return;
+        Alert.alert(
+          '이미지 분석 안내',
+          '이미지는 기기에서 분석되고 비공개 저장소에만 저장돼요. AI 정제에는 인식한 텍스트만 전송돼요.',
+          [{ text: '확인' }],
+        );
+      } catch {
+        /* 고지 실패는 저장 흐름을 막지 않는다 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUri]);
+
+  // E-3(제품명 미인식): 정제는 됐으나 제품명이 없고 사용자가 아직 입력 안 했으면 입력란에 포커스.
+  useEffect(() => {
+    if (analysisState.phase === 'filled' && !analysisState.result?.productName && productNameEdit === null) {
+      productNameRef.current?.focus();
+    }
+  }, [analysisState, productNameEdit]);
+
+  // 자동채움은 "복사"가 아니라 "파생"으로 처리한다(effect·setState 불필요):
+  // 손대지 않은 필드(*Edit === null)는 AI 값을, 손댄 필드는 사용자 값을 보여준다.
+  // 사용자가 편집하면 *Edit 이 채워져 자연히 "AI가 채움" 표시가 사라진다.
+  const aiResult = analysisState.phase === 'filled' ? analysisState.result : null;
+  const productName = productNameEdit ?? aiResult?.productName ?? '';
+  const brand = brandEdit ?? aiResult?.brand ?? '';
+  const price = priceEdit ?? (aiResult?.price != null ? String(aiResult.price) : '');
+  const aiFilled = {
+    productName: productNameEdit === null && !!aiResult?.productName,
+    brand: brandEdit === null && !!aiResult?.brand,
+    price: priceEdit === null && aiResult?.price != null,
+  };
+
+  // 이번 분석 결과의 로그 상태(4종). 분석이 없었으면 null.
+  function analysisLogStatus(): AnalysisStatus | null {
+    if (analysisState.phase === 'error') {
+      return analysisState.errorKind === 'ocr_empty' ? 'ocr_empty' : 'parse_failed';
+    }
+    if (analysisState.result) return needsConfirmation ? 'low_confidence' : 'parsed';
+    return null;
+  }
+
+  // 저장 성공 후 분석 로그를 남기고 item_id 를 연결한다. 실패는 삼켜져 저장 흐름을 막지 않는다.
+  function recordAnalysisLog(itemId: string) {
+    const status = analysisLogStatus();
+    if (!status) return;
+    void createAnalysisLog({
+      rawText: analysisState.rawText,
+      parsed: (analysisState.result as unknown as Json) ?? null,
+      status,
+      itemId,
+    });
+  }
+
+  // 재시도: 정제 실패(E-2, OCR 원문 있음)면 정제만 다시, 그 외(E-1)엔 처음부터 다시.
+  function retryAnalysis() {
+    if (analysisState.errorKind === 'parse_failed' && analysisState.rawText) {
+      reparse(analysisState.rawText);
+    } else if (imageUri) {
+      analyze(imageUri);
+    }
+  }
+
   const canSave = Boolean(imageUri) && productName.trim().length > 0 && !saving;
+  const analysisStatus = imageUri ? analysisStatusInfo(analysisState, needsConfirmation) : null;
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -153,6 +277,8 @@ export default function RegisterScreen() {
       }
       throw e;
     }
+    recordAnalysisLog(id);
+    markSubmitted();
     setSaving(false);
     router.replace('/');
   }
@@ -174,6 +300,8 @@ export default function RegisterScreen() {
         sourceLink: emptyToNull(sourceLink),
         memo: emptyToNull(memo),
       });
+      recordAnalysisLog(existing.id);
+      markSubmitted();
       setDupVisible(false);
       setOverwriteBusy(false);
       router.replace('/');
@@ -220,38 +348,85 @@ export default function RegisterScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {/* Phase 3 자리: OCR 자동 채움 */}
-          <View style={styles.ocrHint}>
-            <Text style={styles.ocrHintText}>AI 자동 채움은 다음 업데이트에서 붙어요(Phase 3).</Text>
-          </View>
+          {/* 분석 상태 인디케이터 (인식 중 / 정리 중 / 완료 / 확인 필요 / 실패) */}
+          {analysisStatus ? (
+            <View style={styles.status} accessibilityLiveRegion="polite">
+              {analysisStatus.loading ? <ActivityIndicator size="small" color={colors.textSub} /> : null}
+              <Text style={[styles.statusText, { color: analysisStatus.color }]}>{analysisStatus.text}</Text>
+            </View>
+          ) : null}
+
+          {/* 실패(E-1/E-2) 상세: E-2 는 인식한 원문을 보여주고, 둘 다 재시도 버튼 제공 */}
+          {analysisState.phase === 'error' ? (
+            <View style={styles.errorBox}>
+              {analysisState.errorKind === 'parse_failed' && analysisState.rawText ? (
+                <>
+                  <Text style={styles.errorHint}>인식한 원문 — 제품명인 줄을 탭하면 제품명 칸에 들어가요</Text>
+                  <ScrollView
+                    style={styles.errorRawBox}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {analysisState.rawText.split('\n').map((line, i) => {
+                      const t = line.trim();
+                      if (!t) return null;
+                      const picked = t === productName.trim() && productName.trim().length > 0;
+                      return (
+                        <TouchableOpacity
+                          key={`${i}-${t}`}
+                          onPress={() => setProductNameEdit(t)}
+                          style={[styles.errorRawLine, picked && styles.errorRawLinePicked]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`제품명에 넣기: ${t}`}
+                        >
+                          <Text style={styles.errorRawText} selectable>
+                            {t}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              ) : null}
+              <TouchableOpacity
+                onPress={retryAnalysis}
+                style={styles.retryBtn}
+                accessibilityRole="button"
+                accessibilityLabel="AI 분석 다시 시도"
+              >
+                <Text style={styles.retryBtnText}>다시 시도</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           {/* 폼 */}
-          <Field label="제품명" required>
+          <Field label="제품명" required ai={aiFilled.productName}>
             <TextInput
+              ref={productNameRef}
               style={styles.input}
               placeholder="예: 무선 이어폰"
               placeholderTextColor={colors.textDisabled}
               value={productName}
-              onChangeText={setProductName}
+              onChangeText={setProductNameEdit}
             />
           </Field>
-          <Field label="브랜드">
+          <Field label="브랜드" ai={aiFilled.brand}>
             <TextInput
               style={styles.input}
               placeholder="예: 소니"
               placeholderTextColor={colors.textDisabled}
               value={brand}
-              onChangeText={setBrand}
+              onChangeText={setBrandEdit}
             />
           </Field>
-          <Field label="가격 (원)">
+          <Field label="가격 (원)" ai={aiFilled.price}>
             <TextInput
               style={styles.input}
               placeholder="예: 189000"
               placeholderTextColor={colors.textDisabled}
               keyboardType="number-pad"
               value={price}
-              onChangeText={setPrice}
+              onChangeText={setPriceEdit}
             />
           </Field>
           <Field label="링크">
@@ -299,7 +474,11 @@ export default function RegisterScreen() {
               <Text style={styles.saveText}>저장</Text>
             )}
           </TouchableOpacity>
-          {!imageUri ? <Text style={styles.saveNote}>사진을 선택해야 저장할 수 있어요.</Text> : null}
+          {!imageUri ? (
+            <Text style={styles.saveNote}>사진을 선택해야 저장할 수 있어요.</Text>
+          ) : productName.trim().length === 0 ? (
+            <Text style={styles.saveNote}>제품명을 입력해주세요.</Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -316,13 +495,30 @@ export default function RegisterScreen() {
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  ai,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  ai?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>
-        {label}
-        {required ? <Text style={styles.required}> *</Text> : null}
-      </Text>
+      <View style={styles.fieldLabelRow}>
+        <Text style={styles.fieldLabel}>
+          {label}
+          {required ? <Text style={styles.required}> *</Text> : null}
+        </Text>
+        {ai ? (
+          <View style={styles.aiBadge} accessibilityLabel="AI가 채운 값이에요">
+            <Text style={styles.aiBadgeText}>AI가 채움</Text>
+          </View>
+        ) : null}
+      </View>
       {children}
     </View>
   );
@@ -378,15 +574,47 @@ const styles = StyleSheet.create({
   imagePlaceholderText: { fontSize: 16, fontWeight: '600', color: colors.primary },
   imageHint: { fontSize: 13, color: colors.textSub },
   changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
-  ocrHint: {
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.two,
     borderRadius: 10,
     backgroundColor: colors.primaryLight,
     paddingVertical: spacing.two,
     paddingHorizontal: spacing.three,
   },
-  ocrHintText: { fontSize: 12, color: colors.textSub },
+  statusText: { flex: 1, fontSize: 13, fontWeight: '500' },
+  errorBox: {
+    gap: spacing.two,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.error,
+    padding: spacing.three,
+  },
+  errorHint: { fontSize: 12, color: colors.textSub },
+  errorRawBox: { maxHeight: 140, borderRadius: 8, backgroundColor: colors.bgCard, padding: spacing.two },
+  errorRawLine: { paddingVertical: spacing.one, paddingHorizontal: spacing.two, borderRadius: 6 },
+  errorRawLinePicked: { backgroundColor: colors.primaryLight },
+  errorRawText: { fontSize: 13, color: colors.textMain },
+  retryBtn: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingVertical: spacing.two,
+    paddingHorizontal: spacing.three,
+  },
+  retryBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
   field: { gap: spacing.one },
+  fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.textMain },
+  aiBadge: {
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.two,
+  },
+  aiBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bgCard },
   required: { color: colors.error },
   input: {
     backgroundColor: colors.bgCard,
