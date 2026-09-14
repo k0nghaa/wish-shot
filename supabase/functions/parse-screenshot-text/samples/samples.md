@@ -7,11 +7,21 @@
 호출 예 (로그인 사용자 토큰 필요):
 
 ```bash
+# 기본(카테고리 추천 없이) — 출력에 suggestedCategory: null 이 붙는다(하위호환)
 curl -s -X POST "$SUPABASE_URL/functions/v1/parse-screenshot-text" \
   -H "Authorization: Bearer <로그인 사용자 access token>" \
   -H "Content-Type: application/json" \
   -d '{"text":"<아래 원문>"}'
+
+# FR-8 카테고리 추천 — 사용자의 기존 카테고리 이름을 함께 보낸다
+curl -s -X POST "$SUPABASE_URL/functions/v1/parse-screenshot-text" \
+  -H "Authorization: Bearer <로그인 사용자 access token>" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"<아래 원문>","categories":["운동","향수","주방"]}'
 ```
+
+> Phase 4부터 출력에 `suggestedCategory: string | null` 이 추가됐다. `categories` 를 안 보내거나
+> 빈 배열이면 **항상 null**(하위호환). 보낸 목록 밖의 값은 서버가 null 로 무시한다(할루시네이션 차단).
 
 ---
 
@@ -56,6 +66,15 @@ working.hoho / 잔향은 또 파우더리한게 미친 향수예요. / Follow / 
 { "productName": "피니셔 스퀴지", "brand": "DEAR.CUS", "price": 18900, "confidence": 0.7 }
 ```
 핵심: price 는 **18,900**(할인가). 쿠폰 금액(2,000/5,000)이나 원가(26,900)가 아님.
+
+## 4) FR-8 카테고리 추천 (categories 함께 전송)
+
+케이스 2의 Aesop 향수 원문에 `"categories":["운동","향수","주방"]` 를 함께 보냈을 때:
+```json
+{ "productName": "Rōzu Eau de Parfum", "brand": "Aesop", "price": null, "confidence": 0.6, "suggestedCategory": "향수" }
+```
+핵심: 향수 제품이므로 목록 중 **"향수"** 를 고른다. 만약 목록이 `["운동","주방"]` 처럼 맞는 게
+없으면 **suggestedCategory=null**. 목록에 없는 새 이름은 서버가 null 로 무시한다.
 
 ---
 

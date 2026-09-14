@@ -42,17 +42,21 @@ function AuthGate() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  const onLogin = segments[0] === 'login';
+
   useEffect(() => {
     if (!ready) return;
-    const onLogin = segments[0] === 'login';
     if (!session && !onLogin) {
       router.replace('/login');
     } else if (session && onLogin) {
       router.replace('/');
     }
-  }, [ready, session, segments, router]);
+  }, [ready, session, onLogin, router]);
 
-  if (!ready) {
+  // 세션을 아직 모르거나(!ready), 로그아웃 상태로 로그인 화면으로 리다이렉트되는 중이면 스피너.
+  // 후자를 스피너로 막지 않으면 홈 등 보호 화면이 잠깐 마운트돼 DB를 조회하다
+  // anon 권한 부족으로 "permission denied for table ..." 오류가 뜬다.
+  if (!ready || (!session && !onLogin)) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />

@@ -8,3 +8,14 @@ export class DuplicateItemError extends Error {
     this.name = 'DuplicateItemError';
   }
 }
+
+/**
+ * categories INSERT/UPDATE 시 UNIQUE(user_id, name) 위반(Postgres 23505).
+ * 사용자에겐 친화적인 문구만 보이고, 원본 DB 메시지는 콘솔에만 남긴다.
+ */
+export class DuplicateCategoryError extends Error {
+  constructor() {
+    super('동일한 이름의 카테고리가 있어요.');
+    this.name = 'DuplicateCategoryError';
+  }
+}

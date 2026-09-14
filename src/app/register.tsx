@@ -18,7 +18,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CategoryPicker } from '@/components/CategoryPicker';
+import { FormField, formInput } from '@/components/FormField';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
+import { TagInput } from '@/components/TagInput';
+import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { readImageBytes } from '@/lib/imageBytes';
@@ -30,6 +34,7 @@ import {
   findDuplicateItem,
   getCurrentUserId,
   getItemImageSignedUrl,
+  listAllTags,
   listCategories,
   updateItem,
   uploadItemImage,
@@ -95,9 +100,13 @@ export default function RegisterScreen() {
   const [priceEdit, setPriceEdit] = useState<string | null>(null);
   const [sourceLink, setSourceLink] = useState('');
   const [memo, setMemo] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]); // 기존 태그(선택 칩용)
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryId, setCategoryId] = useState<string | null>(null); // null = 미분류
+  // 카테고리도 자동채움처럼 "파생"으로 다룬다(FR-8 추천 미리선택).
+  // undefined = 사용자가 아직 안 고름(추천을 따름), null = 사용자가 미분류 선택, id = 특정 카테고리.
+  const [categoryIdEdit, setCategoryIdEdit] = useState<string | null | undefined>(undefined);
 
   const [saving, setSaving] = useState(false);
 
@@ -112,6 +121,11 @@ export default function RegisterScreen() {
       .then(setCategories)
       .catch(() => {
         /* 카테고리 로드 실패는 저장을 막지 않는다(미분류로 저장 가능) */
+      });
+    listAllTags()
+      .then(setAllTags)
+      .catch(() => {
+        /* 기존 태그 로드 실패는 태그 선택 칩만 비운다 */
       });
   }, []);
 
@@ -132,11 +146,7 @@ export default function RegisterScreen() {
         if (await AsyncStorage.getItem(PRIVACY_NOTICE_KEY)) return;
         await AsyncStorage.setItem(PRIVACY_NOTICE_KEY, '1');
         if (cancelled) return;
-        Alert.alert(
-          '이미지 분석 안내',
-          '이미지는 기기에서 분석되고 비공개 저장소에만 저장돼요. AI 정제에는 인식한 텍스트만 전송돼요.',
-          [{ text: '확인' }],
-        );
+        Alert.alert(PRIVACY_NOTICE.title, PRIVACY_NOTICE.body, [{ text: '확인' }]);
       } catch {
         /* 고지 실패는 저장 흐름을 막지 않는다 */
       }
@@ -165,6 +175,13 @@ export default function RegisterScreen() {
     brand: brandEdit === null && !!aiResult?.brand,
     price: priceEdit === null && aiResult?.price != null,
   };
+
+  // FR-8: AI가 추천한 카테고리(목록 내 이름)를 id 로 환산. 사용자가 아직 안 골랐으면 추천을 미리선택한다.
+  const suggestedCategoryId = aiResult?.suggestedCategory
+    ? (categories.find((c) => c.name === aiResult.suggestedCategory)?.id ?? null)
+    : null;
+  const categoryId = categoryIdEdit !== undefined ? categoryIdEdit : suggestedCategoryId; // null = 미분류
+  const categoryIsSuggested = categoryIdEdit === undefined && suggestedCategoryId != null;
 
   // 이번 분석 결과의 로그 상태(4종). 분석이 없었으면 null.
   function analysisLogStatus(): AnalysisStatus | null {
@@ -219,7 +236,7 @@ export default function RegisterScreen() {
       try {
         const created = await createCategory(name);
         setCategories((prev) => [...prev, created]);
-        setCategoryId(created.id);
+        setCategoryIdEdit(created.id);
       } catch (e) {
         Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했어요.');
       }
@@ -266,6 +283,7 @@ export default function RegisterScreen() {
         price: parsePrice(price),
         sourceLink: emptyToNull(sourceLink),
         memo: emptyToNull(memo),
+        tags: tags.length ? tags : null,
       });
     } catch (e) {
       // 사전조회를 놓친 경합(23505) → 덮어쓰기 모달로 폴백
@@ -280,7 +298,17 @@ export default function RegisterScreen() {
     recordAnalysisLog(id);
     markSubmitted();
     setSaving(false);
-    router.replace('/');
+    // 저장한 카테고리 목록으로 이동해 방금 담은 위시를 맥락에서 보여준다.
+    goToSavedCategory();
+  }
+
+  // 저장한 카테고리 화면으로 이동(미분류면 미분류 목록). 홈이 아니라 담은 위치를 바로 보여준다.
+  function goToSavedCategory() {
+    const targetId = categoryId ?? 'uncategorized';
+    const targetName = categoryId
+      ? (categories.find((c) => c.id === categoryId)?.name ?? '카테고리')
+      : '미분류';
+    router.replace({ pathname: '/category/[id]', params: { id: targetId, name: targetName } });
   }
 
   async function handleOverwrite() {
@@ -299,12 +327,13 @@ export default function RegisterScreen() {
         price: parsePrice(price),
         sourceLink: emptyToNull(sourceLink),
         memo: emptyToNull(memo),
+        tags: tags.length ? tags : null,
       });
       recordAnalysisLog(existing.id);
       markSubmitted();
       setDupVisible(false);
       setOverwriteBusy(false);
-      router.replace('/');
+      goToSavedCategory();
     } catch (e) {
       setOverwriteBusy(false);
       Alert.alert('오류', e instanceof Error ? e.message : '덮어쓰기에 실패했어요.');
@@ -400,38 +429,38 @@ export default function RegisterScreen() {
           ) : null}
 
           {/* 폼 */}
-          <Field label="제품명" required ai={aiFilled.productName}>
+          <FormField label="제품명" required ai={aiFilled.productName}>
             <TextInput
               ref={productNameRef}
-              style={styles.input}
+              style={formInput.input}
               placeholder="예: 무선 이어폰"
               placeholderTextColor={colors.textDisabled}
               value={productName}
               onChangeText={setProductNameEdit}
             />
-          </Field>
-          <Field label="브랜드" ai={aiFilled.brand}>
+          </FormField>
+          <FormField label="브랜드" ai={aiFilled.brand}>
             <TextInput
-              style={styles.input}
+              style={formInput.input}
               placeholder="예: 소니"
               placeholderTextColor={colors.textDisabled}
               value={brand}
               onChangeText={setBrandEdit}
             />
-          </Field>
-          <Field label="가격 (원)" ai={aiFilled.price}>
+          </FormField>
+          <FormField label="가격 (원)" ai={aiFilled.price}>
             <TextInput
-              style={styles.input}
+              style={formInput.input}
               placeholder="예: 189000"
               placeholderTextColor={colors.textDisabled}
               keyboardType="number-pad"
               value={price}
               onChangeText={setPriceEdit}
             />
-          </Field>
-          <Field label="링크">
+          </FormField>
+          <FormField label="링크">
             <TextInput
-              style={styles.input}
+              style={formInput.input}
               placeholder="https://"
               placeholderTextColor={colors.textDisabled}
               autoCapitalize="none"
@@ -440,27 +469,32 @@ export default function RegisterScreen() {
               value={sourceLink}
               onChangeText={setSourceLink}
             />
-          </Field>
-          <Field label="메모">
+          </FormField>
+          <FormField label="메모">
             <TextInput
-              style={[styles.input, styles.memo]}
+              style={[formInput.input, formInput.memo]}
               placeholder="메모를 남겨요"
               placeholderTextColor={colors.textDisabled}
               multiline
               value={memo}
               onChangeText={setMemo}
             />
-          </Field>
+          </FormField>
 
-          {/* 카테고리 선택 */}
-          <Text style={styles.fieldLabel}>카테고리</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-            <Chip label="미분류" selected={categoryId === null} onPress={() => setCategoryId(null)} />
-            {categories.map((c) => (
-              <Chip key={c.id} label={c.name} selected={categoryId === c.id} onPress={() => setCategoryId(c.id)} />
-            ))}
-            <Chip label="+ 새 카테고리" selected={false} onPress={handleCreateCategory} />
-          </ScrollView>
+          <TagInput tags={tags} onChange={setTags} suggestions={allTags} />
+
+          {/* 카테고리 선택 (FR-8: AI 추천이 있으면 미리 선택되고 힌트 표시. 다른 걸 고르면 덮인다) */}
+          <CategoryPicker
+            categories={categories}
+            selectedId={categoryId}
+            onSelect={setCategoryIdEdit}
+            onCreate={handleCreateCategory}
+          />
+          {categoryIsSuggested ? (
+            <Text style={styles.suggestHint} accessibilityLabel="AI가 추천한 카테고리예요">
+              AI가 추천한 카테고리예요. 바꾸려면 다른 걸 눌러요.
+            </Text>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.save, !canSave && styles.saveDisabled]}
@@ -492,47 +526,6 @@ export default function RegisterScreen() {
         onCancel={() => setDupVisible(false)}
       />
     </SafeAreaView>
-  );
-}
-
-function Field({
-  label,
-  required,
-  ai,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  ai?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.field}>
-      <View style={styles.fieldLabelRow}>
-        <Text style={styles.fieldLabel}>
-          {label}
-          {required ? <Text style={styles.required}> *</Text> : null}
-        </Text>
-        {ai ? (
-          <View style={styles.aiBadge} accessibilityLabel="AI가 채운 값이에요">
-            <Text style={styles.aiBadgeText}>AI가 채움</Text>
-          </View>
-        ) : null}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity
-      style={[styles.chip, selected && styles.chipSelected]}
-      onPress={onPress}
-      accessibilityRole="button"
-    >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </TouchableOpacity>
   );
 }
 
@@ -605,40 +598,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.three,
   },
   retryBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  field: { gap: spacing.one },
-  fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
-  fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.textMain },
-  aiBadge: {
-    borderRadius: 999,
-    backgroundColor: colors.accent,
-    paddingVertical: 2,
-    paddingHorizontal: spacing.two,
-  },
-  aiBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bgCard },
-  required: { color: colors.error },
-  input: {
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.silver,
-    borderRadius: 10,
-    paddingVertical: spacing.three,
-    paddingHorizontal: spacing.three,
-    fontSize: 16,
-    color: colors.textMain,
-  },
-  memo: { minHeight: 80, textAlignVertical: 'top' },
-  chips: { gap: spacing.two, paddingVertical: spacing.one },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.silver,
-    backgroundColor: colors.bgCard,
-    paddingVertical: spacing.two,
-    paddingHorizontal: spacing.three,
-  },
-  chipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontSize: 14, color: colors.textSub },
-  chipTextSelected: { color: colors.bgCard, fontWeight: '600' },
   save: {
     marginTop: spacing.two,
     backgroundColor: colors.primary,
@@ -650,4 +609,5 @@ const styles = StyleSheet.create({
   saveDisabled: { opacity: 0.5 },
   saveText: { fontSize: 16, fontWeight: '600', color: colors.bgCard },
   saveNote: { fontSize: 12, color: colors.textSub, textAlign: 'center' },
+  suggestHint: { fontSize: 12, color: colors.primary, marginTop: -spacing.two },
 });

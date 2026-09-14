@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,29 +7,19 @@ import { EmptyState } from '@/components/EmptyState';
 import { ItemCard } from '@/components/ItemCard';
 import { colors, spacing } from '@/constants/theme';
 import { formatSavedDate } from '@/lib/formatDate';
-import { getItemImageSignedUrls, listCategories, listItemsByCategory, type Item } from '@/lib/queries';
+import { getItemImageSignedUrls, listItemsByTag, type Item } from '@/lib/queries';
 
-export default function CategoryItemsScreen() {
+// 태그별 모아보기(FR-15a): 카테고리와 무관하게 그 태그가 달린 아이템만 최신순으로 보여준다.
+export default function TagItemsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; name?: string }>();
-  const id = params.id;
-  const isUncat = id === 'uncategorized';
-  const title = params.name ?? (isUncat ? '미분류' : '카테고리');
+  const { name } = useLocalSearchParams<{ name: string }>();
 
   const [items, setItems] = useState<Item[] | null>(null); // null = 로딩 중
   const [urls, setUrls] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
-      // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 위시리스트 목록으로 돌아간다.
-      if (!isUncat) {
-        const cats = await listCategories();
-        if (!cats.some((c) => c.id === id)) {
-          router.replace('/');
-          return;
-        }
-      }
-      const list = await listItemsByCategory(isUncat ? null : id);
+      const list = await listItemsByTag(name);
       const urlMap = await getItemImageSignedUrls(list.map((it) => it.image_key));
       setItems(list);
       setUrls(urlMap);
@@ -37,7 +27,7 @@ export default function CategoryItemsScreen() {
       setItems([]);
       Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.');
     }
-  }, [id, isUncat, router]);
+  }, [name]);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,7 +42,7 @@ export default function CategoryItemsScreen() {
           <Text style={styles.back}>‹ 뒤로</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>
-          {title}
+          #{name}
         </Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -62,7 +52,7 @@ export default function CategoryItemsScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : items.length === 0 ? (
-        <EmptyState title="이 카테고리에 아직 아이템이 없어요" />
+        <EmptyState title="이 태그의 위시가 없어요" />
       ) : (
         <FlatList
           data={items}
@@ -95,31 +85,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.two,
     paddingBottom: spacing.two,
   },
-  back: {
-    fontSize: 16,
-    color: colors.primary,
-    width: 72,
-  },
-  title: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textMain,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 72,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  list: {
-    padding: spacing.three,
-    gap: spacing.two,
-  },
-  column: {
-    gap: spacing.two,
-  },
+  back: { fontSize: 16, color: colors.primary, width: 72 },
+  title: { flex: 1, fontSize: 18, fontWeight: '700', color: colors.textMain, textAlign: 'center' },
+  headerSpacer: { width: 72 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  list: { padding: spacing.three, gap: spacing.two },
+  column: { gap: spacing.two },
 });

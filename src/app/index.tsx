@@ -25,7 +25,6 @@ import {
   renameCategory,
 } from '@/lib/queries';
 import { toFileUri } from '@/lib/imageBytes';
-import { supabase } from '@/lib/supabase';
 
 type Row = {
   id: string; // 카테고리 id, 또는 미분류는 'uncategorized'
@@ -40,7 +39,6 @@ export default function HomeScreen() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const shareHandled = useRef(false);
   const [rows, setRows] = useState<Row[] | null>(null); // null = 로딩 중
-  const [hasAnyItem, setHasAnyItem] = useState(false);
 
   // 공유 시트로 이미지가 들어오면 등록 화면으로 넘긴다(미로그인 진입은 로그인 후 여기로 복귀 → 유지, FR-1b).
   useEffect(() => {
@@ -70,11 +68,11 @@ export default function HomeScreen() {
         if (!repKeyByCat.has(key)) repKeyByCat.set(key, it.image_key);
       }
 
-      // 빈 카테고리는 비노출. 이름 카테고리 → 미분류 순.
+      // 카테고리는 비어 있어도(개수 0) 노출한다 — 사용자가 카테고리 존재·삭제 여부를 인지하도록(UX 결정).
+      // 이름 카테고리 → 미분류 순. 미분류는 실제 아이템이 있을 때만 노출.
       const built: Row[] = [];
       for (const c of cats) {
         const count = countByCat.get(c.id) ?? 0;
-        if (count === 0) continue;
         built.push({ id: c.id, name: c.name, count, thumbUrl: null, isUncat: false });
       }
       const uncatCount = countByCat.get(null) ?? 0;
@@ -93,10 +91,8 @@ export default function HomeScreen() {
       }
 
       setRows(built);
-      setHasAnyItem(items.length > 0);
     } catch (e) {
       setRows([]);
-      setHasAnyItem(false);
       Alert.alert('오류', e instanceof Error ? e.message : '불러오지 못했어요.');
     }
   }, []);
@@ -181,16 +177,17 @@ export default function HomeScreen() {
     ]);
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-  }
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>WishShot</Text>
-        <TouchableOpacity onPress={handleLogout} hitSlop={8} accessibilityRole="button">
-          <Text style={styles.logout}>로그아웃</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/settings')}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="설정"
+        >
+          <Text style={styles.settings}>설정</Text>
         </TouchableOpacity>
       </View>
 
@@ -205,7 +202,7 @@ export default function HomeScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
         </View>
-      ) : !hasAnyItem ? (
+      ) : rows.length === 0 ? (
         <EmptyState
           title="아직 담은 위시가 없어요"
           description="마음에 든 스크린샷을 담아 위시리스트를 시작해요."
@@ -256,7 +253,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textMain,
   },
-  logout: {
+  settings: {
     fontSize: 14,
     color: colors.textSub,
   },

@@ -50,6 +50,33 @@ export async function listItemsByCategory(categoryId: string | null): Promise<It
   return data ?? [];
 }
 
+/**
+ * 내가 쓴 모든 태그를 빈도 내림차순(동률은 가나다순)으로 반환한다.
+ * 등록·편집 화면의 "기존 태그 선택" 칩에 쓴다. RLS로 본인 아이템만 집계된다.
+ */
+export async function listAllTags(): Promise<string[]> {
+  const { data, error } = await supabase.from('items').select('tags');
+  if (error) throw new Error(`태그를 불러오지 못했어요: ${error.message}`);
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    for (const t of row.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
+    .map(([tag]) => tag);
+}
+
+/** 특정 태그가 달린 아이템(최신순). 카테고리와 무관하게 모아 본다(FR-15a 태그 필터 보기). */
+export async function listItemsByTag(tag: string): Promise<Item[]> {
+  const { data, error } = await supabase
+    .from('items')
+    .select('*')
+    .contains('tags', [tag])
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(`아이템을 불러오지 못했어요: ${error.message}`);
+  return data ?? [];
+}
+
 /** 단건 조회. */
 export async function getItem(id: string): Promise<Item> {
   const { data, error } = await supabase.from('items').select('*').eq('id', id).single();
@@ -101,8 +128,14 @@ export interface UpdateItemInput {
 }
 
 /**
- * 아이템 수정(덮어쓰기 저장에서 사용). 필드와 normalized_name 을 갱신하고 updated_at 은
- * 트리거가 자동 갱신한다. 이미지(image_key)는 그대로 두고, 필요하면 같은 키에 새로 업로드한다.
+ * 아이템 수정(덮어쓰기 저장·편집 화면에서 사용). 필드와 normalized_name 을 갱신하고
+ * updated_at 은 트리거가 자동 갱신한다. 이미지(image_key)는 그대로 두고, 필요하면 같은 키에
+ * 새로 업로드한다.
+ *
+ * 편집으로 brand/product_name 을 **다른 아이템**과 같은 정규화명이 되게 바꾸면
+ * UNIQUE(user_id, normalized_name) 위반(23505)이 난다 → `DuplicateItemError` 로 변환해
+ * 던진다(편집 화면은 이를 잡아 덮어쓰기 없이 안내·차단한다). 값이 그대로면(자기 자신)
+ * 위반이 나지 않는다.
  */
 export async function updateItem(id: string, input: UpdateItemInput): Promise<Item> {
   const { data, error } = await supabase
@@ -120,7 +153,25 @@ export async function updateItem(id: string, input: UpdateItemInput): Promise<It
     .eq('id', id)
     .select()
     .single();
-  if (error) throw new Error(`아이템을 수정하지 못했어요: ${error.message}`);
+  if (error) {
+    if (error.code === '23505') throw new DuplicateItemError();
+    throw new Error(`아이템을 수정하지 못했어요: ${error.message}`);
+  }
+  return data;
+}
+
+/**
+ * 아이템의 카테고리만 바꾼다(FR-15 빠른 이동). `categoryId === null` 이면 미분류로 이동.
+ * 다른 필드·normalized_name 은 건드리지 않으므로 중복 위험이 없다. updated_at 은 트리거가 갱신.
+ */
+export async function moveItemCategory(id: string, categoryId: string | null): Promise<Item> {
+  const { data, error } = await supabase
+    .from('items')
+    .update({ category_id: categoryId })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(`카테고리를 옮기지 못했어요: ${error.message}`);
   return data;
 }
 
