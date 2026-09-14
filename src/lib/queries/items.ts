@@ -134,6 +134,21 @@ export async function updateItem(id: string, input: UpdateItemInput): Promise<It
 }
 
 /**
+ * 아이템의 카테고리만 바꾼다(FR-15 빠른 이동). `categoryId === null` 이면 미분류로 이동.
+ * 다른 필드·normalized_name 은 건드리지 않으므로 중복 위험이 없다. updated_at 은 트리거가 갱신.
+ */
+export async function moveItemCategory(id: string, categoryId: string | null): Promise<Item> {
+  const { data, error } = await supabase
+    .from('items')
+    .update({ category_id: categoryId })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(`카테고리를 옮기지 못했어요: ${error.message}`);
+  return data;
+}
+
+/**
  * 같은 (본인, brand+제품명 정규화) 아이템이 이미 있는지 사전 조회한다. 저장 전 중복 판정용.
  * 저장과 반드시 같은 normalizeName 을 써서 판정 소스를 일치시킨다.
  */

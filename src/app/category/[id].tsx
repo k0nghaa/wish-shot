@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ItemCard } from '@/components/ItemCard';
 import { colors, spacing } from '@/constants/theme';
 import { formatSavedDate } from '@/lib/formatDate';
-import { getItemImageSignedUrls, listItemsByCategory, type Item } from '@/lib/queries';
+import { getItemImageSignedUrls, listCategories, listItemsByCategory, type Item } from '@/lib/queries';
 
 export default function CategoryItemsScreen() {
   const router = useRouter();
@@ -21,6 +21,14 @@ export default function CategoryItemsScreen() {
 
   const load = useCallback(async () => {
     try {
+      // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 위시리스트 목록으로 돌아간다.
+      if (!isUncat) {
+        const cats = await listCategories();
+        if (!cats.some((c) => c.id === id)) {
+          router.replace('/');
+          return;
+        }
+      }
       const list = await listItemsByCategory(isUncat ? null : id);
       const urlMap = await getItemImageSignedUrls(list.map((it) => it.image_key));
       setItems(list);
@@ -29,7 +37,7 @@ export default function CategoryItemsScreen() {
       setItems([]);
       Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.');
     }
-  }, [id, isUncat]);
+  }, [id, isUncat, router]);
 
   useFocusEffect(
     useCallback(() => {

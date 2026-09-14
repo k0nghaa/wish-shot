@@ -5,23 +5,31 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CategoryPicker } from '@/components/CategoryPicker';
+import { formInput } from '@/components/FormField';
 import { colors, spacing } from '@/constants/theme';
+import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
 import { formatSavedDate } from '@/lib/formatDate';
 import { formatPriceKRW } from '@/lib/formatPrice';
 import {
+  createCategory,
   deleteItem,
   deleteItemImage,
   getItem,
   getItemImageSignedUrl,
   listCategories,
+  moveItemCategory,
+  type Category,
   type Item,
 } from '@/lib/queries';
 
@@ -31,8 +39,28 @@ export default function ItemDetailScreen() {
 
   const [item, setItem] = useState<Item | null>(null); // null = 로딩 중
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [categoryName, setCategoryName] = useState<string>('미분류');
   const [deleting, setDeleting] = useState(false);
+
+  // 카테고리 이동 시트(FR-15)
+  const [moveVisible, setMoveVisible] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [newCatName, setNewCatName] = useState(''); // 시트 안 인라인 새 카테고리 입력
+  // 이 화면에서의 동작(이동)으로 원래 카테고리가 비었으면 true → '뒤로'는 카테고리가 아닌 홈으로.
+  const [emptiedSource, setEmptiedSource] = useState(false);
+
+  // 위시리스트 목록(홈)으로 돌아간다. 스택에 카테고리 화면이 있으면 건너뛴다(깜빡임 방지).
+  function goHome() {
+    if (router.canDismiss()) router.dismissAll();
+    else router.replace('/');
+  }
+
+  // 상세 '뒤로': 이 화면에서 원래 카테고리를 비웠으면 홈으로, 아니면 이전 화면으로.
+  function goBack() {
+    if (emptiedSource) goHome();
+    else router.back();
+  }
 
   const load = useCallback(async () => {
     try {
@@ -40,14 +68,13 @@ export default function ItemDetailScreen() {
       setItem(found);
       const [url, cats] = await Promise.all([
         getItemImageSignedUrl(found.image_key).catch(() => null),
-        found.category_id ? listCategories() : Promise.resolve([]),
+        listCategories().catch(() => [] as Category[]),
       ]);
       setImageUrl(url);
-      if (found.category_id) {
-        setCategoryName(cats.find((c) => c.id === found.category_id)?.name ?? '미분류');
-      } else {
-        setCategoryName('미분류');
-      }
+      setCategories(cats);
+      setCategoryName(
+        found.category_id ? (cats.find((c) => c.id === found.category_id)?.name ?? '미분류') : '미분류',
+      );
     } catch (e) {
       Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.', [
         { text: '확인', onPress: () => router.back() },
@@ -71,11 +98,16 @@ export default function ItemDetailScreen() {
   async function doDelete() {
     if (!item) return;
     setDeleting(true);
+    const from = item.category_id;
+    const fromName = categories.find((c) => c.id === from)?.name;
     try {
       await deleteItem(item.id);
       // 행이 지워졌으면 목적은 달성. 이미지 삭제 실패는 치명적이지 않다(고아 객체만 남음).
       await deleteItemImage(item.image_key).catch(() => undefined);
-      router.back();
+      // 이 아이템이 카테고리의 마지막이었으면 카테고리 삭제 안내(응답까지 대기). 비었으면 목록(홈)으로, 아니면 이전 화면으로.
+      const { wasEmpty } = await promptDeleteIfCategoryEmpty(from, fromName);
+      if (wasEmpty) goHome();
+      else router.back();
     } catch (e) {
       setDeleting(false);
       Alert.alert('오류', e instanceof Error ? e.message : '삭제하지 못했어요.');
@@ -86,12 +118,64 @@ export default function ItemDetailScreen() {
     Linking.openURL(url).catch(() => Alert.alert('열 수 없어요', '링크를 열지 못했어요.'));
   }
 
+  // 이동으로 원래 카테고리가 비었으면 안내를 띄우고, '뒤로 → 홈' 플래그를 세운다.
+  async function checkSourceEmptied(fromCategoryId: string | null) {
+    const fromName = categories.find((c) => c.id === fromCategoryId)?.name;
+    const { wasEmpty } = await promptDeleteIfCategoryEmpty(fromCategoryId, fromName, () =>
+      setCategories((prev) => prev.filter((c) => c.id !== fromCategoryId)),
+    );
+    if (wasEmpty) setEmptiedSource(true);
+  }
+
+  // 카테고리만 바꾼다(편집 화면을 거치지 않는 빠른 이동). null = 미분류. 같은 카테고리면 닫기만.
+  async function moveTo(categoryId: string | null) {
+    if (!item) return;
+    const from = item.category_id;
+    if (categoryId === from) {
+      setMoveVisible(false);
+      return;
+    }
+    setMoving(true);
+    try {
+      await moveItemCategory(item.id, categoryId);
+      setMoveVisible(false);
+      setMoving(false);
+      await load(); // 상세의 카테고리명 즉시 갱신(홈·목록은 포커스 재조회로 갱신)
+      await checkSourceEmptied(from);
+    } catch (e) {
+      setMoving(false);
+      Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 옮기지 못했어요.');
+    }
+  }
+
+  // 시트 안 인라인 입력으로 새 카테고리를 만들고 바로 그 카테고리로 이동한다.
+  // (모달 위에 Alert.prompt 를 띄우면 iOS 에서 콜백이 완료되지 못해 이동이 실패하므로 인라인 입력을 쓴다.)
+  async function createAndMove() {
+    const name = newCatName.trim();
+    if (!name || moving || !item) return;
+    const from = item.category_id;
+    setMoving(true);
+    try {
+      const created = await createCategory(name);
+      setCategories((prev) => [...prev, created]);
+      setNewCatName('');
+      await moveItemCategory(item.id, created.id);
+      setMoveVisible(false);
+      setMoving(false);
+      await load();
+      await checkSourceEmptied(from);
+    } catch (e) {
+      setMoving(false);
+      Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했어요.');
+    }
+  }
+
   const price = item ? formatPriceKRW(item.price) : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
+        <TouchableOpacity onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
           <Text style={styles.back}>‹ 뒤로</Text>
         </TouchableOpacity>
         <View style={styles.headerSpacer} />
@@ -147,6 +231,15 @@ export default function ItemDetailScreen() {
             ) : null}
           </View>
 
+          <TouchableOpacity
+            style={styles.moveBtn}
+            onPress={() => setMoveVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="카테고리 이동"
+          >
+            <Text style={styles.moveBtnText}>카테고리 이동</Text>
+          </TouchableOpacity>
+
           {item.memo ? (
             <View style={styles.block}>
               <Text style={styles.blockLabel}>메모</Text>
@@ -168,6 +261,48 @@ export default function ItemDetailScreen() {
           ) : null}
         </ScrollView>
       )}
+
+      <Modal visible={moveVisible} transparent animationType="slide" onRequestClose={() => setMoveVisible(false)}>
+        <View style={styles.sheetBackdrop}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>카테고리 이동</Text>
+              {moving ? <ActivityIndicator color={colors.primary} /> : null}
+            </View>
+            <CategoryPicker categories={categories} selectedId={item?.category_id ?? null} onSelect={moveTo} />
+            <View style={styles.newCatRow}>
+              <TextInput
+                style={[formInput.input, styles.newCatInput]}
+                placeholder="새 카테고리 이름"
+                placeholderTextColor={colors.textDisabled}
+                value={newCatName}
+                onChangeText={setNewCatName}
+                onSubmitEditing={createAndMove}
+                returnKeyType="done"
+                editable={!moving}
+              />
+              <TouchableOpacity
+                style={[styles.newCatBtn, (!newCatName.trim() || moving) && styles.newCatBtnDisabled]}
+                onPress={createAndMove}
+                disabled={!newCatName.trim() || moving}
+                accessibilityRole="button"
+              >
+                <Text style={styles.newCatBtnText}>만들고 이동</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.sheetClose}
+              onPress={() => {
+                setMoveVisible(false);
+                setNewCatName('');
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.sheetCloseText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -236,6 +371,38 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 14, color: colors.textSub },
   rowValue: { flex: 1, fontSize: 15, color: colors.textMain, textAlign: 'right' },
   link: { color: colors.primary },
+  moveBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingVertical: spacing.three,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moveBtnText: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  sheetBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.four,
+    gap: spacing.three,
+  },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetTitle: { fontSize: 17, fontWeight: '700', color: colors.textMain },
+  newCatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
+  newCatInput: { flex: 1 },
+  newCatBtn: {
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.three,
+    paddingHorizontal: spacing.three,
+    justifyContent: 'center',
+  },
+  newCatBtnDisabled: { opacity: 0.5 },
+  newCatBtnText: { fontSize: 14, fontWeight: '600', color: colors.bgCard },
+  sheetClose: { alignItems: 'center', paddingVertical: spacing.three },
+  sheetCloseText: { fontSize: 15, fontWeight: '600', color: colors.textSub },
   block: { gap: spacing.two },
   blockLabel: { fontSize: 14, fontWeight: '600', color: colors.textMain },
   memo: { fontSize: 15, color: colors.textMain, lineHeight: 22 },

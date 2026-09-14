@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/types/database';
 
 import { getCurrentUserId } from './auth';
+import { DuplicateCategoryError } from './errors';
 
 export type Category = Tables<'categories'>;
 
@@ -15,7 +16,7 @@ export async function listCategories(): Promise<Category[]> {
   return data ?? [];
 }
 
-/** 카테고리 생성. 같은 이름이 이미 있으면 UNIQUE(user_id, name) 위반으로 에러가 난다. */
+/** 카테고리 생성. 같은 이름이 이미 있으면 UNIQUE(user_id, name) 위반(23505) → DuplicateCategoryError. */
 export async function createCategory(name: string): Promise<Category> {
   const userId = await getCurrentUserId();
   const { data, error } = await supabase
@@ -23,11 +24,17 @@ export async function createCategory(name: string): Promise<Category> {
     .insert({ user_id: userId, name })
     .select()
     .single();
-  if (error) throw new Error(`카테고리를 만들지 못했어요: ${error.message}`);
+  if (error) {
+    if (error.code === '23505') {
+      console.warn('createCategory 중복 이름:', error.message);
+      throw new DuplicateCategoryError();
+    }
+    throw new Error(`카테고리를 만들지 못했어요: ${error.message}`);
+  }
   return data;
 }
 
-/** 카테고리 이름 변경. */
+/** 카테고리 이름 변경. 같은 이름이 이미 있으면 23505 → DuplicateCategoryError. */
 export async function renameCategory(id: string, name: string): Promise<Category> {
   const { data, error } = await supabase
     .from('categories')
@@ -35,7 +42,13 @@ export async function renameCategory(id: string, name: string): Promise<Category
     .eq('id', id)
     .select()
     .single();
-  if (error) throw new Error(`카테고리 이름을 바꾸지 못했어요: ${error.message}`);
+  if (error) {
+    if (error.code === '23505') {
+      console.warn('renameCategory 중복 이름:', error.message);
+      throw new DuplicateCategoryError();
+    }
+    throw new Error(`카테고리 이름을 바꾸지 못했어요: ${error.message}`);
+  }
   return data;
 }
 

@@ -20,6 +20,7 @@ import { CategoryPicker } from '@/components/CategoryPicker';
 import { FormField, formInput } from '@/components/FormField';
 import { TagInput } from '@/components/TagInput';
 import { colors, spacing } from '@/constants/theme';
+import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
 import { readImageBytes } from '@/lib/imageBytes';
 import {
   createCategory,
@@ -57,6 +58,7 @@ export default function ItemEditScreen() {
   const [memo, setMemo] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null); // null = 미분류
+  const [initialCategoryId, setInitialCategoryId] = useState<string | null>(null); // 편집 전 카테고리(비움 판정용)
 
   const [saving, setSaving] = useState(false);
 
@@ -74,6 +76,7 @@ export default function ItemEditScreen() {
         setMemo(item.memo ?? '');
         setTags(item.tags ?? []);
         setCategoryId(item.category_id);
+        setInitialCategoryId(item.category_id);
         setCategories(cats);
         setLoading(false);
         getItemImageSignedUrl(item.image_key)
@@ -143,7 +146,18 @@ export default function ItemEditScreen() {
         const bytes = await readImageBytes(newImage.uri);
         await uploadItemImage(userId, id, bytes, newImage.contentType);
       }
-      // 상세 화면은 포커스 시 재조회(signed URL도 새로 발급)하므로 back 하면 최신값·새 이미지가 반영된다.
+      // 편집으로 카테고리를 옮겨 원래 카테고리가 비었으면 삭제 안내. 비었으면 목록(홈)으로, 아니면 상세로.
+      // (상세 화면은 포커스 시 재조회하므로 back 하면 최신값·새 이미지가 반영된다.)
+      if (categoryId !== initialCategoryId) {
+        const fromName = categories.find((c) => c.id === initialCategoryId)?.name;
+        // 삭제/유지 선택까지 기다린 뒤 이동해야 홈이 삭제 결과를 반영한다.
+        const { wasEmpty } = await promptDeleteIfCategoryEmpty(initialCategoryId, fromName);
+        if (wasEmpty) {
+          if (router.canDismiss()) router.dismissAll();
+          else router.replace('/');
+          return;
+        }
+      }
       router.back();
     } catch (e) {
       setSaving(false);

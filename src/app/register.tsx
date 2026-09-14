@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CategoryPicker } from '@/components/CategoryPicker';
 import { FormField, formInput } from '@/components/FormField';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
+import { TagInput } from '@/components/TagInput';
 import { colors, spacing } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { readImageBytes } from '@/lib/imageBytes';
@@ -97,6 +98,7 @@ export default function RegisterScreen() {
   const [priceEdit, setPriceEdit] = useState<string | null>(null);
   const [sourceLink, setSourceLink] = useState('');
   const [memo, setMemo] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null); // null = 미분류
@@ -268,6 +270,7 @@ export default function RegisterScreen() {
         price: parsePrice(price),
         sourceLink: emptyToNull(sourceLink),
         memo: emptyToNull(memo),
+        tags: tags.length ? tags : null,
       });
     } catch (e) {
       // 사전조회를 놓친 경합(23505) → 덮어쓰기 모달로 폴백
@@ -282,7 +285,17 @@ export default function RegisterScreen() {
     recordAnalysisLog(id);
     markSubmitted();
     setSaving(false);
-    router.replace('/');
+    // 저장한 카테고리 목록으로 이동해 방금 담은 위시를 맥락에서 보여준다.
+    goToSavedCategory();
+  }
+
+  // 저장한 카테고리 화면으로 이동(미분류면 미분류 목록). 홈이 아니라 담은 위치를 바로 보여준다.
+  function goToSavedCategory() {
+    const targetId = categoryId ?? 'uncategorized';
+    const targetName = categoryId
+      ? (categories.find((c) => c.id === categoryId)?.name ?? '카테고리')
+      : '미분류';
+    router.replace({ pathname: '/category/[id]', params: { id: targetId, name: targetName } });
   }
 
   async function handleOverwrite() {
@@ -301,12 +314,13 @@ export default function RegisterScreen() {
         price: parsePrice(price),
         sourceLink: emptyToNull(sourceLink),
         memo: emptyToNull(memo),
+        tags: tags.length ? tags : null,
       });
       recordAnalysisLog(existing.id);
       markSubmitted();
       setDupVisible(false);
       setOverwriteBusy(false);
-      router.replace('/');
+      goToSavedCategory();
     } catch (e) {
       setOverwriteBusy(false);
       Alert.alert('오류', e instanceof Error ? e.message : '덮어쓰기에 실패했어요.');
@@ -453,6 +467,8 @@ export default function RegisterScreen() {
               onChangeText={setMemo}
             />
           </FormField>
+
+          <TagInput tags={tags} onChange={setTags} />
 
           {/* 카테고리 선택 */}
           <CategoryPicker
