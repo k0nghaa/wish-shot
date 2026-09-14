@@ -220,7 +220,7 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 - **발생한 이슈와 해결**:
   - 한국어 미인식 → Apple Vision `recognitionLanguages`에 `ko-KR` 명시(자작 모듈로 제어).
   - curl 테스트 시 Windows Git Bash가 한국어를 mojibake로 전송 → `--data-binary @UTF-8파일`로 검증(실제 앱은 supabase-js가 UTF-8 전송이라 무관).
-  - E-2 원문이 `numberOfLines=4`로 상태바 잡텍스트만 보임 → 스크롤·복사 가능한 전체 표시로 수정.
+  - E-2 원문이 `numberOfLines=4`로 상태바 잡텍스트만 보임 → 전체 표시로 수정. 이후 "줄 탭 → 제품명 칸 자동 입력"(정제 실패 시 LLM이 없어 앱은 어느 줄이 제품명인지 모르므로 사용자가 탭해서 선택)으로 개선. 탭한 줄은 배경 강조(파생값). `expo-clipboard`(탭→복사·피드백·전체 복사)는 재빌드가 걸려 Phase 4로 미룸.
   - E-3(제품명 null) 시 상태 문구가 일반 "확인이 필요해요"였음 → "제품명을 인식하지 못했어요…"로 명시.
   - **중복 판정 한계(알려진 한계, Phase 3 범위 밖)**: 같은 제품이라도 스크린샷 소스가 다르면(공홈 한국어명 vs 인증샷 영어 라벨) OCR 텍스트가 달라 `normalized_name`이 달라짐 → 크로스-소스 중복은 못 잡음. `normalized_name`은 "동일 재저장 하드 차단" 용도 유지. 이미지·카탈로그 기반 중복/후보 선택 UX는 Phase 4 백로그.
-- **Phase 4로 넘길 것**: 저장 후 편집(FR-14)·카테고리 이동(FR-15)·메모/태그, 기존 SQLite/uploads 데이터 이관(`docs/archive/migrate-sqlite-to-supabase.ts` 개조), TestFlight 내부 테스트, 카테고리 자동 추천(FR-8)은 그 이후.
+- **Phase 4로 넘길 것**: 저장 후 편집(FR-14)·카테고리 이동(FR-15)·메모/태그, 기존 SQLite/uploads 데이터 이관(`docs/archive/migrate-sqlite-to-supabase.ts` 개조), TestFlight 내부 테스트, 카테고리 자동 추천(FR-8), **`expo-clipboard` 도입(E-2 원문 탭→복사·복사 피드백·전체 복사)**, 크로스-소스 중복 판정·제품명 후보 선택 UX, 개인정보 고지 설정 화면 열람은 그 이후. (expo-clipboard 등 네이티브 추가는 Phase 4 재빌드에 묶어서)
