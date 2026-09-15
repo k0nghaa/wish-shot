@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { uuid } from 'expo-modules-core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,12 +19,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CategoryPicker } from '@/components/CategoryPicker';
-import { FormField, formInput } from '@/components/FormField';
+import { FolderPickerSheet } from '@/components/FolderPickerSheet';
+import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { TagInput } from '@/components/TagInput';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radius, spacing, type } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { readImageBytes } from '@/lib/imageBytes';
 import {
@@ -62,23 +63,23 @@ function analysisStatusInfo(
   switch (state.phase) {
     case 'imageReceived':
     case 'ocrRunning':
-      return { text: '이미지에서 글자를 읽고 있어요…', color: colors.textSub, loading: true };
+      return { text: '글자를 읽는 중…', color: colors.textSub, loading: true };
     case 'parsing':
-      return { text: 'AI가 제품 정보를 정리하고 있어요…', color: colors.textSub, loading: true };
+      return { text: 'AI가 정보를 정리하는 중…', color: colors.textSub, loading: true };
     case 'filled':
       // E-3(부분 성공): 정제는 됐으나 제품명을 못 뽑음 → 제품명 입력을 명시적으로 안내.
       if (state.result && !state.result.productName) {
-        return { text: '제품명을 인식하지 못했어요. 직접 입력해 주세요.', color: colors.textMain, loading: false };
+        return { text: '제품명을 인식하지 못했습니다. 직접 입력하세요.', color: colors.textMain, loading: false };
       }
       return needsConfirmation
-        ? { text: '확인이 필요해요 — AI가 채운 값을 확인해 주세요.', color: colors.textMain, loading: false }
-        : { text: 'AI가 제품 정보를 채웠어요. 확인해 주세요.', color: colors.primary, loading: false };
+        ? { text: 'AI가 채운 값을 확인하세요.', color: colors.textMain, loading: false }
+        : { text: 'AI가 채웠습니다. 확인하세요.', color: colors.textMain, loading: false };
     case 'error':
       return {
         text:
           state.errorKind === 'ocr_empty'
-            ? '글자를 인식하지 못했어요. 직접 입력해 주세요.'
-            : '정보를 정리하지 못했어요. 직접 입력해 주세요.',
+            ? '글자를 인식하지 못했습니다. 직접 입력하세요.'
+            : '정보를 정리하지 못했습니다. 직접 입력하세요.',
         color: colors.error,
         loading: false,
       };
@@ -107,6 +108,7 @@ export default function RegisterScreen() {
   // 카테고리도 자동채움처럼 "파생"으로 다룬다(FR-8 추천 미리선택).
   // undefined = 사용자가 아직 안 고름(추천을 따름), null = 사용자가 미분류 선택, id = 특정 카테고리.
   const [categoryIdEdit, setCategoryIdEdit] = useState<string | null | undefined>(undefined);
+  const [folderSheet, setFolderSheet] = useState(false);
 
   const [saving, setSaving] = useState(false);
 
@@ -163,9 +165,7 @@ export default function RegisterScreen() {
     }
   }, [analysisState, productNameEdit]);
 
-  // 자동채움은 "복사"가 아니라 "파생"으로 처리한다(effect·setState 불필요):
-  // 손대지 않은 필드(*Edit === null)는 AI 값을, 손댄 필드는 사용자 값을 보여준다.
-  // 사용자가 편집하면 *Edit 이 채워져 자연히 "AI가 채움" 표시가 사라진다.
+  // 자동채움은 "복사"가 아니라 "파생"으로 처리한다(effect·setState 불필요).
   const aiResult = analysisState.phase === 'filled' ? analysisState.result : null;
   const productName = productNameEdit ?? aiResult?.productName ?? '';
   const brand = brandEdit ?? aiResult?.brand ?? '';
@@ -182,6 +182,7 @@ export default function RegisterScreen() {
     : null;
   const categoryId = categoryIdEdit !== undefined ? categoryIdEdit : suggestedCategoryId; // null = 미분류
   const categoryIsSuggested = categoryIdEdit === undefined && suggestedCategoryId != null;
+  const folderName = categoryId ? (categories.find((c) => c.id === categoryId)?.name ?? '미분류') : '미분류';
 
   // 이번 분석 결과의 로그 상태(4종). 분석이 없었으면 null.
   function analysisLogStatus(): AnalysisStatus | null {
@@ -219,7 +220,7 @@ export default function RegisterScreen() {
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('사진 접근이 필요해요', '설정에서 사진 접근을 허용하면 이미지를 담을 수 있어요.');
+      Alert.alert('사진 접근 필요', '설정에서 사진 접근을 허용하세요.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1 });
@@ -229,18 +230,11 @@ export default function RegisterScreen() {
     if (asset.mimeType) setContentType(asset.mimeType);
   }
 
-  function handleCreateCategory() {
-    Alert.prompt('새 카테고리', '카테고리 이름을 입력해요.', async (input) => {
-      const name = input?.trim();
-      if (!name) return;
-      try {
-        const created = await createCategory(name);
-        setCategories((prev) => [...prev, created]);
-        setCategoryIdEdit(created.id);
-      } catch (e) {
-        Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했어요.');
-      }
-    });
+  // 폴더 시트의 인라인 생성 — 만든 폴더를 목록에 추가하고 반환한다(시트가 선택·닫기 처리).
+  async function createCategoryInline(name: string): Promise<Category> {
+    const created = await createCategory(name);
+    setCategories((prev) => [...prev, created]);
+    return created;
   }
 
   async function openDuplicate(existing: Item) {
@@ -263,7 +257,7 @@ export default function RegisterScreen() {
       await performNewSave();
     } catch (e) {
       setSaving(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '저장에 실패했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '저장하지 못했습니다.');
     }
   }
 
@@ -298,16 +292,13 @@ export default function RegisterScreen() {
     recordAnalysisLog(id);
     markSubmitted();
     setSaving(false);
-    // 저장한 카테고리 목록으로 이동해 방금 담은 위시를 맥락에서 보여준다.
     goToSavedCategory();
   }
 
-  // 저장한 카테고리 화면으로 이동(미분류면 미분류 목록). 홈이 아니라 담은 위치를 바로 보여준다.
+  // 저장한 카테고리 화면으로 이동(미분류면 미분류 목록).
   function goToSavedCategory() {
     const targetId = categoryId ?? 'uncategorized';
-    const targetName = categoryId
-      ? (categories.find((c) => c.id === categoryId)?.name ?? '카테고리')
-      : '미분류';
+    const targetName = categoryId ? (categories.find((c) => c.id === categoryId)?.name ?? '카테고리') : '미분류';
     router.replace({ pathname: '/category/[id]', params: { id: targetId, name: targetName } });
   }
 
@@ -336,7 +327,7 @@ export default function RegisterScreen() {
       goToSavedCategory();
     } catch (e) {
       setOverwriteBusy(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '덮어쓰기에 실패했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '덮어쓰지 못했습니다.');
     }
   }
 
@@ -351,51 +342,51 @@ export default function RegisterScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Text style={styles.back}>‹ 뒤로</Text>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="취소">
+          <Text style={styles.cancel}>취소</Text>
         </TouchableOpacity>
         <Text style={styles.title}>위시 담기</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity onPress={handleSave} disabled={!canSave} hitSlop={8} accessibilityRole="button" accessibilityLabel="저장">
+          {saving ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <Text style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}>저장</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          {/* 이미지 미리보기 / 선택 */}
-          <TouchableOpacity style={styles.imageBox} onPress={pickImage} accessibilityRole="button">
+          {/* 이미지 미리보기 / 선택 (중앙 정사각) */}
+          <TouchableOpacity style={styles.imageBox} onPress={pickImage} accessibilityRole="button" accessibilityLabel="사진 선택">
             {imageUri ? (
               <Image source={{ uri: imageUri }} style={styles.image} contentFit="cover" />
             ) : (
               <View style={styles.imagePlaceholder}>
-                <Text style={styles.imagePlaceholderText}>사진 선택</Text>
-                <Text style={styles.imageHint}>스크린샷을 골라 담아요</Text>
+                <SymbolView name="photo" size={32} tintColor={colors.silverDark} />
+                <Text style={styles.imageHint}>사진 선택</Text>
               </View>
             )}
           </TouchableOpacity>
-          {imageUri ? (
-            <TouchableOpacity onPress={pickImage} accessibilityRole="button">
-              <Text style={styles.changeImage}>다른 사진 선택</Text>
-            </TouchableOpacity>
-          ) : null}
 
-          {/* 분석 상태 인디케이터 (인식 중 / 정리 중 / 완료 / 확인 필요 / 실패) */}
+          {/* 분석 상태 인디케이터 (인라인) */}
           {analysisStatus ? (
             <View style={styles.status} accessibilityLiveRegion="polite">
-              {analysisStatus.loading ? <ActivityIndicator size="small" color={colors.textSub} /> : null}
+              {/* 로딩: 스피너+문구를 한 그룹으로 가운데 정렬(스피너는 문구 바로 옆). */}
+              {analysisStatus.loading ? (
+                <ActivityIndicator size="small" color={colors.textSub} style={styles.statusSpinner} />
+              ) : null}
               <Text style={[styles.statusText, { color: analysisStatus.color }]}>{analysisStatus.text}</Text>
             </View>
           ) : null}
 
-          {/* 실패(E-1/E-2) 상세: E-2 는 인식한 원문을 보여주고, 둘 다 재시도 버튼 제공 */}
+          {/* 실패(E-1/E-2) 상세 */}
           {analysisState.phase === 'error' ? (
             <View style={styles.errorBox}>
               {analysisState.errorKind === 'parse_failed' && analysisState.rawText ? (
                 <>
-                  <Text style={styles.errorHint}>인식한 원문 — 제품명인 줄을 탭하면 제품명 칸에 들어가요</Text>
-                  <ScrollView
-                    style={styles.errorRawBox}
-                    nestedScrollEnabled
-                    keyboardShouldPersistTaps="handled"
-                  >
+                  <Text style={styles.errorHint}>제품명인 줄을 탭하면 제품명 칸에 들어갑니다.</Text>
+                  <ScrollView style={styles.errorRawBox} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                     {analysisState.rawText.split('\n').map((line, i) => {
                       const t = line.trim();
                       if (!t) return null;
@@ -417,104 +408,99 @@ export default function RegisterScreen() {
                   </ScrollView>
                 </>
               ) : null}
-              <TouchableOpacity
-                onPress={retryAnalysis}
-                style={styles.retryBtn}
-                accessibilityRole="button"
-                accessibilityLabel="AI 분석 다시 시도"
-              >
+              <TouchableOpacity onPress={retryAnalysis} style={styles.retryBtn} accessibilityRole="button" accessibilityLabel="다시 시도">
                 <Text style={styles.retryBtnText}>다시 시도</Text>
               </TouchableOpacity>
             </View>
           ) : null}
 
-          {/* 폼 */}
-          <FormField label="제품명" required ai={aiFilled.productName}>
-            <TextInput
-              ref={productNameRef}
-              style={formInput.input}
-              placeholder="예: 무선 이어폰"
-              placeholderTextColor={colors.textDisabled}
-              value={productName}
-              onChangeText={setProductNameEdit}
-            />
-          </FormField>
-          <FormField label="브랜드" ai={aiFilled.brand}>
-            <TextInput
-              style={formInput.input}
-              placeholder="예: 소니"
-              placeholderTextColor={colors.textDisabled}
-              value={brand}
-              onChangeText={setBrandEdit}
-            />
-          </FormField>
-          <FormField label="가격 (원)" ai={aiFilled.price}>
-            <TextInput
-              style={formInput.input}
-              placeholder="예: 189000"
-              placeholderTextColor={colors.textDisabled}
-              keyboardType="number-pad"
-              value={price}
-              onChangeText={setPriceEdit}
-            />
-          </FormField>
-          <FormField label="링크">
-            <TextInput
-              style={formInput.input}
-              placeholder="https://"
-              placeholderTextColor={colors.textDisabled}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              value={sourceLink}
-              onChangeText={setSourceLink}
-            />
-          </FormField>
-          <FormField label="메모">
-            <TextInput
-              style={[formInput.input, formInput.memo]}
-              placeholder="메모를 남겨요"
-              placeholderTextColor={colors.textDisabled}
-              multiline
-              value={memo}
-              onChangeText={setMemo}
-            />
-          </FormField>
+          {/* 그룹 카드 1: 제품명·브랜드·가격·링크 */}
+          <FormCard>
+            <FormRow label="제품명" required ai={aiFilled.productName}>
+              <TextInput
+                ref={productNameRef}
+                style={formInput.rowInput}
+                placeholder="예: 무선 이어폰"
+                placeholderTextColor={colors.textDisabled}
+                value={productName}
+                onChangeText={setProductNameEdit}
+              />
+            </FormRow>
+            <FormRow label="브랜드" ai={aiFilled.brand}>
+              <TextInput
+                style={formInput.rowInput}
+                placeholder="예: 소니"
+                placeholderTextColor={colors.textDisabled}
+                value={brand}
+                onChangeText={setBrandEdit}
+              />
+            </FormRow>
+            <FormRow label="가격" ai={aiFilled.price}>
+              <TextInput
+                style={formInput.rowInput}
+                placeholder="₩ 0"
+                placeholderTextColor={colors.textDisabled}
+                keyboardType="number-pad"
+                value={price}
+                onChangeText={setPriceEdit}
+              />
+            </FormRow>
+            <FormRow label="링크">
+              <TextInput
+                style={formInput.rowInput}
+                placeholder="https://"
+                placeholderTextColor={colors.textDisabled}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                value={sourceLink}
+                onChangeText={setSourceLink}
+              />
+            </FormRow>
+          </FormCard>
+
+          {/* 추천 문구는 항상 렌더하고 추천이 없을 땐 투명 처리 — 폴더 섹션 위치를 고정(점프 방지). */}
+          <Text
+            style={[styles.suggestHint, !categoryIsSuggested && styles.suggestHintHidden]}
+            accessible={categoryIsSuggested}
+            accessibilityLabel="AI가 추천한 폴더"
+          >
+            AI가 추천한 폴더입니다. 바꾸려면 눌러 선택하세요.
+          </Text>
+
+          {/* 그룹 카드 2: 폴더·메모 */}
+          <FormCard>
+            <DisclosureRow label="폴더" value={folderName} onPress={() => setFolderSheet(true)} />
+            <FormBlock label="메모">
+              <TextInput
+                style={formInput.memo}
+                placeholder="메모"
+                placeholderTextColor={colors.textDisabled}
+                multiline
+                value={memo}
+                onChangeText={setMemo}
+              />
+            </FormBlock>
+          </FormCard>
 
           <TagInput tags={tags} onChange={setTags} suggestions={allTags} />
 
-          {/* 카테고리 선택 (FR-8: AI 추천이 있으면 미리 선택되고 힌트 표시. 다른 걸 고르면 덮인다) */}
-          <CategoryPicker
-            categories={categories}
-            selectedId={categoryId}
-            onSelect={setCategoryIdEdit}
-            onCreate={handleCreateCategory}
-          />
-          {categoryIsSuggested ? (
-            <Text style={styles.suggestHint} accessibilityLabel="AI가 추천한 카테고리예요">
-              AI가 추천한 카테고리예요. 바꾸려면 다른 걸 눌러요.
-            </Text>
-          ) : null}
-
-          <TouchableOpacity
-            style={[styles.save, !canSave && styles.saveDisabled]}
-            onPress={handleSave}
-            disabled={!canSave}
-            accessibilityRole="button"
-          >
-            {saving ? (
-              <ActivityIndicator color={colors.bgCard} />
-            ) : (
-              <Text style={styles.saveText}>저장</Text>
-            )}
-          </TouchableOpacity>
           {!imageUri ? (
-            <Text style={styles.saveNote}>사진을 선택해야 저장할 수 있어요.</Text>
+            <Text style={styles.saveNote}>사진을 선택하세요.</Text>
           ) : productName.trim().length === 0 ? (
-            <Text style={styles.saveNote}>제품명을 입력해주세요.</Text>
+            <Text style={styles.saveNote}>제품명을 입력하세요.</Text>
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <FolderPickerSheet
+        visible={folderSheet}
+        onClose={() => setFolderSheet(false)}
+        categories={categories}
+        selectedId={categoryId}
+        onSelect={setCategoryIdEdit}
+        onCreateCategory={createCategoryInline}
+      />
 
       <OverwriteDialog
         visible={dupVisible}
@@ -537,49 +523,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.three,
-    paddingTop: spacing.two,
+    paddingTop: spacing.three,
     paddingBottom: spacing.two,
   },
-  back: { fontSize: 16, color: colors.primary, width: 72 },
-  title: { flex: 1, fontSize: 18, fontWeight: '700', color: colors.textMain, textAlign: 'center' },
-  headerSpacer: { width: 72 },
-  content: {
-    padding: spacing.three,
-    gap: spacing.three,
-    paddingBottom: spacing.six,
-  },
+  cancel: { fontSize: 16, color: colors.primary },
+  title: { ...type.headline, color: colors.textMain },
+  saveBtn: { fontSize: 16, fontWeight: '700', color: colors.primary },
+  saveBtnDisabled: { color: colors.textDisabled },
+  content: { padding: spacing.three, gap: spacing.three, paddingBottom: spacing.six },
   imageBox: {
-    width: '100%',
+    alignSelf: 'center',
+    width: '52%',
     aspectRatio: 1,
-    borderRadius: 14,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.silver,
   },
   image: { width: '100%', height: '100%' },
-  imagePlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.one,
-  },
-  imagePlaceholderText: { fontSize: 16, fontWeight: '600', color: colors.primary },
+  imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.one },
   imageHint: { fontSize: 13, color: colors.textSub },
   changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
   status: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.two,
-    borderRadius: 10,
-    backgroundColor: colors.bgCard,
-    paddingVertical: spacing.two,
-    paddingHorizontal: spacing.three,
+    paddingVertical: spacing.one,
   },
-  statusText: { flex: 1, fontSize: 13, fontWeight: '500' },
+  // 좁은 공간에 맞춰 스피너를 살짝 축소(약 -2px).
+  statusSpinner: { transform: [{ scale: 0.9 }] },
+  statusText: { fontSize: 13, fontWeight: '500' },
   errorBox: {
     gap: spacing.two,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.error,
     padding: spacing.three,
@@ -598,16 +576,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.three,
   },
   retryBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  save: {
-    marginTop: spacing.two,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: spacing.three,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveDisabled: { opacity: 0.5 },
-  saveText: { fontSize: 16, fontWeight: '600', color: colors.bgCard },
   saveNote: { fontSize: 12, color: colors.textSub, textAlign: 'center' },
-  suggestHint: { fontSize: 12, color: colors.primary, marginTop: -spacing.two },
+  // 폴더/메모 카드 위 FR-8 추천 안내 문구. 위 간격 축소(marginTop) + 폴더 섹션을 위로 당김(marginBottom).
+  suggestHint: { fontSize: 13, color: colors.textSub, marginTop: 5, marginBottom: -4, paddingHorizontal: spacing.one },
+  suggestHintHidden: { opacity: 0 },
 });

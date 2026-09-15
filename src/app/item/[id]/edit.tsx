@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,10 +17,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CategoryPicker } from '@/components/CategoryPicker';
-import { FormField, formInput } from '@/components/FormField';
+import { FolderPickerSheet } from '@/components/FolderPickerSheet';
+import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
 import { TagInput } from '@/components/TagInput';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
 import { readImageBytes } from '@/lib/imageBytes';
 import {
@@ -61,6 +62,7 @@ export default function ItemEditScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null); // null = 미분류
   const [initialCategoryId, setInitialCategoryId] = useState<string | null>(null); // 편집 전 카테고리(비움 판정용)
+  const [folderSheet, setFolderSheet] = useState(false);
 
   const [saving, setSaving] = useState(false);
 
@@ -94,7 +96,7 @@ export default function ItemEditScreen() {
             /* 이미지 미리보기 실패는 편집을 막지 않는다 */
           });
       } catch (e) {
-        Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.', [
+        Alert.alert('오류', e instanceof Error ? e.message : '불러오지 못했습니다.', [
           { text: '확인', onPress: () => router.back() },
         ]);
       }
@@ -107,7 +109,7 @@ export default function ItemEditScreen() {
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('사진 접근이 필요해요', '설정에서 사진 접근을 허용하면 이미지를 바꿀 수 있어요.');
+      Alert.alert('사진 접근 필요', '설정에서 사진 접근을 허용하세요.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1 });
@@ -116,20 +118,14 @@ export default function ItemEditScreen() {
     setNewImage({ uri: asset.uri, contentType: asset.mimeType ?? 'image/jpeg' });
   }
 
-  function handleCreateCategory() {
-    Alert.prompt('새 카테고리', '카테고리 이름을 입력해요.', async (input) => {
-      const name = input?.trim();
-      if (!name) return;
-      try {
-        const created = await createCategory(name);
-        setCategories((prev) => [...prev, created]);
-        setCategoryId(created.id);
-      } catch (e) {
-        Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했어요.');
-      }
-    });
+  // 폴더 시트의 인라인 생성 — 만든 폴더를 목록에 추가하고 반환한다(시트가 선택·닫기 처리).
+  async function createCategoryInline(name: string): Promise<Category> {
+    const created = await createCategory(name);
+    setCategories((prev) => [...prev, created]);
+    return created;
   }
 
+  const folderName = categoryId ? (categories.find((c) => c.id === categoryId)?.name ?? '미분류') : '미분류';
   const canSave = !loading && !saving && productName.trim().length > 0;
 
   async function handleSave() {
@@ -154,10 +150,8 @@ export default function ItemEditScreen() {
         await uploadItemImage(userId, id, bytes, newImage.contentType);
       }
       // 편집으로 카테고리를 옮겨 원래 카테고리가 비었으면 삭제 안내. 비었으면 목록(홈)으로, 아니면 상세로.
-      // (상세 화면은 포커스 시 재조회하므로 back 하면 최신값·새 이미지가 반영된다.)
       if (categoryId !== initialCategoryId) {
         const fromName = categories.find((c) => c.id === initialCategoryId)?.name;
-        // 삭제/유지 선택까지 기다린 뒤 이동해야 홈이 삭제 결과를 반영한다.
         const { wasEmpty } = await promptDeleteIfCategoryEmpty(initialCategoryId, fromName);
         if (wasEmpty) {
           if (router.canDismiss()) router.dismissAll();
@@ -170,21 +164,27 @@ export default function ItemEditScreen() {
       setSaving(false);
       // 다른 아이템과 정규화명이 겹치면 덮어쓰기 없이 안내·차단한다(제약 3).
       if (e instanceof DuplicateItemError) {
-        Alert.alert('이미 있는 위시예요', '같은 브랜드·제품명의 위시가 이미 있어요. 브랜드나 제품명을 다르게 바꿔 주세요.');
+        Alert.alert('이미 있는 위시', '같은 브랜드·제품명의 위시가 있습니다. 브랜드나 제품명을 다르게 바꾸세요.');
         return;
       }
-      Alert.alert('오류', e instanceof Error ? e.message : '수정하지 못했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '수정하지 못했습니다.');
     }
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Text style={styles.back}>‹ 뒤로</Text>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="취소">
+          <Text style={styles.cancel}>취소</Text>
         </TouchableOpacity>
         <Text style={styles.title}>위시 편집</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity onPress={handleSave} disabled={!canSave} hitSlop={8} accessibilityRole="button" accessibilityLabel="저장">
+          {saving ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <Text style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}>저장</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -194,97 +194,93 @@ export default function ItemEditScreen() {
       ) : (
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            {/* 이미지 미리보기 / 교체 (탭하면 사진 선택) */}
+            {/* 이미지 미리보기 / 교체 (중앙 정사각) */}
             <TouchableOpacity style={styles.imageBox} onPress={pickImage} accessibilityRole="button" accessibilityLabel="사진 바꾸기">
               {newImage || imageUrl ? (
-                <Image
-                  source={{ uri: newImage?.uri ?? imageUrl! }}
-                  style={styles.image}
-                  contentFit="cover"
-                  transition={150}
-                />
+                <Image source={{ uri: newImage?.uri ?? imageUrl! }} style={styles.image} contentFit="cover" transition={150} />
               ) : (
-                <View style={styles.imagePlaceholder} />
+                <View style={styles.imagePlaceholder}>
+                  <SymbolView name="photo" size={32} tintColor={colors.silverDark} />
+                </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={pickImage} accessibilityRole="button">
-              <Text style={styles.changeImage}>다른 사진 선택</Text>
-            </TouchableOpacity>
 
-            <FormField label="제품명" required>
-              <TextInput
-                style={formInput.input}
-                placeholder="예: 무선 이어폰"
-                placeholderTextColor={colors.textDisabled}
-                value={productName}
-                onChangeText={setProductName}
-              />
-            </FormField>
-            <FormField label="브랜드">
-              <TextInput
-                style={formInput.input}
-                placeholder="예: 소니"
-                placeholderTextColor={colors.textDisabled}
-                value={brand}
-                onChangeText={setBrand}
-              />
-            </FormField>
-            <FormField label="가격 (원)">
-              <TextInput
-                style={formInput.input}
-                placeholder="예: 189000"
-                placeholderTextColor={colors.textDisabled}
-                keyboardType="number-pad"
-                value={price}
-                onChangeText={setPrice}
-              />
-            </FormField>
-            <FormField label="링크">
-              <TextInput
-                style={formInput.input}
-                placeholder="https://"
-                placeholderTextColor={colors.textDisabled}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                value={sourceLink}
-                onChangeText={setSourceLink}
-              />
-            </FormField>
-            <FormField label="메모">
-              <TextInput
-                style={[formInput.input, formInput.memo]}
-                placeholder="메모를 남겨요"
-                placeholderTextColor={colors.textDisabled}
-                multiline
-                value={memo}
-                onChangeText={setMemo}
-              />
-            </FormField>
+            {/* 그룹 카드 1: 제품명·브랜드·가격·링크 */}
+            <FormCard>
+              <FormRow label="제품명" required>
+                <TextInput
+                  style={formInput.rowInput}
+                  placeholder="예: 무선 이어폰"
+                  placeholderTextColor={colors.textDisabled}
+                  value={productName}
+                  onChangeText={setProductName}
+                />
+              </FormRow>
+              <FormRow label="브랜드">
+                <TextInput
+                  style={formInput.rowInput}
+                  placeholder="예: 소니"
+                  placeholderTextColor={colors.textDisabled}
+                  value={brand}
+                  onChangeText={setBrand}
+                />
+              </FormRow>
+              <FormRow label="가격">
+                <TextInput
+                  style={formInput.rowInput}
+                  placeholder="₩ 0"
+                  placeholderTextColor={colors.textDisabled}
+                  keyboardType="number-pad"
+                  value={price}
+                  onChangeText={setPrice}
+                />
+              </FormRow>
+              <FormRow label="링크">
+                <TextInput
+                  style={formInput.rowInput}
+                  placeholder="https://"
+                  placeholderTextColor={colors.textDisabled}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  value={sourceLink}
+                  onChangeText={setSourceLink}
+                />
+              </FormRow>
+            </FormCard>
+
+            {/* 그룹 카드 2: 폴더·메모 */}
+            <FormCard>
+              <DisclosureRow label="폴더" value={folderName} onPress={() => setFolderSheet(true)} />
+              <FormBlock label="메모">
+                <TextInput
+                  style={formInput.memo}
+                  placeholder="메모"
+                  placeholderTextColor={colors.textDisabled}
+                  multiline
+                  value={memo}
+                  onChangeText={setMemo}
+                />
+              </FormBlock>
+            </FormCard>
 
             <TagInput tags={tags} onChange={setTags} suggestions={allTags} />
 
-            <CategoryPicker
-              categories={categories}
-              selectedId={categoryId}
-              onSelect={setCategoryId}
-              onCreate={handleCreateCategory}
-            />
-
-            <TouchableOpacity
-              style={[styles.save, !canSave && styles.saveDisabled]}
-              onPress={handleSave}
-              disabled={!canSave}
-              accessibilityRole="button"
-            >
-              {saving ? <ActivityIndicator color={colors.bgCard} /> : <Text style={styles.saveText}>저장</Text>}
-            </TouchableOpacity>
             {productName.trim().length === 0 ? (
-              <Text style={styles.saveNote}>제품명을 입력해주세요.</Text>
+              <Text style={styles.saveNote}>제품명을 입력하세요.</Text>
             ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
       )}
+
+      <FolderPickerSheet
+        visible={folderSheet}
+        onClose={() => setFolderSheet(false)}
+        categories={categories}
+        selectedId={categoryId}
+        onSelect={setCategoryId}
+        onCreateCategory={createCategoryInline}
+      />
     </SafeAreaView>
   );
 }
@@ -298,34 +294,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.three,
-    paddingTop: spacing.two,
+    paddingTop: spacing.three,
     paddingBottom: spacing.two,
   },
-  back: { fontSize: 16, color: colors.primary, width: 72 },
-  title: { flex: 1, fontSize: 18, fontWeight: '700', color: colors.textMain, textAlign: 'center' },
-  headerSpacer: { width: 72 },
+  cancel: { fontSize: 16, color: colors.primary },
+  title: { ...type.headline, color: colors.textMain },
+  saveBtn: { fontSize: 16, fontWeight: '700', color: colors.primary },
+  saveBtnDisabled: { color: colors.textDisabled },
   content: { padding: spacing.three, gap: spacing.three, paddingBottom: spacing.six },
   imageBox: {
-    width: '100%',
+    alignSelf: 'center',
+    width: '52%',
     aspectRatio: 1,
-    borderRadius: 14,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.silver,
   },
   image: { width: '100%', height: '100%' },
-  imagePlaceholder: { flex: 1, backgroundColor: colors.silver },
-  changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center', marginTop: -spacing.two },
-  save: {
-    marginTop: spacing.two,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: spacing.three,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveDisabled: { opacity: 0.5 },
-  saveText: { fontSize: 16, fontWeight: '600', color: colors.bgCard },
+  imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
   saveNote: { fontSize: 12, color: colors.textSub, textAlign: 'center' },
 });

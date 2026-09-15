@@ -20,7 +20,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryPicker } from '@/components/CategoryPicker';
-import { formInput } from '@/components/FormField';
 import { colors, colorsDark, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
 import { formatPriceKRW } from '@/lib/formatPrice';
@@ -270,7 +269,7 @@ export default function ItemDetailScreen() {
             <CategoryPicker categories={categories} selectedId={current?.category_id ?? null} onSelect={moveTo} />
             <View style={styles.newCatRow}>
               <TextInput
-                style={[formInput.input, styles.newCatInput]}
+                style={styles.newCatInput}
                 placeholder="새 카테고리 이름"
                 placeholderTextColor={colors.textDisabled}
                 value={newCatName}
@@ -404,7 +403,15 @@ const styles = StyleSheet.create({
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sheetTitle: { ...type.headline, color: colors.textMain },
   newCatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
-  newCatInput: { flex: 1 },
+  newCatInput: {
+    flex: 1,
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.md,
+    paddingVertical: spacing.three,
+    paddingHorizontal: spacing.three,
+    fontSize: 16,
+    color: colors.textMain,
+  },
   newCatBtn: {
     borderRadius: 10,
     backgroundColor: colors.primary,

@@ -66,6 +66,9 @@ function AuthGate() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      {/* 등록·편집 = 모달 시트(아래서 위로). 취소/저장 헤더 관습과 맞춤. */}
+      <Stack.Screen name="register" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="item/[id]/edit" options={{ presentation: 'modal' }} />
       {/* 상세 사진 뷰어 — 세로 모달(열 때 위로, 닫을 때 아래로). 갤러리의 아래 스와이프 닫기와 이어짐. */}
       <Stack.Screen name="item/[id]/index" options={{ presentation: 'fullScreenModal' }} />
       {/* 정보(i) 하프시트 — react-native-screens 네이티브 반시트(formSheet). 재빌드 불필요. */}
