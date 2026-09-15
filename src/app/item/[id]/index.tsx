@@ -1,86 +1,102 @@
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { useCallback, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Linking,
   Modal,
-  ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Gallery from 'react-native-awesome-gallery';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryPicker } from '@/components/CategoryPicker';
-import { formInput } from '@/components/FormField';
-import { colors, spacing } from '@/constants/theme';
+import { colors, colorsDark, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
-import { formatSavedDate } from '@/lib/formatDate';
 import { formatPriceKRW } from '@/lib/formatPrice';
 import {
   createCategory,
   deleteItem,
   deleteItemImage,
   getItem,
-  getItemImageSignedUrl,
+  getItemImageSignedUrls,
   listCategories,
+  listItems,
+  listItemsByCategory,
+  listItemsByTag,
   moveItemCategory,
   type Category,
   type Item,
 } from '@/lib/queries';
 
+// 좌우 스와이프(이전/다음)의 대상 목록을 상세가 알도록 진입부가 넘기는 컨텍스트.
+type Ctx = 'all' | 'cat' | 'uncat' | 'tag';
+
 export default function ItemDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; ctx?: Ctx; ctxKey?: string }>();
+  const { id, ctx, ctxKey } = params;
 
-  const [item, setItem] = useState<Item | null>(null); // null = 로딩 중
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [items, setItems] = useState<Item[] | null>(null); // 좌우로 넘길 아이템들(null = 로딩)
+  const [index, setIndex] = useState(0); // 현재 보고 있는 위치
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryName, setCategoryName] = useState<string>('미분류');
   const [deleting, setDeleting] = useState(false);
 
-  // 카테고리 이동 시트(FR-15)
   const [moveVisible, setMoveVisible] = useState(false);
   const [moving, setMoving] = useState(false);
-  const [newCatName, setNewCatName] = useState(''); // 시트 안 인라인 새 카테고리 입력
-  // 이 화면에서의 동작(이동)으로 원래 카테고리가 비었으면 true → '뒤로'는 카테고리가 아닌 홈으로.
+  const [newCatName, setNewCatName] = useState('');
   const [emptiedSource, setEmptiedSource] = useState(false);
+  const insets = useSafeAreaInsets();
 
-  // 위시리스트 목록(홈)으로 돌아간다. 스택에 카테고리 화면이 있으면 건너뛴다(깜빡임 방지).
+  const current = items && items.length > 0 ? (items[index] ?? items[0]) : null;
+
   function goHome() {
     if (router.canDismiss()) router.dismissAll();
     else router.replace('/');
   }
 
-  // 상세 '뒤로': 이 화면에서 원래 카테고리를 비웠으면 홈으로, 아니면 이전 화면으로.
   function goBack() {
     if (emptiedSource) goHome();
-    else router.back();
+    else if (router.canGoBack()) router.back();
+    else goHome();
   }
 
   const load = useCallback(async () => {
     try {
-      const found = await getItem(id);
-      setItem(found);
-      const [url, cats] = await Promise.all([
-        getItemImageSignedUrl(found.image_key).catch(() => null),
+      // 컨텍스트에 맞는 목록을 불러온다(없으면 단일 아이템만).
+      let list: Item[];
+      if (ctx === 'all') list = await listItems();
+      else if (ctx === 'cat' && ctxKey) list = await listItemsByCategory(ctxKey);
+      else if (ctx === 'uncat') list = await listItemsByCategory(null);
+      else if (ctx === 'tag' && ctxKey) list = await listItemsByTag(ctxKey);
+      else list = [await getItem(id)];
+
+      const idx = Math.max(0, list.findIndex((it) => it.id === id));
+      const [urlMap, cats] = await Promise.all([
+        getItemImageSignedUrls(list.map((it) => it.image_key)),
         listCategories().catch(() => [] as Category[]),
       ]);
-      setImageUrl(url);
+      setItems(list);
+      setIndex(idx);
+      setUrls(urlMap);
       setCategories(cats);
-      setCategoryName(
-        found.category_id ? (cats.find((c) => c.id === found.category_id)?.name ?? '미분류') : '미분류',
-      );
     } catch (e) {
-      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.', [
-        { text: '확인', onPress: () => router.back() },
+      Alert.alert('오류', e instanceof Error ? e.message : '불러오지 못했습니다.', [
+        { text: '확인', onPress: goBack },
       ]);
     }
-  }, [id, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, ctx, ctxKey]);
 
   useFocusEffect(
     useCallback(() => {
@@ -89,36 +105,43 @@ export default function ItemDetailScreen() {
   );
 
   function confirmDelete() {
-    Alert.alert('삭제할까요?', '이 위시를 삭제해요. 복구할 수 없어요.', [
+    Alert.alert('삭제할까요?', '삭제한 위시는 복구할 수 없습니다.', [
       { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: doDelete },
     ]);
   }
 
   async function doDelete() {
-    if (!item) return;
+    if (!current) return;
     setDeleting(true);
-    const from = item.category_id;
+    const from = current.category_id;
     const fromName = categories.find((c) => c.id === from)?.name;
     try {
-      await deleteItem(item.id);
-      // 행이 지워졌으면 목적은 달성. 이미지 삭제 실패는 치명적이지 않다(고아 객체만 남음).
-      await deleteItemImage(item.image_key).catch(() => undefined);
-      // 이 아이템이 카테고리의 마지막이었으면 카테고리 삭제 안내(응답까지 대기). 비었으면 목록(홈)으로, 아니면 이전 화면으로.
+      await deleteItem(current.id);
+      await deleteItemImage(current.image_key).catch(() => undefined);
       const { wasEmpty } = await promptDeleteIfCategoryEmpty(from, fromName);
       if (wasEmpty) goHome();
-      else router.back();
+      else goBack();
     } catch (e) {
       setDeleting(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '삭제하지 못했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '삭제하지 못했습니다.');
     }
   }
 
-  function openLink(url: string) {
-    Linking.openURL(url).catch(() => Alert.alert('열 수 없어요', '링크를 열지 못했어요.'));
+  function openLink() {
+    if (!current?.source_link) return;
+    Linking.openURL(current.source_link).catch(() => Alert.alert('링크 열기 실패', '링크를 열지 못했습니다.'));
   }
 
-  // 이동으로 원래 카테고리가 비었으면 안내를 띄우고, '뒤로 → 홈' 플래그를 세운다.
+  function handleMore() {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { options: ['카테고리 이동', '취소'], cancelButtonIndex: 1 },
+      (i) => {
+        if (i === 0) setMoveVisible(true);
+      },
+    );
+  }
+
   async function checkSourceEmptied(fromCategoryId: string | null) {
     const fromName = categories.find((c) => c.id === fromCategoryId)?.name;
     const { wasEmpty } = await promptDeleteIfCategoryEmpty(fromCategoryId, fromName, () =>
@@ -127,146 +150,114 @@ export default function ItemDetailScreen() {
     if (wasEmpty) setEmptiedSource(true);
   }
 
-  // 카테고리만 바꾼다(편집 화면을 거치지 않는 빠른 이동). null = 미분류. 같은 카테고리면 닫기만.
   async function moveTo(categoryId: string | null) {
-    if (!item) return;
-    const from = item.category_id;
+    if (!current) return;
+    const from = current.category_id;
     if (categoryId === from) {
       setMoveVisible(false);
       return;
     }
     setMoving(true);
     try {
-      await moveItemCategory(item.id, categoryId);
-      setMoveVisible(false);
-      setMoving(false);
-      await load(); // 상세의 카테고리명 즉시 갱신(홈·목록은 포커스 재조회로 갱신)
-      await checkSourceEmptied(from);
-    } catch (e) {
-      setMoving(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 옮기지 못했어요.');
-    }
-  }
-
-  // 시트 안 인라인 입력으로 새 카테고리를 만들고 바로 그 카테고리로 이동한다.
-  // (모달 위에 Alert.prompt 를 띄우면 iOS 에서 콜백이 완료되지 못해 이동이 실패하므로 인라인 입력을 쓴다.)
-  async function createAndMove() {
-    const name = newCatName.trim();
-    if (!name || moving || !item) return;
-    const from = item.category_id;
-    setMoving(true);
-    try {
-      const created = await createCategory(name);
-      setCategories((prev) => [...prev, created]);
-      setNewCatName('');
-      await moveItemCategory(item.id, created.id);
+      await moveItemCategory(current.id, categoryId);
       setMoveVisible(false);
       setMoving(false);
       await load();
       await checkSourceEmptied(from);
     } catch (e) {
       setMoving(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '옮기지 못했습니다.');
     }
   }
 
-  const price = item ? formatPriceKRW(item.price) : null;
+  async function createAndMove() {
+    const name = newCatName.trim();
+    if (!name || moving || !current) return;
+    const from = current.category_id;
+    setMoving(true);
+    try {
+      const created = await createCategory(name);
+      setCategories((prev) => [...prev, created]);
+      setNewCatName('');
+      await moveItemCategory(current.id, created.id);
+      setMoveVisible(false);
+      setMoving(false);
+      await load();
+      await checkSourceEmptied(from);
+    } catch (e) {
+      setMoving(false);
+      Alert.alert('오류', e instanceof Error ? e.message : '만들지 못했습니다.');
+    }
+  }
+
+  const price = current ? formatPriceKRW(current.price) : null;
+  const subtitle = current ? [current.brand, price].filter(Boolean).join(' · ') : '';
+  const hasLink = Boolean(current?.source_link);
+  const galleryData = items ? items.map((it) => urls[it.image_key] ?? '') : [];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Text style={styles.back}>‹ 뒤로</Text>
-        </TouchableOpacity>
-        <View style={styles.headerSpacer} />
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: '/item/[id]/edit', params: { id } })}
-            hitSlop={8}
-            disabled={!item || deleting}
-            accessibilityRole="button"
-            accessibilityLabel="편집"
-          >
-            <Text style={styles.edit}>편집</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={confirmDelete}
-            hitSlop={8}
-            disabled={!item || deleting}
-            accessibilityRole="button"
-            accessibilityLabel="삭제"
-          >
-            {deleting ? <ActivityIndicator color={colors.error} /> : <Text style={styles.delete}>삭제</Text>}
-          </TouchableOpacity>
-        </View>
-      </View>
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" />
 
-      {item === null ? (
+      {/* 사진을 화면 전체(풀블리드)로 깔고, 헤더·액션바를 그 위에 겹친다(앨범과 동일). */}
+      {items === null ? (
         <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colorsDark.textMain} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.imageBox}>
-            {imageUrl ? (
-              <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" transition={150} />
-            ) : (
-              <View style={styles.imagePlaceholder} />
-            )}
-          </View>
-
-          <Text style={styles.name}>{item.product_name}</Text>
-          {item.brand ? <Text style={styles.brand}>{item.brand}</Text> : null}
-
-          <View style={styles.rows}>
-            {price ? <InfoRow label="가격" value={price} /> : null}
-            <InfoRow label="카테고리" value={categoryName} />
-            <InfoRow label="저장일" value={formatSavedDate(item.created_at)} />
-            {item.source_link ? (
-              <InfoRow
-                label="링크"
-                value={item.source_link}
-                onPress={() => openLink(item.source_link!)}
-              />
-            ) : null}
-          </View>
-
-          <TouchableOpacity
-            style={styles.moveBtn}
-            onPress={() => setMoveVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel="카테고리 이동"
-          >
-            <Text style={styles.moveBtnText}>카테고리 이동</Text>
-          </TouchableOpacity>
-
-          {item.memo ? (
-            <View style={styles.block}>
-              <Text style={styles.blockLabel}>메모</Text>
-              <Text style={styles.memo}>{item.memo}</Text>
-            </View>
-          ) : null}
-
-          {item.tags && item.tags.length > 0 ? (
-            <View style={styles.block}>
-              <Text style={styles.blockLabel}>태그</Text>
-              <View style={styles.tags}>
-                {item.tags.map((tag) => (
-                  <TouchableOpacity
-                    key={tag}
-                    style={styles.tag}
-                    onPress={() => router.push({ pathname: '/tag/[name]', params: { name: tag } })}
-                    accessibilityRole="button"
-                    accessibilityLabel={`태그로 모아보기: ${tag}`}
-                  >
-                    <Text style={styles.tagText}>{tag}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ) : null}
-        </ScrollView>
+        <GestureHandlerRootView style={StyleSheet.absoluteFill}>
+          <Gallery
+            data={galleryData}
+            initialIndex={index}
+            onIndexChange={setIndex}
+            onSwipeToClose={goBack}
+            keyExtractor={(_, i) => items?.[i]?.id ?? String(i)}
+            renderItem={({ item, setImageDimensions }) =>
+              item ? (
+                <Image
+                  source={{ uri: item }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="contain"
+                  onLoad={(e) => setImageDimensions({ width: e.source.width, height: e.source.height })}
+                />
+              ) : (
+                <View style={StyleSheet.absoluteFill} />
+              )
+            }
+          />
+        </GestureHandlerRootView>
       )}
+
+      <View style={[styles.header, { paddingTop: insets.top + spacing.two }]}>
+        <TouchableOpacity style={styles.circleBtn} onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
+          <SymbolView name="chevron.left" size={18} tintColor={colorsDark.textMain} weight="semibold" />
+        </TouchableOpacity>
+
+        <View style={styles.titlePill}>
+          <Text style={styles.titleName} numberOfLines={1}>
+            {current?.product_name ?? ' '}
+          </Text>
+          {subtitle ? (
+            <Text style={styles.titleSub} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+
+        <TouchableOpacity style={styles.circleBtn} onPress={handleMore} hitSlop={8} disabled={!current} accessibilityRole="button" accessibilityLabel="더보기">
+          <SymbolView name="ellipsis" size={18} tintColor={colorsDark.textMain} weight="semibold" />
+        </TouchableOpacity>
+      </View>
+
+      {/* 하단 액션바(알약): 정보 · 링크 · 편집 · 삭제 (현재 보고 있는 아이템 기준) */}
+      <View style={[styles.actionBarWrap, { bottom: insets.bottom + spacing.two }]}>
+        <View style={styles.actionBar}>
+          <ActionButton icon="info.circle" label="정보" onPress={() => current && router.push({ pathname: '/item/[id]/info', params: { id: current.id } })} disabled={!current} />
+          <ActionButton icon="link" label="링크" onPress={openLink} disabled={!current || !hasLink} />
+          <ActionButton icon="pencil" label="편집" onPress={() => current && router.push({ pathname: '/item/[id]/edit', params: { id: current.id } })} disabled={!current || deleting} />
+          <ActionButton icon="trash" label="삭제" tint={colorsDark.error} onPress={confirmDelete} disabled={!current || deleting} loading={deleting} />
+        </View>
+      </View>
 
       <Modal visible={moveVisible} transparent animationType="slide" onRequestClose={() => setMoveVisible(false)}>
         <View style={styles.sheetBackdrop}>
@@ -275,10 +266,10 @@ export default function ItemDetailScreen() {
               <Text style={styles.sheetTitle}>카테고리 이동</Text>
               {moving ? <ActivityIndicator color={colors.primary} /> : null}
             </View>
-            <CategoryPicker categories={categories} selectedId={item?.category_id ?? null} onSelect={moveTo} />
+            <CategoryPicker categories={categories} selectedId={current?.category_id ?? null} onSelect={moveTo} />
             <View style={styles.newCatRow}>
               <TextInput
-                style={[formInput.input, styles.newCatInput]}
+                style={styles.newCatInput}
                 placeholder="새 카테고리 이름"
                 placeholderTextColor={colors.textDisabled}
                 value={newCatName}
@@ -309,83 +300,98 @@ export default function ItemDetailScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
-  );
-}
-
-function InfoRow({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      {onPress ? (
-        <Text style={[styles.rowValue, styles.link]} numberOfLines={1} onPress={onPress}>
-          {value}
-        </Text>
-      ) : (
-        <Text style={styles.rowValue} numberOfLines={1}>
-          {value}
-        </Text>
-      )}
     </View>
   );
 }
 
+function ActionButton({
+  icon,
+  label,
+  onPress,
+  disabled,
+  tint,
+  loading,
+}: {
+  icon: SFSymbol;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  tint?: string;
+  loading?: boolean;
+}) {
+  const color = disabled ? colorsDark.textDisabled : (tint ?? colorsDark.textMain);
+  return (
+    <TouchableOpacity
+      style={styles.actionBtn}
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {loading ? (
+        <ActivityIndicator color={colorsDark.error} />
+      ) : (
+        <SymbolView name={icon} size={22} tintColor={color} />
+      )}
+      <Text style={[styles.actionLabel, { color }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+const CIRCLE = 40;
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  // 상세 = 사진 뷰어 → 앨범처럼 항상 검정 크롬(준비해둔 다크 토큰 사용).
+  root: { flex: 1, backgroundColor: colorsDark.bg },
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.two,
     paddingHorizontal: spacing.three,
-    paddingTop: spacing.two,
     paddingBottom: spacing.two,
   },
-  back: { fontSize: 16, color: colors.primary },
-  headerSpacer: { flex: 1 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.four },
-  edit: { fontSize: 16, color: colors.primary, fontWeight: '600' },
-  delete: { fontSize: 16, color: colors.error, fontWeight: '600' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: spacing.three, gap: spacing.three, paddingBottom: spacing.six },
-  imageBox: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.silver,
-  },
-  image: { width: '100%', height: '100%' },
-  imagePlaceholder: { flex: 1, backgroundColor: colors.silver },
-  name: { fontSize: 22, fontWeight: '700', color: colors.textMain },
-  brand: { fontSize: 16, color: colors.textSub, marginTop: -spacing.two },
-  rows: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.silver,
-    paddingHorizontal: spacing.three,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.three,
-    paddingVertical: spacing.three,
-  },
-  rowLabel: { fontSize: 14, color: colors.textSub },
-  rowValue: { flex: 1, fontSize: 15, color: colors.textMain, textAlign: 'right' },
-  link: { color: colors.primary },
-  moveBtn: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingVertical: spacing.three,
+  circleBtn: {
+    width: CIRCLE,
+    height: CIRCLE,
+    borderRadius: CIRCLE / 2,
+    backgroundColor: colorsDark.bgCard,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  moveBtnText: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  titlePill: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: colorsDark.bgCard,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.three,
+    paddingVertical: spacing.one,
+  },
+  titleName: { ...type.headline, color: colorsDark.textMain },
+  titleSub: { ...type.footnote, color: colorsDark.textSub },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  actionBarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  actionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    gap: spacing.four,
+    backgroundColor: colorsDark.bgCard,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.four,
+    paddingVertical: spacing.two,
+  },
+  actionBtn: { alignItems: 'center', justifyContent: 'center', gap: 2, minWidth: 44 },
+  actionLabel: { ...type.caption },
   sheetBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bg,
@@ -395,9 +401,17 @@ const styles = StyleSheet.create({
     gap: spacing.three,
   },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sheetTitle: { fontSize: 17, fontWeight: '700', color: colors.textMain },
+  sheetTitle: { ...type.headline, color: colors.textMain },
   newCatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
-  newCatInput: { flex: 1 },
+  newCatInput: {
+    flex: 1,
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.md,
+    paddingVertical: spacing.three,
+    paddingHorizontal: spacing.three,
+    fontSize: 16,
+    color: colors.textMain,
+  },
   newCatBtn: {
     borderRadius: 10,
     backgroundColor: colors.primary,
@@ -406,18 +420,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   newCatBtnDisabled: { opacity: 0.5 },
-  newCatBtnText: { fontSize: 14, fontWeight: '600', color: colors.bgCard },
+  newCatBtnText: { fontSize: 14, fontWeight: '600', color: colors.bg },
   sheetClose: { alignItems: 'center', paddingVertical: spacing.three },
   sheetCloseText: { fontSize: 15, fontWeight: '600', color: colors.textSub },
-  block: { gap: spacing.two },
-  blockLabel: { fontSize: 14, fontWeight: '600', color: colors.textMain },
-  memo: { fontSize: 15, color: colors.textMain, lineHeight: 22 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.two },
-  tag: {
-    borderRadius: 999,
-    backgroundColor: colors.primaryLight,
-    paddingVertical: spacing.one,
-    paddingHorizontal: spacing.three,
-  },
-  tagText: { fontSize: 13, color: colors.primaryHover },
 });

@@ -8,12 +8,14 @@
 
 - **앱**: Expo SDK 57 (React Native) + Expo Router + TypeScript, iOS 우선
 - **백엔드**: Supabase (Postgres + Storage + Auth), `@supabase/supabase-js`로 직접 호출 + RLS
+- **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. (이메일 가입/승격은 이후 Phase)
 - **공유 시트**: `expo-share-intent` (iOS Share Extension)
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
 - **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`)
-- **빌드**: EAS 클라우드 빌드 (Windows PC + Mac 없이 iOS 개발)
+- **빌드**: EAS 클라우드 빌드 → TestFlight (Windows PC + Mac 없이 iOS 개발·배포)
+- **디자인**: 흰 배경 + iOS 시스템 그레이 모노톤 리스킨(색 토큰 = `src/constants/theme.ts`)
 
-주요 화면: 홈(카테고리 목록·설정 진입) · 등록(OCR 자동채움·카테고리 추천·메모/태그) · 상세(편집·카테고리 이동·삭제) · 편집 · 설정(로그아웃·개인정보 안내).
+주요 화면: **하단 알약 탭바(전체·폴더·검색)** · 폴더 홈(2×2 모자이크 카드·설정 진입) · 전체(전체 아이템 3열 그리드) · 등록(OCR 자동채움·카테고리 추천·메모/태그) · **상세 풀스크린 뷰어 + 정보(i) 하프시트**(편집·카테고리 이동·삭제) · 편집 · 설정(개인정보 안내). **로그인 화면 없이 익명 로그인으로 바로 사용.**
 
 ## 로컬 실행
 
@@ -98,4 +100,6 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 - Phase 1 작업 기록: [`docs/phases/phase-1-toolchain.md`](docs/phases/phase-1-toolchain.md)
 - Phase 3 작업 지시·결과: [`docs/phases/phase-3-ocr-and-autofill.md`](docs/phases/phase-3-ocr-and-autofill.md)
 - Phase 4 작업 지시·결과: [`docs/phases/phase-4-edit-and-manage.md`](docs/phases/phase-4-edit-and-manage.md)
+- Phase 5 작업 지시·결과(리스킨·탭바·상세 뷰어·익명 로그인·TestFlight): [`docs/phases/phase-5-redesign-and-deploy.md`](docs/phases/phase-5-redesign-and-deploy.md)
+- 개인정보처리방침 원문(TestFlight 외부 공개용): [`docs/legal/privacy.html`](docs/legal/privacy.html)
 - 저장소 작업 규칙: [`CLAUDE.md`](CLAUDE.md)

@@ -1,16 +1,19 @@
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
-import { ItemCard } from '@/components/ItemCard';
+import { PhotoTile } from '@/components/PhotoTile';
 import { colors, spacing } from '@/constants/theme';
-import { formatSavedDate } from '@/lib/formatDate';
 import { getItemImageSignedUrls, listCategories, listItemsByCategory, type Item } from '@/lib/queries';
+
+const COLUMNS = 3;
 
 export default function CategoryItemsScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const tileSize = width / COLUMNS; // 여백 없이 화면 폭 3등분(전체 탭과 동일)
   const params = useLocalSearchParams<{ id: string; name?: string }>();
   const id = params.id;
   const isUncat = id === 'uncategorized';
@@ -35,7 +38,7 @@ export default function CategoryItemsScreen() {
       setUrls(urlMap);
     } catch (e) {
       setItems([]);
-      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했습니다.');
     }
   }, [id, isUncat, router]);
 
@@ -62,21 +65,24 @@ export default function CategoryItemsScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : items.length === 0 ? (
-        <EmptyState title="이 카테고리에 아직 아이템이 없어요" />
+        <EmptyState title="담은 위시가 없습니다" />
       ) : (
         <FlatList
           data={items}
           keyExtractor={(it) => it.id}
-          numColumns={2}
-          columnWrapperStyle={styles.column}
+          numColumns={COLUMNS}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <ItemCard
-              productName={item.product_name}
-              brand={item.brand}
-              savedDate={formatSavedDate(item.created_at)}
-              thumbnailUrl={urls[item.image_key] ?? null}
-              onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
+            <PhotoTile
+              url={urls[item.image_key] ?? null}
+              size={tileSize}
+              accessibilityLabel={item.product_name}
+              onPress={() =>
+                router.push({
+                  pathname: '/item/[id]',
+                  params: { id: item.id, ctx: isUncat ? 'uncat' : 'cat', ctxKey: id },
+                })
+              }
             />
           )}
         />
@@ -116,10 +122,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   list: {
-    padding: spacing.three,
-    gap: spacing.two,
-  },
-  column: {
-    gap: spacing.two,
+    paddingBottom: spacing.four, // 그리드는 가장자리까지(여백 없음)
   },
 });

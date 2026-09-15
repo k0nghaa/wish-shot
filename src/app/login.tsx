@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +16,10 @@ import { colors, spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 // Phase 1 Step 3: 이메일 + 비밀번호 로그인. 가입 링크는 없다 (본인 계정은 대시보드에서 수동 생성).
+// Phase 5 Step 6: 익명 로그인 도입으로 정상 흐름에선 도달하지 않는다. 개발용 왕복(설정의
+// "이메일 로그인(개발용)")으로 열려, 이메일 계정으로 되돌아오는 경로를 연다.
 export default function LoginScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,7 +27,7 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!email.trim() || !password) {
-      setError('이메일과 비밀번호를 모두 입력해 주세요.');
+      setError('이메일과 비밀번호를 입력하세요.');
       return;
     }
     setLoading(true);
@@ -34,20 +38,29 @@ export default function LoginScreen() {
     });
     setLoading(false);
     if (signInError) {
-      // 성공 시엔 라우팅 가드가 자동으로 홈으로 보낸다.
-      setError('이메일 또는 비밀번호를 다시 확인해 주세요.');
+      setError('이메일 또는 비밀번호를 확인하세요.');
+      return;
     }
+    // 로그인 성공 → 홈으로. AuthGate 는 /login 을 자동 이동시키지 않으므로 직접 이동한다.
+    router.replace('/');
   }
 
   return (
     <SafeAreaView style={styles.safe}>
+      <View style={styles.topBar}>
+        {router.canGoBack() ? (
+          <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="취소">
+            <Text style={styles.cancel}>취소</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.container}>
           <Text style={styles.title}>WishShot</Text>
-          <Text style={styles.subtitle}>이메일로 로그인해 주세요.</Text>
+          <Text style={styles.subtitle}>이메일로 로그인</Text>
 
           <TextInput
             style={styles.input}
@@ -93,6 +106,12 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  topBar: {
+    height: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.three,
+  },
+  cancel: { fontSize: 16, color: colors.primary },
   flex: { flex: 1 },
   container: {
     flex: 1,

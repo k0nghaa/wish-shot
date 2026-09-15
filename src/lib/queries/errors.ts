@@ -4,7 +4,7 @@
  */
 export class DuplicateItemError extends Error {
   constructor() {
-    super('이미 같은 브랜드·제품명의 아이템이 있어요.');
+    super('이미 같은 브랜드·제품명의 위시가 있습니다.');
     this.name = 'DuplicateItemError';
   }
 }
@@ -15,7 +15,7 @@ export class DuplicateItemError extends Error {
  */
 export class DuplicateCategoryError extends Error {
   constructor() {
-    super('동일한 이름의 카테고리가 있어요.');
+    super('같은 이름의 카테고리가 있습니다.');
     this.name = 'DuplicateCategoryError';
   }
 }

@@ -23,6 +23,8 @@ export function Thumbnail({
       source={{ uri: url }}
       style={style}
       contentFit="cover"
+      cachePolicy="memory-disk"
+      recyclingKey={url}
       transition={150}
       accessibilityIgnoresInvertColors
     />
@@ -31,6 +33,6 @@ export function Thumbnail({
 
 const styles = StyleSheet.create({
   placeholder: {
-    backgroundColor: colors.silver,
+    backgroundColor: colors.placeholder,
   },
 });

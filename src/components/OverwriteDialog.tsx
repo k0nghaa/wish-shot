@@ -31,8 +31,8 @@ export function OverwriteDialog({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>이미 담은 위시예요</Text>
-          <Text style={styles.desc}>같은 브랜드·제품명이 있어요. 어떻게 할까요?</Text>
+          <Text style={styles.title}>이미 담은 위시</Text>
+          <Text style={styles.desc}>같은 브랜드·제품명이 있습니다. 어떻게 할까요?</Text>
 
           {item ? (
             <View style={styles.existing}>

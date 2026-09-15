@@ -35,7 +35,7 @@ export async function parseScreenshotText(text: string): Promise<ParseResult> {
   const { data, error } = await supabase.functions.invoke<ParseResult>('parse-screenshot-text', {
     body: { text, categories: categoryNames },
   });
-  if (error) throw new Error(`정제에 실패했어요: ${error.message}`);
+  if (error) throw new Error(`정제에 실패했습니다: ${error.message}`);
   if (!data || typeof data.confidence !== 'number') {
     throw new Error('정제 결과가 올바르지 않아요.');
   }
