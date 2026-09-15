@@ -59,9 +59,9 @@ const styles = StyleSheet.create({
   required: { color: colors.error },
   aiBadge: {
     borderRadius: 999,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.primary, // 검정 채움(모노톤 강조)
     paddingVertical: 2,
     paddingHorizontal: spacing.two,
   },
-  aiBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bgCard },
+  aiBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bg },
 });

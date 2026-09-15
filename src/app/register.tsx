@@ -68,10 +68,10 @@ function analysisStatusInfo(
     case 'filled':
       // E-3(부분 성공): 정제는 됐으나 제품명을 못 뽑음 → 제품명 입력을 명시적으로 안내.
       if (state.result && !state.result.productName) {
-        return { text: '제품명을 인식하지 못했어요. 직접 입력해 주세요.', color: colors.accent, loading: false };
+        return { text: '제품명을 인식하지 못했어요. 직접 입력해 주세요.', color: colors.textMain, loading: false };
       }
       return needsConfirmation
-        ? { text: '확인이 필요해요 — AI가 채운 값을 확인해 주세요.', color: colors.accent, loading: false }
+        ? { text: '확인이 필요해요 — AI가 채운 값을 확인해 주세요.', color: colors.textMain, loading: false }
         : { text: 'AI가 제품 정보를 채웠어요. 확인해 주세요.', color: colors.primary, loading: false };
     case 'error':
       return {
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.two,
     borderRadius: 10,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.bgCard,
     paddingVertical: spacing.two,
     paddingHorizontal: spacing.three,
   },
@@ -587,7 +587,7 @@ const styles = StyleSheet.create({
   errorHint: { fontSize: 12, color: colors.textSub },
   errorRawBox: { maxHeight: 140, borderRadius: 8, backgroundColor: colors.bgCard, padding: spacing.two },
   errorRawLine: { paddingVertical: spacing.one, paddingHorizontal: spacing.two, borderRadius: 6 },
-  errorRawLinePicked: { backgroundColor: colors.primaryLight },
+  errorRawLinePicked: { backgroundColor: colors.silver },
   errorRawText: { fontSize: 13, color: colors.textMain },
   retryBtn: {
     alignSelf: 'flex-start',

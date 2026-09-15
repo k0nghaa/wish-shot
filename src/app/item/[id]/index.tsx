@@ -415,9 +415,9 @@ const styles = StyleSheet.create({
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.two },
   tag: {
     borderRadius: 999,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.bgCard,
     paddingVertical: spacing.one,
     paddingHorizontal: spacing.three,
   },
-  tagText: { fontSize: 13, color: colors.primaryHover },
+  tagText: { fontSize: 13, color: colors.textMain },
 });

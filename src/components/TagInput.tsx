@@ -103,12 +103,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.one,
     borderRadius: 999,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.primary, // 선택 태그 = 검정 채움 (M3)
     paddingVertical: spacing.one,
     paddingHorizontal: spacing.three,
   },
-  tagText: { fontSize: 13, color: colors.primaryHover },
-  tagRemove: { fontSize: 12, color: colors.primaryHover, fontWeight: '700' },
+  tagText: { fontSize: 13, color: colors.bg },
+  tagRemove: { fontSize: 12, color: colors.bg, fontWeight: '700' },
   pickHint: { fontSize: 12, color: colors.textSub },
   pick: {
     borderRadius: 999,
