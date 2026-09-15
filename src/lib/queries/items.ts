@@ -32,7 +32,7 @@ export async function listItems(): Promise<Item[]> {
     .from('items')
     .select('*')
     .order('created_at', { ascending: false });
-  if (error) throw new Error(`아이템을 불러오지 못했어요: ${error.message}`);
+  if (error) throw new Error(`아이템을 불러오지 못했습니다: ${error.message}`);
   return data ?? [];
 }
 
@@ -46,7 +46,7 @@ export async function listItemsByCategory(categoryId: string | null): Promise<It
     .order('created_at', { ascending: false });
   const query = categoryId === null ? base.is('category_id', null) : base.eq('category_id', categoryId);
   const { data, error } = await query;
-  if (error) throw new Error(`아이템을 불러오지 못했어요: ${error.message}`);
+  if (error) throw new Error(`아이템을 불러오지 못했습니다: ${error.message}`);
   return data ?? [];
 }
 
@@ -56,7 +56,7 @@ export async function listItemsByCategory(categoryId: string | null): Promise<It
  */
 export async function listAllTags(): Promise<string[]> {
   const { data, error } = await supabase.from('items').select('tags');
-  if (error) throw new Error(`태그를 불러오지 못했어요: ${error.message}`);
+  if (error) throw new Error(`태그를 불러오지 못했습니다: ${error.message}`);
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
     for (const t of row.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
@@ -73,14 +73,14 @@ export async function listItemsByTag(tag: string): Promise<Item[]> {
     .select('*')
     .contains('tags', [tag])
     .order('created_at', { ascending: false });
-  if (error) throw new Error(`아이템을 불러오지 못했어요: ${error.message}`);
+  if (error) throw new Error(`아이템을 불러오지 못했습니다: ${error.message}`);
   return data ?? [];
 }
 
 /** 단건 조회. */
 export async function getItem(id: string): Promise<Item> {
   const { data, error } = await supabase.from('items').select('*').eq('id', id).single();
-  if (error) throw new Error(`아이템을 불러오지 못했어요: ${error.message}`);
+  if (error) throw new Error(`아이템을 불러오지 못했습니다: ${error.message}`);
   return data;
 }
 
@@ -111,7 +111,7 @@ export async function createItem(input: NewItemInput): Promise<Item> {
   if (error) {
     // 사전조회를 놓친 중복(경합)은 23505 로 잡아 덮어쓰기 모달로 폴백한다.
     if (error.code === '23505') throw new DuplicateItemError();
-    throw new Error(`아이템을 저장하지 못했어요: ${error.message}`);
+    throw new Error(`아이템을 저장하지 못했습니다: ${error.message}`);
   }
   return data;
 }
@@ -155,7 +155,7 @@ export async function updateItem(id: string, input: UpdateItemInput): Promise<It
     .single();
   if (error) {
     if (error.code === '23505') throw new DuplicateItemError();
-    throw new Error(`아이템을 수정하지 못했어요: ${error.message}`);
+    throw new Error(`아이템을 수정하지 못했습니다: ${error.message}`);
   }
   return data;
 }
@@ -171,7 +171,7 @@ export async function moveItemCategory(id: string, categoryId: string | null): P
     .eq('id', id)
     .select()
     .single();
-  if (error) throw new Error(`카테고리를 옮기지 못했어요: ${error.message}`);
+  if (error) throw new Error(`카테고리를 옮기지 못했습니다: ${error.message}`);
   return data;
 }
 
@@ -189,12 +189,12 @@ export async function findDuplicateItem(
     .select('*')
     .eq('normalized_name', normalized)
     .maybeSingle();
-  if (error) throw new Error(`중복 확인에 실패했어요: ${error.message}`);
+  if (error) throw new Error(`중복 확인에 실패했습니다: ${error.message}`);
   return data;
 }
 
 /** 아이템 행 삭제. Storage 객체 삭제는 별도(storage.deleteItemImage)로 호출한다(Step 5). */
 export async function deleteItem(id: string): Promise<void> {
   const { error } = await supabase.from('items').delete().eq('id', id);
-  if (error) throw new Error(`아이템을 삭제하지 못했어요: ${error.message}`);
+  if (error) throw new Error(`아이템을 삭제하지 못했습니다: ${error.message}`);
 }

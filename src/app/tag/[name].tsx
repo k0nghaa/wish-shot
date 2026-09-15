@@ -28,7 +28,7 @@ export default function TagItemsScreen() {
       setUrls(urlMap);
     } catch (e) {
       setItems([]);
-      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했습니다.');
     }
   }, [name]);
 
@@ -55,7 +55,7 @@ export default function TagItemsScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : items.length === 0 ? (
-        <EmptyState title="이 태그의 위시가 없어요" />
+        <EmptyState title="이 태그의 위시가 없습니다" />
       ) : (
         <FlatList
           data={items}

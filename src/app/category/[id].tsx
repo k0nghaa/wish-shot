@@ -38,7 +38,7 @@ export default function CategoryItemsScreen() {
       setUrls(urlMap);
     } catch (e) {
       setItems([]);
-      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했습니다.');
     }
   }, [id, isUncat, router]);
 
@@ -65,7 +65,7 @@ export default function CategoryItemsScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : items.length === 0 ? (
-        <EmptyState title="이 카테고리에 아직 아이템이 없어요" />
+        <EmptyState title="담은 위시가 없습니다" />
       ) : (
         <FlatList
           data={items}

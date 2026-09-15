@@ -9,9 +9,9 @@ import { supabase } from '@/lib/supabase';
  */
 export async function getCurrentUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
-  if (error) throw new Error(`세션을 확인하지 못했어요: ${error.message}`);
+  if (error) throw new Error(`세션을 확인하지 못했습니다: ${error.message}`);
   const userId = data.session?.user.id;
-  if (!userId) throw new Error('로그인이 필요해요.');
+  if (!userId) throw new Error('로그인이 필요합니다.');
   return userId;
 }
 
@@ -24,5 +24,5 @@ export async function getCurrentUserEmail(): Promise<string | null> {
 /** 로그아웃. 세션이 사라지면 _layout 의 AuthGate 가 onAuthStateChange 로 로그인 화면으로 보낸다. */
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
-  if (error) throw new Error(`로그아웃하지 못했어요: ${error.message}`);
+  if (error) throw new Error(`로그아웃하지 못했습니다: ${error.message}`);
 }

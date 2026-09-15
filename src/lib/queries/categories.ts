@@ -12,7 +12,7 @@ export async function listCategories(): Promise<Category[]> {
     .from('categories')
     .select('*')
     .order('created_at', { ascending: true });
-  if (error) throw new Error(`카테고리를 불러오지 못했어요: ${error.message}`);
+  if (error) throw new Error(`카테고리를 불러오지 못했습니다: ${error.message}`);
   return data ?? [];
 }
 
@@ -29,7 +29,7 @@ export async function createCategory(name: string): Promise<Category> {
       console.warn('createCategory 중복 이름:', error.message);
       throw new DuplicateCategoryError();
     }
-    throw new Error(`카테고리를 만들지 못했어요: ${error.message}`);
+    throw new Error(`카테고리를 만들지 못했습니다: ${error.message}`);
   }
   return data;
 }
@@ -47,7 +47,7 @@ export async function renameCategory(id: string, name: string): Promise<Category
       console.warn('renameCategory 중복 이름:', error.message);
       throw new DuplicateCategoryError();
     }
-    throw new Error(`카테고리 이름을 바꾸지 못했어요: ${error.message}`);
+    throw new Error(`카테고리 이름을 바꾸지 못했습니다: ${error.message}`);
   }
   return data;
 }
@@ -58,5 +58,5 @@ export async function renameCategory(id: string, name: string): Promise<Category
  */
 export async function deleteCategory(id: string): Promise<void> {
   const { error } = await supabase.from('categories').delete().eq('id', id);
-  if (error) throw new Error(`카테고리를 삭제하지 못했어요: ${error.message}`);
+  if (error) throw new Error(`카테고리를 삭제하지 못했습니다: ${error.message}`);
 }

@@ -34,7 +34,7 @@ export async function promptDeleteIfCategoryEmpty(
 
   const name = categoryName ?? '이 카테고리';
   return new Promise<EmptyCategoryResult>((resolve) => {
-    Alert.alert('빈 카테고리', `「${name}」에 남은 위시가 없어요. 카테고리를 삭제할까요?`, [
+    Alert.alert('빈 카테고리', `「${name}」에 남은 위시가 없습니다. 삭제할까요?`, [
       { text: '그대로 두기', style: 'cancel', onPress: () => resolve({ wasEmpty: true, deleted: false }) },
       {
         text: '삭제',
@@ -45,7 +45,7 @@ export async function promptDeleteIfCategoryEmpty(
             onDeleted?.();
             resolve({ wasEmpty: true, deleted: true });
           } catch (e) {
-            Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 삭제하지 못했어요.');
+            Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 삭제하지 못했습니다.');
             resolve({ wasEmpty: true, deleted: false });
           }
         },

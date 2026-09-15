@@ -55,7 +55,7 @@ export async function uploadItemImage(
     contentType,
     upsert: true,
   });
-  if (error) throw new Error(`이미지를 업로드하지 못했어요: ${error.message}`);
+  if (error) throw new Error(`이미지를 업로드하지 못했습니다: ${error.message}`);
   invalidateSignedUrl(key); // 덮어쓰기 시 캐시된 옛 URL 이 옛 사진을 재사용하지 않도록
   return key;
 }
@@ -68,7 +68,7 @@ export async function getItemImageSignedUrl(
   const cached = getCachedSignedUrl(imageKey);
   if (cached) return cached;
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(imageKey, expiresInSec);
-  if (error) throw new Error(`이미지 주소를 만들지 못했어요: ${error.message}`);
+  if (error) throw new Error(`이미지 주소를 만들지 못했습니다: ${error.message}`);
   putCachedSignedUrl(imageKey, data.signedUrl, expiresInSec);
   return data.signedUrl;
 }
@@ -95,7 +95,7 @@ export async function getItemImageSignedUrls(
   if (misses.length === 0) return map; // 전부 캐시 히트 → 네트워크 호출 없음(재렌더 시 flicker 없음)
 
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrls(misses, expiresInSec);
-  if (error) throw new Error(`이미지 주소를 만들지 못했어요: ${error.message}`);
+  if (error) throw new Error(`이미지 주소를 만들지 못했습니다: ${error.message}`);
   for (const row of data ?? []) {
     if (row.path && row.signedUrl) {
       map[row.path] = row.signedUrl;
@@ -108,6 +108,6 @@ export async function getItemImageSignedUrls(
 /** Storage 객체 삭제(Step 5 아이템 삭제 시 행과 함께 지운다). */
 export async function deleteItemImage(imageKey: string): Promise<void> {
   const { error } = await supabase.storage.from(BUCKET).remove([imageKey]);
-  if (error) throw new Error(`이미지를 삭제하지 못했어요: ${error.message}`);
+  if (error) throw new Error(`이미지를 삭제하지 못했습니다: ${error.message}`);
   invalidateSignedUrl(imageKey);
 }

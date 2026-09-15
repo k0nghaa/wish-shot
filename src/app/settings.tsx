@@ -32,7 +32,7 @@ export default function SettingsScreen() {
       await signOut();
     } catch (e) {
       setLoggingOut(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '로그아웃하지 못했어요.');
+      Alert.alert('오류', e instanceof Error ? e.message : '로그아웃하지 못했습니다.');
     }
   }
 

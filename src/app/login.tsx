@@ -23,7 +23,7 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!email.trim() || !password) {
-      setError('이메일과 비밀번호를 모두 입력해 주세요.');
+      setError('이메일과 비밀번호를 입력하세요.');
       return;
     }
     setLoading(true);
@@ -35,7 +35,7 @@ export default function LoginScreen() {
     setLoading(false);
     if (signInError) {
       // 성공 시엔 라우팅 가드가 자동으로 홈으로 보낸다.
-      setError('이메일 또는 비밀번호를 다시 확인해 주세요.');
+      setError('이메일 또는 비밀번호를 확인하세요.');
     }
   }
 
@@ -47,7 +47,7 @@ export default function LoginScreen() {
       >
         <View style={styles.container}>
           <Text style={styles.title}>WishShot</Text>
-          <Text style={styles.subtitle}>이메일로 로그인해 주세요.</Text>
+          <Text style={styles.subtitle}>이메일로 로그인</Text>
 
           <TextInput
             style={styles.input}
