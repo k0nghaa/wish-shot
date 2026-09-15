@@ -1,17 +1,20 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
-import { ItemCard } from '@/components/ItemCard';
+import { PhotoTile } from '@/components/PhotoTile';
 import { colors, spacing } from '@/constants/theme';
-import { formatSavedDate } from '@/lib/formatDate';
 import { getItemImageSignedUrls, listItemsByTag, type Item } from '@/lib/queries';
+
+const COLUMNS = 3;
 
 // 태그별 모아보기(FR-15a): 카테고리와 무관하게 그 태그가 달린 아이템만 최신순으로 보여준다.
 export default function TagItemsScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const tileSize = width / COLUMNS; // 여백 없이 화면 폭 3등분(전체·폴더와 동일)
   const { name } = useLocalSearchParams<{ name: string }>();
 
   const [items, setItems] = useState<Item[] | null>(null); // null = 로딩 중
@@ -57,15 +60,13 @@ export default function TagItemsScreen() {
         <FlatList
           data={items}
           keyExtractor={(it) => it.id}
-          numColumns={2}
-          columnWrapperStyle={styles.column}
+          numColumns={COLUMNS}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <ItemCard
-              productName={item.product_name}
-              brand={item.brand}
-              savedDate={formatSavedDate(item.created_at)}
-              thumbnailUrl={urls[item.image_key] ?? null}
+            <PhotoTile
+              url={urls[item.image_key] ?? null}
+              size={tileSize}
+              accessibilityLabel={item.product_name}
               onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
             />
           )}
@@ -89,6 +90,5 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 18, fontWeight: '700', color: colors.textMain, textAlign: 'center' },
   headerSpacer: { width: 72 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { padding: spacing.three, gap: spacing.two },
-  column: { gap: spacing.two },
+  list: { paddingBottom: spacing.four }, // 그리드는 가장자리까지(여백 없음)
 });
