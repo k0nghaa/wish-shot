@@ -1,41 +1,29 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
-import { getCurrentUserEmail, signOut } from '@/lib/queries';
+import { signInAnonymouslyIfNeeded, signOut } from '@/lib/queries';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
 
-  useEffect(() => {
-    getCurrentUserEmail()
-      .then(setEmail)
-      .catch(() => setEmail(null));
-  }, []);
-
-  function confirmLogout() {
-    Alert.alert('로그아웃', '로그아웃할까요?', [
-      { text: '취소', style: 'cancel' },
-      { text: '로그아웃', style: 'destructive', onPress: doLogout },
-    ]);
-  }
-
-  async function doLogout() {
-    setLoggingOut(true);
+  // 개발용 세션 리셋: 현재 세션을 버리고 새 익명 세션으로 시작한다. 익명 경로를 재설치 없이
+  // 즉시 테스트하기 위한 것 — __DEV__ 에서만 노출된다.
+  // 재익명 로그인까지 await 한 뒤 홈으로 이동해, 홈이 새 세션으로 재로드되게 한다(레이스 방지).
+  async function handleDevReset() {
     try {
-      // 세션이 사라지면 _layout 의 AuthGate 가 로그인 화면으로 보낸다(별도 내비게이션 불필요).
       await signOut();
+      await signInAnonymouslyIfNeeded();
+      router.replace('/');
     } catch (e) {
-      setLoggingOut(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '로그아웃하지 못했습니다.');
+      Alert.alert('오류', e instanceof Error ? e.message : '세션 초기화에 실패했습니다.');
     }
   }
 
+  // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
+  // 이메일 가입/계정 승격·로그아웃은 Phase 6.
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
@@ -47,35 +35,32 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.sectionLabel}>계정</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>이메일</Text>
-            <Text style={styles.rowValue} numberOfLines={1}>
-              {email ?? '-'}
-            </Text>
-          </View>
-        </View>
-
         <Text style={styles.sectionLabel}>개인정보 안내</Text>
         <View style={styles.card}>
           <Text style={styles.noticeTitle}>{PRIVACY_NOTICE.title}</Text>
           <Text style={styles.noticeBody}>{PRIVACY_NOTICE.body}</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.logout}
-          onPress={confirmLogout}
-          disabled={loggingOut}
-          accessibilityRole="button"
-          accessibilityLabel="로그아웃"
-        >
-          {loggingOut ? (
-            <ActivityIndicator color={colors.error} />
-          ) : (
-            <Text style={styles.logoutText}>로그아웃</Text>
-          )}
-        </TouchableOpacity>
+        {__DEV__ ? (
+          <View style={styles.devSection}>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevReset}
+              accessibilityRole="button"
+              accessibilityLabel="세션 초기화(개발용)"
+            >
+              <Text style={styles.devButtonText}>세션 초기화(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={() => router.push('/login')}
+              accessibilityRole="button"
+              accessibilityLabel="이메일 로그인(개발용)"
+            >
+              <Text style={styles.devButtonText}>이메일 로그인(개발용)</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -110,19 +95,19 @@ const styles = StyleSheet.create({
     padding: spacing.three,
     gap: spacing.two,
   },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.three },
-  rowLabel: { fontSize: 14, color: colors.textSub },
-  rowValue: { flex: 1, fontSize: 15, color: colors.textMain, textAlign: 'right' },
   noticeTitle: { fontSize: 15, fontWeight: '600', color: colors.textMain },
   noticeBody: { fontSize: 14, color: colors.textSub, lineHeight: 21 },
-  logout: {
+  devSection: {
     marginTop: spacing.four,
+    gap: spacing.two,
+  },
+  devButton: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.error,
+    borderColor: colors.silver,
     paddingVertical: spacing.three,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoutText: { fontSize: 16, fontWeight: '600', color: colors.error },
+  devButtonText: { fontSize: 15, color: colors.textSub },
 });
