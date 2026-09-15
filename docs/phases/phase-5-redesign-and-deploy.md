@@ -177,17 +177,18 @@ Phase 1~4 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지,
 - 재빌드 = TestFlight용 1회뿐. 발표 = 내 폰 dev client 라이브.
 - 핸드오프 = **화면 스크린샷 + `docs/design/phase-5-visual-spec.md`**.
 
-## 결과 기록 (Phase 완료 시 작성)
+## 결과 기록
 
-- **완료일**:
-- **팔레트 최종값 / 다크 토큰 준비 방식**:
-- **리스킨한 화면 / 조정한 공통 컴포넌트**:
-- **풀스크린 뷰어 구현 / 이미지 표시 이슈 해결**:
-- **익명 로그인 도입 결과(토글, `_layout`·`auth.ts`, 로그아웃 처리)**:
-- **(선택) 새로고침·스켈레톤 적용 범위**:
-- **EAS 빌드/제출/TestFlight 처리 시간·내부 테스터 초대 결과**:
-- **용어(카테고리/폴더) 결정**:
-- **발생한 이슈와 해결**:
-- **하단 탭바 도입 결과(_layout 구조 변경, 전체 탭 처리, 검색 플레이스홀더)**:
-- **정보(i) 하프시트(M7) 구현(Modal 기반) 결과**:
-- **다음(Phase 6)으로 넘길 것**: 찜·New·탭바 배지·검색 기능·빠른 담기 팝업·필름스트립·상세 공유·출처 앱 표시·다크 모드 실적용·이메일 가입/승격 등.
+- **완료일**: 2026-09-16
+- **팔레트 최종값 / 다크 토큰 준비 방식**: 흰 배경(`#FFFFFF`) + iOS 시스템 그레이 모노톤. `theme.ts`는 **토큰 이름 유지 + 값만 교체**(`primary`=검정 `#000000`, `accent`=`wine`(`#7A2231`) — 찜·New·탭바 배지 전용이라 Phase 5 화면엔 미노출). 다크는 `colorsDark` 맵으로 **준비만**(소비 안 함). 원시 hex는 `theme.ts` 밖에 전무.
+- **리스킨한 화면 / 조정한 공통 컴포넌트**: 홈(폴더 탭·2×2 모자이크)·전체·검색(플레이스홀더)·카테고리·태그·상세 뷰어·정보 시트·등록·편집·설정·로그인. 공통 컴포넌트: `CategoryCard`, `PhotoTile`, `CustomTabBar`, `TabHeaderLogo`, `FormField(FormCard/FormRow/DisclosureRow/FormBlock)`, `FolderPickerSheet`, `TagInput`, `EmptyState`, `OverwriteDialog`. 사용자 노출 카피는 대화체(`~어요/~해요/~예요`)를 **단답/`~습니다`** 로 통일(데이터 레이어 에러 문자열 포함).
+- **풀스크린 뷰어 구현 / 이미지 표시 이슈 해결**: 상세를 세로 모달 뷰어로 재구성, 이미지 탭 → **풀스크린 `contentFit:"contain"`(원본 비율, 안 잘림)**, 핀치 줌은 이미 설치된 gesture-handler+reanimated로 직접 구현(재빌드 0). 썸네일은 `cover`, 뷰어는 `contain`.
+- **익명 로그인 도입 결과(토글, `_layout`·`auth.ts`, 로그아웃 처리)**: 대시보드 **Anonymous sign-ins ON(하단 Save 필수)**. `auth.ts`에 `signInAnonymouslyIfNeeded()`. `_layout` AuthGate = 세션 없으면 `/login` 대신 **익명 부트스트랩**, **첫 세션 확보 후에는 세션이 잠깐 null이어도 네비게이터를 언마운트하지 않음**(`everHadSession` — 언마운트/재마운트가 라우트를 모달로 꼬아 `GO_BACK` 나던 문제 해결). 설정의 **로그아웃·계정(이메일) 섹션 제거**(익명엔 무의미), `__DEV__` 전용 **세션 리셋 + 이메일 로그인 왕복** 버튼 추가. `login`은 성공 시 홈 복귀 + 취소 버튼(정상 흐름 미도달).
+- **(선택) 새로고침·스켈레톤 적용 범위**: **미적용** — Step 7은 Phase 6로 이관.
+- **EAS 빌드/제출/TestFlight 처리 시간·내부 테스터 초대 결과**: production 빌드 ~5–15분. **최초 2회 실패 → 해결**: ① `EXPO_PUBLIC_*` 미등록 → **EAS 환경(production)에 env 등록**, ② `npm ci` peer 충돌(awesome-gallery↔reanimated4) → **`.npmrc`(legacy-peer-deps) 커밋**. 이후 빌드 성공(`1.0.0 (4)`). `eas submit`은 **무료 티어 큐** 대기 후 처리, ASC "완료". 내부 테스터 이메일 초대 → TestFlight 설치 → **익명 즉시 사용·스플래시·아이콘·헤더 로고 실기기 확인**. 외부 공개 링크는 베타 심사 제출(개인정보처리방침 URL 필요 → `docs/legal/privacy.html` + Notion 게시).
+- **브랜딩(아이콘·스플래시·로고)**: 앱 아이콘 `assets/images/icon.png`(1024, 불투명), 스플래시 `splash-icon.png`(검정 배경 + 흰 워드마크, `imageWidth 240`), 인앱 헤더 `logo.png`(expo-image 렌더). iOS 아이콘 오버라이드(`ios.icon: expo.icon`) 제거 → 미사용 `assets/expo.icon/` 삭제. **아이콘 저대비/획 잘림은 Phase 6 개선 과제.**
+- **용어(카테고리/폴더) 결정**: **UI 라벨만 "폴더"**(홈 타이틀·카드), **코드·라우트·데이터는 "카테고리(category)" 유지**. 전면 교체는 보류.
+- **발생한 이슈와 해결**: (1) 헤더 2단 통일안 → 사용자 선호로 **롤백**. (2) 세션 리셋 후 register로 튐 + `GO_BACK` → `everHadSession`으로 네비게이터 유지 + 리셋 핸들러가 재익명 로그인까지 await. (3) 폴더 시트 키보드 가림 → `KeyboardAvoidingView`, 시트 열기 애니메이션(배경 즉시 + 시트만 슬라이드업). (4) EAS 환경변수 미등록. (5) `npm ci` peer 충돌.
+- **하단 탭바 도입 결과(_layout 구조 변경, 전체 탭 처리, 검색 플레이스홀더)**: `src/app/(tabs)/` 그룹(`_layout`=Expo Router `Tabs`) + `CustomTabBar`(플로팅 알약, JS 전용). **폴더=홈, 전체=전체 아이템 3열 그리드(찜·New 제외), 검색=플레이스홀더**. 상세/등록/편집/설정/태그는 탭 위 스택.
+- **정보(i) 하프시트(M7) 구현 결과**: **expo-router `formSheet`**(`react-native-screens` 네이티브 반시트) — `presentation:'formSheet'` + `sheetAllowedDetents:[0.5,1]` + 그래버. **새 의존성·재빌드 0**. 라우트 `item/[id]/info.tsx`.
+- **다음(Phase 6)으로 넘길 것**: 찜·New·탭바 배지·검색 기능·빠른 담기 팝업·필름스트립·상세 공유·출처 앱 표시·다크 모드 실적용·이메일 가입/승격·Step 7(당겨서 새로고침·스켈레톤)·**앱 아이콘 개선(저대비·획 잘림)**·외부 TestFlight 공개 링크 심사 완료.
