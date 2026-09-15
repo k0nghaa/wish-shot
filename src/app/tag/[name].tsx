@@ -67,7 +67,7 @@ export default function TagItemsScreen() {
               url={urls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
-              onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
+              onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id, ctx: 'tag', ctxKey: name } })}
             />
           )}
         />

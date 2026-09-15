@@ -64,7 +64,19 @@ function AuthGate() {
     );
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      {/* 정보(i) 하프시트 — react-native-screens 네이티브 반시트(formSheet). 재빌드 불필요. */}
+      <Stack.Screen
+        name="item/[id]/info"
+        options={{
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.5, 1],
+          sheetGrabberVisible: true,
+        }}
+      />
+    </Stack>
+  );
 }
 
 const styles = StyleSheet.create({
