@@ -66,6 +66,8 @@ function AuthGate() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      {/* 상세 사진 뷰어 — 세로 모달(열 때 위로, 닫을 때 아래로). 갤러리의 아래 스와이프 닫기와 이어짐. */}
+      <Stack.Screen name="item/[id]/index" options={{ presentation: 'fullScreenModal' }} />
       {/* 정보(i) 하프시트 — react-native-screens 네이티브 반시트(formSheet). 재빌드 불필요. */}
       <Stack.Screen
         name="item/[id]/info"
