@@ -26,7 +26,7 @@ import { TagInput } from '@/components/TagInput';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
-import { readImageBytes } from '@/lib/imageBytes';
+import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import {
   createAnalysisLog,
   createCategory,
@@ -79,7 +79,9 @@ function analysisStatusInfo(
         text:
           state.errorKind === 'ocr_empty'
             ? '글자를 인식하지 못했습니다. 직접 입력하세요.'
-            : '정보를 정리하지 못했습니다. 직접 입력하세요.',
+            : state.errorKind === 'image_not_ready'
+              ? '사진을 아직 내려받지 못했습니다. 잠시 후 다시 시도하세요.'
+              : '정보를 정리하지 못했습니다. 직접 입력하세요.',
         color: colors.error,
         loading: false,
       };
@@ -223,9 +225,10 @@ export default function RegisterScreen() {
       Alert.alert('사진 접근 필요', '설정에서 사진 접근을 허용하세요.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1, exif: false });
     if (result.canceled) return;
     const asset = result.assets[0];
+    logImageDiag('pickImage', asset.uri, { fileSize: asset.fileSize, mimeType: asset.mimeType });
     setImageUri(asset.uri);
     if (asset.mimeType) setContentType(asset.mimeType);
   }
@@ -257,6 +260,10 @@ export default function RegisterScreen() {
       await performNewSave();
     } catch (e) {
       setSaving(false);
+      if (e instanceof ImageNotReadyError) {
+        Alert.alert('사진 준비 중', e.message);
+        return;
+      }
       Alert.alert('오류', e instanceof Error ? e.message : '저장하지 못했습니다.');
     }
   }
@@ -327,6 +334,10 @@ export default function RegisterScreen() {
       goToSavedCategory();
     } catch (e) {
       setOverwriteBusy(false);
+      if (e instanceof ImageNotReadyError) {
+        Alert.alert('사진 준비 중', e.message);
+        return;
+      }
       Alert.alert('오류', e instanceof Error ? e.message : '덮어쓰지 못했습니다.');
     }
   }

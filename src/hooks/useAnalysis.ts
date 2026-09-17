@@ -1,5 +1,6 @@
 import { useCallback, useReducer, useRef } from 'react';
 
+import { ensureFileReady, ImageNotReadyError } from '@/lib/imageBytes';
 import { ocrEngine } from '@/lib/ocr';
 import { parseScreenshotText, type ParseResult } from '@/lib/queries';
 
@@ -20,8 +21,11 @@ export type AnalysisPhase =
   | 'submitted'
   | 'error';
 
-/** 실패 종류: OCR 결과 없음(E-1) / 정제 실패(E-2). */
-export type AnalysisErrorKind = 'ocr_empty' | 'parse_failed';
+/**
+ * 실패 종류: OCR 결과 없음(E-1) / 정제 실패(E-2) / 사진 미준비(iCloud 미다운로드).
+ * image_not_ready 는 막다른 상태가 아니라 재시도로 회복되는 상태다(수동 입력도 가능).
+ */
+export type AnalysisErrorKind = 'ocr_empty' | 'parse_failed' | 'image_not_ready';
 
 export interface AnalysisState {
   phase: AnalysisPhase;
@@ -103,6 +107,8 @@ export function useAnalysis() {
 
     let rawText = '';
     try {
+      // OCR·업로드가 같은 준비 게이트를 보게 한다. iCloud 미다운로드는 여기서 재시도·흡수.
+      await ensureFileReady(uri);
       const ocr = await ocrEngine.recognize(uri);
       if (!isCurrent()) return;
       rawText = ocr.text?.trim() ?? '';
@@ -119,9 +125,16 @@ export function useAnalysis() {
       const result = await parseScreenshotText(rawText);
       if (!isCurrent()) return;
       dispatch({ type: 'filled', result });
-    } catch {
+    } catch (e) {
       if (!isCurrent()) return;
-      // E-2: 정제 실패/타임아웃/네트워크 → 원문 유지 + 수동 입력 폴백
+      if (e instanceof ImageNotReadyError) {
+        // 사진이 아직 로컬에 없음(iCloud 최적화) → 재시도 안내. rawText 없음.
+        if (__DEV__) console.warn('[WishShot/analyze] 사진 미준비', e);
+        dispatch({ type: 'error', kind: 'image_not_ready', rawText: '' });
+        return;
+      }
+      // E-2: 정제 실패/타임아웃/네트워크, 또는 OCR 모듈 실패 → 원문 유지 + 수동 입력 폴백.
+      if (__DEV__) console.warn('[WishShot/analyze] 실패', { hadRawText: !!rawText }, e);
       dispatch({ type: 'error', kind: 'parse_failed', rawText });
     }
   }, []);
