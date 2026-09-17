@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
+import { RegionSelectSheet } from '@/components/RegionSelectSheet';
 import { TagInput } from '@/components/TagInput';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
@@ -47,6 +48,8 @@ const emptyToNull = (s: string): string | null => (s.trim() ? s.trim() : null);
 
 // 개인정보 고지(NFR-3)를 최초 1회만 보여주기 위한 플래그.
 const PRIVACY_NOTICE_KEY = 'wishshot.privacyNoticeShown';
+// "제품 영역 지정" 시트의 선택 영역 전송 고지를 최초 1회만 보여주기 위한 플래그.
+const REGION_NOTICE_KEY = 'wishshot.regionNoticeShown';
 
 function parsePrice(text: string): number | null {
   const digits = text.replace(/[^\d]/g, '');
@@ -63,6 +66,7 @@ function analysisStatusInfo(
     case 'ocrRunning':
       return { text: '글자를 읽는 중…', color: colors.textSub, loading: true };
     case 'parsing':
+    case 'imageParsing':
       return { text: 'AI가 정보를 정리하는 중…', color: colors.textSub, loading: true };
     case 'filled':
       // E-3(부분 성공): 정제는 됐으나 제품명을 못 뽑음 → 제품명 입력을 명시적으로 안내.
@@ -79,7 +83,9 @@ function analysisStatusInfo(
             ? '글자를 인식하지 못했습니다. 직접 입력하세요.'
             : state.errorKind === 'image_not_ready'
               ? '사진을 아직 내려받지 못했습니다. 잠시 후 다시 시도하세요.'
-              : '정보를 정리하지 못했습니다. 직접 입력하세요.',
+              : state.errorKind === 'image_parse_failed'
+                ? '이미지 분석에 실패했습니다. 다시 시도하세요.'
+                : '정보를 정리하지 못했습니다. 직접 입력하세요.',
         color: colors.error,
         loading: false,
       };
@@ -132,7 +138,8 @@ export default function RegisterScreen() {
   }, []);
 
   // 분석(OCR → LLM 정제) 상태머신. 이미지가 들어오면 즉시 시작한다.
-  const { analyze, reparse, state: analysisState, needsConfirmation, markSubmitted } = useAnalysis();
+  const { analyze, reparse, submitRegion, cancelRegion, reopenRegion, state: analysisState, needsConfirmation, markSubmitted } =
+    useAnalysis();
   const productNameRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -157,6 +164,29 @@ export default function RegisterScreen() {
       cancelled = true;
     };
   }, [imageUri]);
+
+  // 제품 영역 지정 최초 고지: 텍스트를 못 찾아 시트가 처음 열릴 때만 1회. 선택 영역만 전송됨을 설명.
+  useEffect(() => {
+    if (analysisState.phase !== 'regionSelect') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (await AsyncStorage.getItem(REGION_NOTICE_KEY)) return;
+        await AsyncStorage.setItem(REGION_NOTICE_KEY, '1');
+        if (cancelled) return;
+        Alert.alert(
+          '제품 영역 지정',
+          '텍스트를 찾지 못했습니다. 제품이 잘 보이는 부분을 사각형으로 선택하면, 그 영역만 AI 분석에 전송됩니다. 이 영역은 분석에만 쓰이며, 사진은 원본 그대로 저장됩니다.',
+          [{ text: '확인' }],
+        );
+      } catch {
+        /* 고지 실패는 흐름을 막지 않는다 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisState.phase]);
 
   // E-3(제품명 미인식): 정제는 됐으나 제품명이 없고 사용자가 아직 입력 안 했으면 입력란에 포커스.
   useEffect(() => {
@@ -197,17 +227,24 @@ export default function RegisterScreen() {
   function recordAnalysisLog(itemId: string) {
     const status = analysisLogStatus();
     if (!status) return;
+    // 이미지 폴백으로 채워진 경우 parsed 에 source:'image_region' 을 남긴다(분석 경로 추적).
+    const parsed =
+      analysisState.result != null
+        ? { ...analysisState.result, ...(analysisState.via === 'image_region' ? { source: 'image_region' } : {}) }
+        : null;
     void createAnalysisLog({
       rawText: analysisState.rawText,
-      parsed: (analysisState.result as unknown as Json) ?? null,
+      parsed: (parsed as unknown as Json) ?? null,
       status,
       itemId,
     });
   }
 
-  // 재시도: 정제 실패(E-2, OCR 원문 있음)면 정제만 다시, 그 외(E-1)엔 처음부터 다시.
+  // 재시도: 이미지 분석 실패면 시트 재열기, 정제 실패(E-2, OCR 원문 있음)면 정제만 다시, 그 외(E-1)엔 처음부터.
   function retryAnalysis() {
-    if (analysisState.errorKind === 'parse_failed' && analysisState.rawText) {
+    if (analysisState.errorKind === 'image_parse_failed') {
+      reopenRegion();
+    } else if (analysisState.errorKind === 'parse_failed' && analysisState.rawText) {
       reparse(analysisState.rawText);
     } else if (imageUri) {
       analyze(imageUri);
@@ -523,6 +560,15 @@ export default function RegisterScreen() {
         onOverwrite={handleOverwrite}
         onView={handleViewExisting}
         onCancel={() => setDupVisible(false)}
+      />
+
+      {/* 제품 영역 지정(Phase 6): OCR 텍스트 부족 시 열림. 선택 영역만 크롭해 전송. */}
+      <RegionSelectSheet
+        visible={analysisState.phase === 'regionSelect' || analysisState.phase === 'imageParsing'}
+        imageUri={imageUri}
+        busy={analysisState.phase === 'imageParsing'}
+        onSubmit={(image) => submitRegion(image, analysisState.rawText ?? '')}
+        onCancel={() => cancelRegion(analysisState.rawText ?? '')}
       />
     </SafeAreaView>
   );
