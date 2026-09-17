@@ -17,6 +17,7 @@
     "expo-image-manipulator": "~57.0.18",
     "expo-image-picker": "~57.0.16",
     "expo-linking": "~57.0.9",
+    "expo-media-library": "~57.0.5",
     "expo-router": "57.0.19",
     "expo-share-intent": "^8.0.1",
     "expo-splash-screen": "~57.0.8",
