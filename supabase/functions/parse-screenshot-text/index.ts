@@ -1,9 +1,14 @@
 // parse-screenshot-text — 온디바이스 OCR 원문을 Claude Haiku로 정제해
 // { productName, price, brand, confidence } 를 돌려주는 Edge Function (Deno).
 //
-// 계약(Phase 3 + Phase 4 FR-8):
-//   입력:  { "text": string, "categories"?: string[] }   OCR 원문 + 사용자의 기존 카테고리 이름들
-//   출력:  { productName, price, brand, confidence, suggestedCategory }
+// 계약(Phase 3 + Phase 4 FR-8 + Phase 6 이미지 분기):
+//   입력:  { "text": string, "categories"?: string[],
+//           "image"?: { "base64": string, "mediaType": "image/jpeg" | "image/png" } }
+//     - text:       OCR 원문. 이미지가 있으면 비어 있어도 된다(텍스트 부족 폴백).
+//     - categories: 사용자의 기존 카테고리 이름들(FR-8 추천용).
+//     - image:      사용자가 명시적으로 선택한 "제품 영역 크롭"만(Phase 6). 텍스트를 못 찾았을 때만 온다.
+//                   통이미지·자동 전송 아님. 로그·저장하지 않고 Anthropic 요청에만 쓴다.
+//   출력:  { productName, price, brand, confidence, suggestedCategory }  (스키마 불변)
 //     - productName: string | null       못 뽑으면 null (앱에서 E-3 수동 입력)
 //     - price:       number | null       원 단위 정수(KRW). 없으면 null
 //     - brand:       string | null       없으면 null
@@ -13,7 +18,10 @@
 //
 // 규칙:
 //   - Claude API 키(ANTHROPIC_API_KEY)는 이 함수의 시크릿에만 존재. 앱엔 없음.
-//   - 로그인 사용자만 호출(anon 거부). 이미지가 아니라 "텍스트만" 받는다(NFR-3).
+//   - 로그인 사용자만 호출(anon 거부).
+//   - NFR-3(개정): AI 정제엔 인식된 "텍스트"만 보낸다. 단, 텍스트를 찾지 못한 경우에 한해
+//     사용자가 직접 선택한 "제품 영역 크롭 이미지"만 동의 후 전송된다(통이미지 아님). 미저장·미로깅.
+//   - image 없는 요청은 Phase 5와 바이트 단위로 동일 동작(하위호환).
 //   - LLM 오류/타임아웃은 명확한 실패 응답으로 → 앱이 E-2(원문+재시도+수동 폴백) 처리.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -26,6 +34,12 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 const MODEL = 'claude-haiku-4-5';
 // LLM 호출 타임아웃(ms). 초과 시 앱이 E-2로 폴백할 수 있게 실패 응답을 준다.
 const LLM_TIMEOUT_MS = 20_000;
+// 이미지 분기(Phase 6): 이미지 입력은 처리 지연이 커 타임아웃을 상향한다.
+const IMAGE_LLM_TIMEOUT_MS = 25_000;
+// 허용 이미지 타입(화이트리스트). 크롭본은 JPEG.
+const ALLOWED_MEDIA_TYPES = ['image/jpeg', 'image/png'] as const;
+// base64 문자열 길이 상한(≈1.5MB 이미지). 크롭·리사이즈된 영역만 오므로 넉넉. 초과 시 400.
+const MAX_IMAGE_BASE64_LEN = 2_000_000;
 
 // 구조화 출력 스키마. structured outputs 제약(additionalProperties:false + required, 숫자/문자 제약 미지원)에 맞춤.
 const OUTPUT_SCHEMA = {
@@ -55,17 +69,31 @@ const SYSTEM_PROMPT = [
   'Ignore UI noise: clock/time, carrier/battery, buttons (구매하기, 후기, 팔로우, Follow, Add comment), banners, view/like counts, URLs.',
 ].join('\n');
 
-/** categories 유무에 따라 suggestedCategory 지침을 덧붙인다(FR-8). 목록 밖 값·새 이름 금지. */
-function buildSystemPrompt(categories: string[]): string {
+// 이미지 분기(Phase 6): 사용자가 잘라낸 제품 영역이 함께 온다. 피사체·패키지·로고로 추정하되 가격은 추측 금지.
+const IMAGE_PROMPT = [
+  'An image is ALSO provided: a rectangular product region the user cropped (the OCR text may be empty or sparse — rely on the image).',
+  'Identify productName and brand from the image itself — the subject, packaging, label, or logo.',
+  'price: ONLY if a price is clearly legible in the image; otherwise null. Do NOT guess or infer a price.',
+  'Lower confidence when the product is ambiguous or you are unsure.',
+].join('\n');
+
+/**
+ * 이미지 유무·categories 유무에 따라 시스템 프롬프트를 조립한다.
+ * hasImage=false·categories=[] 이면 Phase 5 와 동일한 프롬프트(바이트 동일). FR-8: 목록 밖 값·새 이름 금지.
+ */
+function buildSystemPrompt(categories: string[], hasImage: boolean): string {
+  const parts = [SYSTEM_PROMPT];
+  if (hasImage) parts.push(IMAGE_PROMPT);
   if (categories.length === 0) {
-    return `${SYSTEM_PROMPT}\n- suggestedCategory: always null (no categories were provided).`;
+    parts.push('- suggestedCategory: always null (no categories were provided).');
+  } else {
+    parts.push(
+      '- suggestedCategory: pick the ONE category from the user\'s existing list below that best fits this product.',
+      '  You MUST copy one of these strings VERBATIM, or use null if none clearly fits. Never invent a new category name.',
+      `  Existing categories: ${JSON.stringify(categories)}`,
+    );
   }
-  return [
-    SYSTEM_PROMPT,
-    '- suggestedCategory: pick the ONE category from the user\'s existing list below that best fits this product.',
-    '  You MUST copy one of these strings VERBATIM, or use null if none clearly fits. Never invent a new category name.',
-    `  Existing categories: ${JSON.stringify(categories)}`,
-  ].join('\n');
+  return parts.join('\n');
 }
 
 type ParsedResult = {
@@ -110,26 +138,55 @@ Deno.serve(async (req) => {
   } = await supabase.auth.getUser();
   if (authError || !user) return json({ error: 'unauthorized' }, 401);
 
-  // 2) 입력 검증: { text: string, categories?: string[] }
-  let body: { text?: unknown; categories?: unknown };
+  // 2) 입력 검증: { text: string, categories?: string[], image?: { base64, mediaType } }
+  let body: { text?: unknown; categories?: unknown; image?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ error: 'invalid_json' }, 400);
   }
-  const text = body?.text;
-  if (typeof text !== 'string' || text.trim().length === 0) {
+  const text = typeof body?.text === 'string' ? body.text : '';
+
+  // image(Phase 6): 있으면 검증. 타입 화이트리스트 + base64 길이 상한. 크롭본이 아니어도 여기선 형식만 본다.
+  let image: { base64: string; mediaType: string } | null = null;
+  if (body?.image != null) {
+    const raw = body.image;
+    if (typeof raw !== 'object') return json({ error: 'invalid_image' }, 400);
+    const b64 = (raw as { base64?: unknown }).base64;
+    const mt = (raw as { mediaType?: unknown }).mediaType;
+    if (typeof b64 !== 'string' || b64.length === 0) return json({ error: 'invalid_image' }, 400);
+    if (typeof mt !== 'string' || !ALLOWED_MEDIA_TYPES.includes(mt as (typeof ALLOWED_MEDIA_TYPES)[number])) {
+      return json({ error: 'invalid_media_type' }, 400);
+    }
+    if (b64.length > MAX_IMAGE_BASE64_LEN) return json({ error: 'image_too_large' }, 400);
+    image = { base64: b64, mediaType: mt };
+  }
+
+  // 텍스트든 이미지든 최소 하나는 있어야 한다. 이미지 없이 텍스트가 비면 기존처럼 거부.
+  if (text.trim().length === 0 && !image) {
     return json({ error: 'invalid_text' }, 400);
   }
+
   // categories: 문자열만 추리고, 빈 값·중복 제거. 없으면 추천을 건너뛴다(하위호환).
   const categories = Array.isArray(body?.categories)
     ? [...new Set(body.categories.filter((c: unknown): c is string => typeof c === 'string' && c.trim().length > 0))]
     : [];
 
+  // 관측용: 이미지 "데이터"는 남기지 않고 길이만 기록한다(NFR-3).
+  console.log(`parse: textLen=${text.length} hasImage=${!!image} imgB64Len=${image?.base64.length ?? 0} cats=${categories.length}`);
+
   // 3) Claude Haiku 호출 (구조화 출력). Deno에 설치될 SDK 버전이 output_config를
   //    지원하는지 확신할 수 없어, 문서화된 REST 바디를 fetch로 직접 호출한다.
+  // 이미지가 있으면 [image, text] 블록. 없으면 기존과 바이트 동일한 문자열 content.
+  const userContent = image
+    ? [
+        { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+        { type: 'text', text: `OCR text (may be empty):\n${text}` },
+      ]
+    : text;
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), image ? IMAGE_LLM_TIMEOUT_MS : LLM_TIMEOUT_MS);
   let anthropicRes: Response;
   try {
     anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -143,9 +200,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 400,
-        system: buildSystemPrompt(categories),
+        system: buildSystemPrompt(categories, !!image),
         output_config: { format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
-        messages: [{ role: 'user', content: text }],
+        messages: [{ role: 'user', content: userContent }],
       }),
     });
   } catch (e) {
