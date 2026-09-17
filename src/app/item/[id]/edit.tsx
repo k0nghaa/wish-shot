@@ -6,8 +6,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -198,8 +196,13 @@ export default function ItemEditScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets
+        >
             {/* 이미지 미리보기 / 교체 (중앙 정사각) */}
             <TouchableOpacity style={styles.imageBox} onPress={pickImage} accessibilityRole="button" accessibilityLabel="사진 바꾸기">
               {newImage || imageUrl ? (
@@ -275,8 +278,7 @@ export default function ItemEditScreen() {
             {productName.trim().length === 0 ? (
               <Text style={styles.saveNote}>제품명을 입력하세요.</Text>
             ) : null}
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </ScrollView>
       )}
 
       <FolderPickerSheet
