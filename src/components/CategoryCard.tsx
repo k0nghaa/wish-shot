@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -48,6 +49,8 @@ export function CategoryCard({
             </View>
           ))}
         </View>
+        {/* 하단 그라데이션 — 이미지 위 흰 라벨 가독성(그림자 대신 자연스러운 페이드). */}
+        <LinearGradient colors={['transparent', colors.overlay]} style={styles.bottomFade} pointerEvents="none" />
         <View style={styles.labelWrap} pointerEvents="none">
           <Text style={styles.name} numberOfLines={1}>
             {name}
@@ -108,15 +111,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.two,
     paddingBottom: spacing.two,
   },
+  bottomFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '45%',
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
   name: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.bg, // 흰색 라벨(이미지 위)
-    // 오버레이 없이 이미지 위에서도 읽히도록 텍스트 그림자(순수 JS, 라이브러리 불필요).
-    // TODO(Step 8 재빌드): expo-linear-gradient 추가 후 이 그림자를 하단 그라데이션 오버레이로 교체.
-    textShadowColor: 'rgba(0,0,0,0.7)',
+    // 그라데이션 위에서도 밝은 배경에 안전하도록 옅은 그림자만 보조로 유지.
+    textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    textShadowRadius: 2,
   },
   deleteBadge: {
     position: 'absolute',

@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
+import { ImageZoomModal } from '@/components/ImageZoomModal';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { RegionSelectSheet } from '@/components/RegionSelectSheet';
 import { TagInput } from '@/components/TagInput';
@@ -117,6 +118,7 @@ export default function RegisterScreen() {
   const [folderSheet, setFolderSheet] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [zoomVisible, setZoomVisible] = useState(false); // 원본 확대 보기(롱프레스)
 
   // 중복 덮어쓰기 모달 상태
   const [dupItem, setDupItem] = useState<Item | null>(null);
@@ -409,7 +411,14 @@ export default function RegisterScreen() {
         automaticallyAdjustKeyboardInsets
       >
           {/* 이미지 미리보기 / 선택 (중앙 정사각) */}
-          <TouchableOpacity style={styles.imageBox} onPress={pickImage} accessibilityRole="button" accessibilityLabel="사진 선택">
+          <TouchableOpacity
+            style={styles.imageBox}
+            onPress={pickImage}
+            onLongPress={() => imageUri && setZoomVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="사진 선택"
+            accessibilityHint={imageUri ? '길게 누르면 원본을 확대해 봅니다' : undefined}
+          >
             {imageUri ? (
               <Image source={{ uri: imageUri }} style={styles.image} contentFit="cover" />
             ) : (
@@ -419,6 +428,19 @@ export default function RegisterScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+          {/* 제품 영역으로 분석: OCR 성공/실패와 무관하게 언제든 영역을 골라 AI 분석(제품 여럿·오채움 대비). */}
+          {imageUri ? (
+            <TouchableOpacity
+              onPress={reopenRegion}
+              style={styles.regionBtn}
+              accessibilityRole="button"
+              accessibilityLabel="제품 영역으로 분석"
+            >
+              <SymbolView name="crop" size={15} tintColor={colors.primary} />
+              <Text style={styles.regionBtnText}>제품 영역으로 분석</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* 분석 상태 인디케이터 (인라인) */}
           {analysisStatus ? (
@@ -562,6 +584,9 @@ export default function RegisterScreen() {
         onCancel={() => setDupVisible(false)}
       />
 
+      {/* 원본 확대 보기(롱프레스) — 텍스트를 직접 읽고 입력할 때 */}
+      <ImageZoomModal visible={zoomVisible} uri={imageUri} onClose={() => setZoomVisible(false)} />
+
       {/* 제품 영역 지정(Phase 6): OCR 텍스트 부족 시 열림. 선택 영역만 크롭해 전송. */}
       <RegionSelectSheet
         visible={analysisState.phase === 'regionSelect' || analysisState.phase === 'imageParsing'}
@@ -603,6 +628,16 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.one },
   imageHint: { fontSize: 13, color: colors.textSub },
+  regionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.one,
+    alignSelf: 'center',
+    paddingVertical: spacing.one,
+    paddingHorizontal: spacing.three,
+  },
+  regionBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
   changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
   status: {
     flexDirection: 'row',
