@@ -6,8 +6,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,7 +20,7 @@ import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/compon
 import { TagInput } from '@/components/TagInput';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
-import { readImageBytes } from '@/lib/imageBytes';
+import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import {
   createCategory,
   DuplicateItemError,
@@ -112,9 +110,10 @@ export default function ItemEditScreen() {
       Alert.alert('사진 접근 필요', '설정에서 사진 접근을 허용하세요.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1, exif: false });
     if (result.canceled) return;
     const asset = result.assets[0];
+    logImageDiag('edit.pickImage', asset.uri, { fileSize: asset.fileSize, mimeType: asset.mimeType });
     setNewImage({ uri: asset.uri, contentType: asset.mimeType ?? 'image/jpeg' });
   }
 
@@ -167,6 +166,11 @@ export default function ItemEditScreen() {
         Alert.alert('이미 있는 위시', '같은 브랜드·제품명의 위시가 있습니다. 브랜드나 제품명을 다르게 바꾸세요.');
         return;
       }
+      // 필드는 저장됐으나 새 사진이 아직 로컬에 없음(iCloud 최적화) → 사진만 교체 실패 안내.
+      if (e instanceof ImageNotReadyError) {
+        Alert.alert('사진 준비 중', e.message);
+        return;
+      }
       Alert.alert('오류', e instanceof Error ? e.message : '수정하지 못했습니다.');
     }
   }
@@ -192,8 +196,13 @@ export default function ItemEditScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets
+        >
             {/* 이미지 미리보기 / 교체 (중앙 정사각) */}
             <TouchableOpacity style={styles.imageBox} onPress={pickImage} accessibilityRole="button" accessibilityLabel="사진 바꾸기">
               {newImage || imageUrl ? (
@@ -269,8 +278,7 @@ export default function ItemEditScreen() {
             {productName.trim().length === 0 ? (
               <Text style={styles.saveNote}>제품명을 입력하세요.</Text>
             ) : null}
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </ScrollView>
       )}
 
       <FolderPickerSheet

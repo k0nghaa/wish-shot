@@ -35,7 +35,7 @@ Phase 2까지 **수동 입력**으로 저장하던 등록 화면 위에, **온�
 Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지, 커밋 컨벤션, 문서 동기화, 데이터 레이어 경유, 모르면 묻기)을 그대로 승계하고 다음을 추가한다.
 
 1. **비밀 값은 앱에 절대 넣지 않는다.** Claude API 키·Supabase `service_role` 키는 **Edge Function 환경 변수(시크릿)에만** 존재한다. 앱 번들(`EXPO_PUBLIC_*` 포함)에 들어가면 안 된다. 앱은 로그인 사용자의 세션(anon 클라이언트)으로 Edge Function을 호출한다.
-2. **이미지는 기기를 떠나지 않는다.** OCR은 **온디바이스**(ML Kit). 서버(Edge Function → LLM)로는 **OCR로 추출한 텍스트만** 보낸다. 원본 이미지는 저장용 Storage 업로드(Phase 2)를 제외하고 어디로도 전송하지 않는다. 이 방침을 **첫 업로드 시 사용자에게 고지한다**(NFR-3).
+2. **이미지는 기기를 떠나지 않는다.** OCR은 **온디바이스**(ML Kit). 서버(Edge Function → LLM)로는 **OCR로 추출한 텍스트만** 보낸다. 원본 이미지는 저장용 Storage 업로드(Phase 2)를 제외하고 어디로도 전송하지 않는다. 이 방침을 **첫 업로드 시 사용자에게 고지한다**(NFR-3). *(각주 — Phase 6 개정: 텍스트를 찾지 못한 경우에 한해 사용자가 직접 선택한 제품 영역 크롭만 동의 후 전송된다. `docs/phases/phase-6-hackathon-submission.md` 참고.)*
 3. **OCR 엔진은 인터페이스 뒤에 캡슐화한다(FR-8a).** `interface OcrEngine { recognize(uri): Promise<{ text; confidence? }> }` 를 두고, 구현체 `MlKitOcrEngine`(실기기)·`MockOcrEngine`(개발/테스트)를 그 뒤에 숨긴다. 화면·상태머신은 인터페이스만 안다 — 나중에 엔진을 갈아끼워도 로직 레이어는 무변경.
 4. **네이티브 의존성은 이 Phase 초반에 한 번에 추가.** ML Kit 텍스트 인식 래퍼는 **네이티브 모듈**이라 추가 시 EAS 재빌드가 필요하다. Step 1에서 미리 추가하고 재빌드를 한 번 돌린다. 이후 이 Phase 안에서 네이티브 의존성을 추가하지 않는다. **ML Kit 래퍼 패키지의 Expo SDK 57 호환 버전은 착수 시 먼저 확인**한다(결정 문서 §8 미결). 불확실하면 임의 버전을 쓰지 말고 사람에게 보고한다.
 5. **서버는 Edge Function 1개뿐.** Next.js·Express·별도 API 서버를 만들지 않는다. `parse-screenshot-text` Edge Function(Supabase, Deno 런타임) 하나로 LLM 정제를 처리한다. 더 필요해 보이면 사람에게 묻는다.
@@ -202,7 +202,7 @@ Phase 1·2 규칙(한국어 문자열, 디자인 토큰, 비밀값 커밋 금지
 **이 문서에서 확정한 결정:**
 - 정제 공급자: **Claude Haiku(유료) 유지.** 무료 LLM 티어(예: Gemini 무료)는 입력을 제품 개선·사람 검토에 사용하는 데이터 정책이라 NFR-3(텍스트만·프라이버시) 스탠스와 충돌 → 제외. 또한 OCR은 제품 필드만이 아니라 화면 전체 텍스트를 긁으므로 이름·주소가 섞일 수 있어 "제품 정보만"은 보장이 아님. 유료 티어는 입력을 학습에 쓰지 않음.
 - Edge Function은 `parse-screenshot-text` **1개**. 입력 `{ text }`, 출력 `{ productName, price, brand, confidence }`. Claude 키는 Edge Function 시크릿에만.
-- 이미지는 기기를 떠나지 않음(온디바이스 OCR). **텍스트만** 서버로. NFR-3 고지 포함.
+- 이미지는 기기를 떠나지 않음(온디바이스 OCR). **텍스트만** 서버로. NFR-3 고지 포함. *(Phase 6 개정: 텍스트 부족 시 선택 영역 크롭만 예외 전송.)*
 - OCR은 `OcrEngine` 인터페이스 뒤에 캡슐화(MlKit/Mock 교체 가능).
 - `analysis_logs`는 Phase 2에서 만든 테이블을 **쓰기만**(스키마 변경 없음).
 - 카테고리 자동 추천(FR-8)은 Phase 3 범위 밖 — 이후.

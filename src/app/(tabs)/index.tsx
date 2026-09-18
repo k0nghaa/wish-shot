@@ -9,7 +9,7 @@ import { CategoryCard } from '@/components/CategoryCard';
 import { EmptyState } from '@/components/EmptyState';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { colors, radius, spacing, type } from '@/constants/theme';
-import { toFileUri } from '@/lib/imageBytes';
+import { logImageDiag, toFileUri } from '@/lib/imageBytes';
 import {
   createCategory,
   deleteCategory,
@@ -55,6 +55,7 @@ export default function HomeScreen() {
     shareHandled.current = true;
     const imageUri = toFileUri(file.path);
     const imageMime = file.mimeType ?? 'image/jpeg';
+    logImageDiag('shareIntent', file.path, { mimeType: file.mimeType });
     resetShareIntent();
     router.push({ pathname: '/register', params: { imageUri, imageMime } });
   }, [hasShareIntent, shareIntent, resetShareIntent, router]);

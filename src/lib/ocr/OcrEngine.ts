@@ -13,7 +13,7 @@ export interface OcrResult {
 
 export interface OcrEngine {
   /**
-   * 로컬 이미지 uri에서 텍스트를 인식한다. 이미지는 기기를 떠나지 않는다(NFR-3).
+   * 로컬 이미지 uri에서 텍스트를 인식한다. OCR은 온디바이스라 이미지가 서버로 가지 않는다(NFR-3).
    * @param uri file:// 또는 스킴 없는 절대경로. 정규화는 imageBytes.toFileUri 참고.
    */
   recognize(uri: string): Promise<OcrResult>;

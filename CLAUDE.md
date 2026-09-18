@@ -2,7 +2,7 @@
 
 이 파일은 이 저장소에서 작업하는 Claude Code에게 제공하는 가이드입니다.
 
-> 상태: **Phase 5 완료** (디자인 리스킨 + 하단 탭바·상세 뷰어/정보 시트 + 익명 로그인 + TestFlight 배포). Phase 4까지의 등록·OCR 자동채움·편집·카테고리 이동·태그 위에, 전 화면을 **흰 배경 + iOS 시스템 그레이 모노톤**으로 리스킨하고, **하단 알약 탭바(전체·폴더·검색)** 구조를 도입했으며, 상세를 **풀스크린 뷰어 + 정보(i) 하프시트**로 재구성했습니다. 인증은 **익명 로그인**(로그인 벽 제거 — 켜면 바로 사용)으로 전환했고, 사용자 노출 카피를 **간결 단답형**으로 통일했습니다. 앱 아이콘·스플래시(검정 배경 워드마크)·헤더 로고를 적용하고 **TestFlight로 첫 외부 배포**를 완료했습니다. (Step 7 새로고침·스켈레톤, 찜·New·검색 기능 등은 Phase 6로 이관.) 이 문서는 현재 저장소 상태를 반영합니다.
+> 상태: **Phase 6 앱 코드 완료 · 제출(Step 8) 진행 중** (원티드 AI Championship 2026 제출용). Phase 5(리스킨·하단 탭바·상세 뷰어/정보 시트·익명 로그인·TestFlight) 위에 다음을 추가했습니다: (1) **iCloud "저장 공간 최적화" 사진 업로드 대응** — 파일 준비 폴링(`ensureFileReady`, exists&&size>0 재시도)·안내·재시도 + `__DEV__` 계측(1차). (2) **등록/편집 폼 키보드 가림 수정** — ScrollView `automaticallyAdjustKeyboardInsets`. (3) **텍스트가 부족한 제품 사진용 "제품 영역 지정" 이미지 폴백** — 사용자가 고른 사각 영역만 동의 후 Edge Function→Claude로 전송(하위호환, 미저장). (4) **NFR-3 문구 개정** — 방침·인앱 고지·README 정합, 과장 문구 제거. (5) **검색**(클라이언트 필터). 네이티브 모듈 `expo-image-manipulator`(크롭)·`expo-media-library`(iCloud 2차 대비)를 dev 재빌드 1회에 묶었습니다. **최종 production 빌드·외부 TestFlight 제출·랜딩·영상(Step 8)과 방침 Notion 동기화는 사람 진행.** 이 문서는 현재 저장소 상태를 반영합니다.
 
 ## 프로젝트 개요
 
@@ -24,8 +24,8 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - **인증**: **익명 로그인**(Phase 5). 세션이 없으면 `auth.signInAnonymouslyIfNeeded()`가 `supabase.auth.signInAnonymously()`로 기기별 익명 세션을 만든다 → **로그인 벽 없이 즉시 사용**. 세션은 `@react-native-async-storage/async-storage`에 저장 → 재시작 후 유지, RLS가 익명 세션의 `auth.uid()`로 행 격리(익명도 `authenticated` 롤이라 기존 GRANT·정책 그대로 적용). 대시보드 **Authentication → Anonymous sign-ins 토글 ON**(하단 Save)이 필요하다. 이메일 로그인 라우트(`login.tsx`)는 보존하되 정상 흐름에선 도달하지 않는다(계정 승격은 Phase 6). `signInWithPassword`/`signOut`은 `__DEV__` 왕복 버튼에서만 쓴다.
 - **공유 시트**: `expo-share-intent`(iOS Share Extension, 이미지 1개 수신).
 - **이미지**: `expo-image-picker`(앱 내 사진 선택), `expo-file-system`(선택/공유 이미지 uri → 바이트 읽기, `File.arrayBuffer()`). 둘 다 네이티브.
-- **OCR**: 온디바이스 **Apple Vision**(iOS 내장). 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr/`가 `recognitionLanguages=["ko-KR","en-US"]`로 한국어+영어를 인식. `OcrEngine` 인터페이스(`src/lib/ocr/`) 뒤에 캡슐화해 교체 가능. **엔진 결정**: 지시서의 Google ML Kit 대신 Apple Vision 채택 — iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, 어떤 RN용 ML Kit 래퍼도 Expo SDK 57/New Architecture 호환을 확인하지 못했기 때문. 온디바이스라 NFR-3(텍스트만 서버로)는 동일 만족.
-- **LLM 정제 + 카테고리 추천(FR-8)**: Edge Function `parse-screenshot-text`(Deno)가 Claude Haiku(`claude-haiku-4-5`)로 OCR 원문을 정제해 `{productName, price, brand, confidence, suggestedCategory}` 반환. 입력에 `categories?: string[]`(사용자 기존 카테고리 이름)을 받으면 그중 하나를 추천(`suggestedCategory`), 없거나 빈 배열이면 `null`(하위호환). 목록 밖 값은 서버·앱 양쪽에서 무시. 구조화 출력(json_schema) 사용. Claude 키는 함수 시크릿에만.
+- **OCR**: 온디바이스 **Apple Vision**(iOS 내장). 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr/`가 `recognitionLanguages=["ko-KR","en-US"]`로 한국어+영어를 인식. `OcrEngine` 인터페이스(`src/lib/ocr/`) 뒤에 캡슐화해 교체 가능. **엔진 결정**: 지시서의 Google ML Kit 대신 Apple Vision 채택 — iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, 어떤 RN용 ML Kit 래퍼도 Expo SDK 57/New Architecture 호환을 확인하지 못했기 때문. OCR은 온디바이스라 이미지가 서버로 가지 않고, AI 정제엔 **텍스트만** 전송한다. **단, 텍스트를 찾지 못한 경우에 한해 사용자가 직접 선택한 제품 영역 크롭만 동의 후 전송한다**(NFR-3 개정, Phase 6 — 통이미지·자동 전송 없음, 크롭 미저장).
+- **LLM 정제 + 카테고리 추천(FR-8)**: Edge Function `parse-screenshot-text`(Deno)가 Claude Haiku(`claude-haiku-4-5`)로 OCR 원문을 정제해 `{productName, price, brand, confidence, suggestedCategory}` 반환. 입력에 `categories?: string[]`(사용자 기존 카테고리 이름)을 받으면 그중 하나를 추천(`suggestedCategory`), 없거나 빈 배열이면 `null`(하위호환). 목록 밖 값은 서버·앱 양쪽에서 무시. 구조화 출력(json_schema) 사용. Claude 키는 함수 시크릿에만. **Phase 6**: 입력에 `image?: {base64, mediaType}`(사용자가 선택한 제품 영역 크롭)을 추가로 받는다 — OCR 텍스트 부족 시에만, 명시 동의 후. 이미지가 있으면 이미지+텍스트로 정제하고 없으면 기존과 바이트 동일(하위호환). 출력 스키마 불변. 크롭 이미지는 서버에서 미저장·미로깅(길이만 기록).
 - **빌드**: 윈도우 PC에서 EAS 클라우드 빌드 → 아이폰 개발 빌드 → TestFlight. 로컬에 Xcode/Mac 없음.
 
 ## 디렉터리 구조
@@ -120,7 +120,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 
 ## 데이터 레이어 · Supabase 접근
 
-- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름변경/삭제), `items`(전체·카테고리별·**태그별 listItemsByTag**/**전체 태그 listAllTags**/단건/생성/**수정 updateItem**/**카테고리 이동 moveItemCategory**/삭제/중복조회), `storage`(업로드/서명URL/배치 서명URL/삭제), `auth`(getCurrentUserId·getCurrentUserEmail·signOut), `errors`(DuplicateItemError·DuplicateCategoryError), `analysisLogs`(분석 로그 기록·item_id 연결 — 실패는 삼켜 저장을 막지 않음), `parse`(parseScreenshotText — Edge Function 호출, **텍스트 + 카테고리 이름 목록만** 전송, 이미지 아님). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
+- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름변경/삭제), `items`(전체·카테고리별·**태그별 listItemsByTag**/**전체 태그 listAllTags**/단건/생성/**수정 updateItem**/**카테고리 이동 moveItemCategory**/삭제/중복조회), `storage`(업로드/서명URL/배치 서명URL/삭제), `auth`(getCurrentUserId·getCurrentUserEmail·signOut), `errors`(DuplicateItemError·DuplicateCategoryError), `analysisLogs`(분석 로그 기록·item_id 연결 — 실패는 삼켜 저장을 막지 않음), `parse`(parseScreenshotText(text, image?) — Edge Function 호출. 기본은 **텍스트 + 카테고리 이름 목록만** 전송. OCR 텍스트 부족 시 사용자가 고른 **제품 영역 크롭**만 동의 후 함께 전송 — Phase 6). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
 - **편집·이동의 중복 판정.** `updateItem`은 `normalizeName`을 재계산하고, 편집으로 **다른 아이템**과 정규화명이 겹치면 23505 → `DuplicateItemError`로 변환해 화면이 **차단·안내**(덮어쓰기 없음). `moveItemCategory`는 `category_id`만 바꿔(정규화명 불변) 중복 위험이 없다. 카테고리 생성/이름변경 중복은 `DuplicateCategoryError`("동일한 이름의 카테고리가 있어요")로 변환(원본 메시지는 콘솔).
 - **빈 카테고리 표시(Phase 4 UX 결정).** 홈은 개수 0인 카테고리도 노출한다(Phase 2의 "빈 카테고리 비노출" 규칙을 뒤집음 — 삭제 여부를 사용자가 인지하도록). 대신 이동·편집·삭제로 카테고리가 0이 되면 `promptDeleteIfCategoryEmpty`로 삭제/유지를 묻는다.
 - **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`(hooks)로만 다룬다. `analysis_logs`는 Phase 2에서 만든 테이블을 **쓰기만** 한다(스키마 변경 없음). `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문).
@@ -147,8 +147,10 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 
 ```
 [iOS 공유 시트 / 앱 내 사진 선택]
-  → Expo 앱 → OcrEngine(Apple Vision, 온디바이스) → Edge Function(Claude Haiku 정제) → 폼 자동채움("AI가 채움")
-  → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL)
+  → Expo 앱 → OcrEngine(Apple Vision, 온디바이스)
+       ├ (텍스트 충분) 텍스트만 → Edge Function(Claude Haiku 정제)
+       └ (텍스트 부족) 제품 영역 지정 시트 → 선택 영역 크롭만(동의 후) → Edge Function
+  → 폼 자동채움("AI가 채움") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL, 원본 저장)
 ```
 
-Phase 4까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR(이미지는 기기를 안 떠남) → 텍스트(+카테고리 이름)만 Edge Function으로 전송해 정제·**카테고리 추천(FR-8)** → 폼 자동채움·추천 미리선택(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). 저장 후에는 **편집·카테고리 이동**, **하단 탭바(전체/폴더/검색)** 이동, **상세 풀스크린 뷰어·정보(i) 하프시트** 열람이 가능하고, **로그인 벽 없이 익명 세션**으로 바로 쓴다(설정=개인정보 열람). **기존 v1 데이터 이관은 범위에서 제외**(archive 보존만). Phase 5는 리스킨·탭바·정보 시트·익명 로그인 모두 **JS/설정 변경**이라 새 네이티브 모듈 없음(브랜딩 아이콘/스플래시 반영 + TestFlight 빌드만 EAS).
+Phase 4까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR → 텍스트(+카테고리 이름)만 Edge Function으로 전송해 정제·**카테고리 추천(FR-8)**(**텍스트 부족 시엔 사용자가 고른 제품 영역 크롭만 동의 후 전송 — Phase 6**) → 폼 자동채움·추천 미리선택(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). 저장 후에는 **편집·카테고리 이동**, **하단 탭바(전체/폴더/검색)** 이동, **상세 풀스크린 뷰어·정보(i) 하프시트** 열람이 가능하고, **로그인 벽 없이 익명 세션**으로 바로 쓴다(설정=개인정보 열람). **기존 v1 데이터 이관은 범위에서 제외**(archive 보존만). Phase 5는 리스킨·탭바·정보 시트·익명 로그인 모두 **JS/설정 변경**이라 새 네이티브 모듈 없음(브랜딩 아이콘/스플래시 반영 + TestFlight 빌드만 EAS).

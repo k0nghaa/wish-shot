@@ -11,7 +11,7 @@
 - **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. (이메일 가입/승격은 이후 Phase)
 - **공유 시트**: `expo-share-intent` (iOS Share Extension)
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
-- **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`)
+- **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하면 사용자가 선택한 제품 영역 크롭만 예외 전송해 분석(Phase 6, 하위호환·미저장)**
 - **빌드**: EAS 클라우드 빌드 → TestFlight (Windows PC + Mac 없이 iOS 개발·배포)
 - **디자인**: 흰 배경 + iOS 시스템 그레이 모노톤 리스킨(색 토큰 = `src/constants/theme.ts`)
 
@@ -75,7 +75,8 @@ npx tsc --noEmit
 ## OCR 정제 Edge Function (`parse-screenshot-text`)
 
 온디바이스 OCR(Apple Vision)로 뽑은 **텍스트만** Edge Function으로 보내 Claude Haiku가
-제품명·가격·브랜드를 정제합니다. 이미지는 기기를 떠나지 않습니다(NFR-3).
+제품명·가격·브랜드를 정제합니다. 원본 이미지는 비공개 저장소까지만 가고, AI 정제엔 텍스트만 전송합니다.
+단, 텍스트를 찾지 못한 경우에 한해 사용자가 직접 선택한 **제품 영역 크롭만** 확인 후 전송하며 저장하지 않습니다(NFR-3, Phase 6 개정).
 
 **시크릿 등록 & 배포** (Claude 키는 함수 시크릿에만 — 앱·커밋 금지):
 
