@@ -194,15 +194,15 @@ Phase 1~5 규칙(한국어·단답형 카피, 디자인 토큰, 비밀값 커밋
 
 ## 결과 기록
 
-- **완료일**:
-- **참가 신청 / 외부 TestFlight 베타 심사 결과(제출일·통과일·공개 링크)**:
-- **iCloud 업로드 실패 원인(계측 결과)과 적용한 수정(1차/2차)**:
-- **키보드 가림 수정 방식**:
-- **재빌드 1회에 포함된 네이티브 모듈**:
-- **Edge Function 이미지 분기 결과(계약·크기 상한·프롬프트·타임아웃·배포)**:
-- **제품 영역 지정 시트 구현 결과(트리거 임계값·크롭 UI 방식·상태 머신 변경·페이로드 크기)**:
-- **NFR-3 개정 최종 문구(4곳)**:
-- **검색 구현 여부·범위**:
-- **최종 빌드 번호 / 영상 / 랜딩 URL / 제출 완료 시각**:
-- **발생한 이슈와 해결**:
-- **다음(Phase 7)으로 넘길 것**: 찜·New·배지 · OCR 탭-투-필 오버레이(bbox 모듈) · 피사체 분리(VisionKit) · 빠른 담기 · 필름스트립 · 공유 · 출처 앱 · 다크 모드 · 이메일 승격 · 새로고침·스켈레톤 · 아이콘 개선 · (미구현 시) 검색
+- **완료일**: 앱 코드 Step 1~7 — 2026-09-18. (Step 8 제출·빌드는 사람 진행 예정.)
+- **참가 신청 / 외부 TestFlight 베타 심사 결과(제출일·통과일·공개 링크)**: 사람 진행(Step 0 참가·베타 제출 완료, 최종 빌드는 Step 8).
+- **iCloud 업로드 실패 원인(계측 결과)과 적용한 수정(1차/2차)**: 계측(uri 스킴·`File.exists`·`size`·재시도 로그, `[WishShot/img]`) 추가. **1차** — `ensureFileReady`(exists && size>0 폴링 500ms×6) + `readImageBytes`가 읽기 전 통과, OCR도 같은 게이트, 실패 시 `image_not_ready` 안내·재시도, picker `exif:false`. **2차**(`expo-media-library`)는 모듈만 이번 재빌드에 포함하고 코드는 보류(다른 기기 iCloud 피드백 후 판단). `__DEV__` 시뮬레이션 노브로 UX 검증(기본 off).
+- **키보드 가림 수정 방식**: `KeyboardAvoidingView(padding)` → ScrollView `automaticallyAdjustKeyboardInsets` + `keyboardDismissMode="interactive"`(register·edit). iOS가 실제 키보드 높이만큼 인셋을 잡고 포커스 필드를 올림.
+- **재빌드 1회에 포함된 네이티브 모듈**: `expo-image-manipulator`(~57.0.18, 크롭) + `expo-media-library`(~57.0.5, iCloud 2차 대비). *(개발 검증은 Expo Go로 대체해 dev 빌드는 스킵 — 두 모듈이 Expo Go에 포함됨. production 빌드는 Step 8.)*
+- **Edge Function 이미지 분기 결과(계약·크기 상한·프롬프트·타임아웃·배포)**: 입력에 `image?:{base64, mediaType}` 추가. mediaType 화이트리스트(jpeg/png)·base64 2M 상한 초과 시 `400`. 이미지 있으면 `[image, text]` 블록 + 이미지 프롬프트(피사체·로고로 추정, 가격 안 보이면 null·추측 금지), 타임아웃 25s. 없으면 Phase 5와 바이트 동일(하위호환), 출력 스키마 불변. 크롭 미저장·미로깅(길이만). **배포 완료.**
+- **제품 영역 지정 시트 구현 결과(트리거 임계값·크롭 UI 방식·상태 머신 변경·페이로드 크기)**: 트리거 `OCR_MIN_CHARS=20`. 크롭 UI = **중앙 박스 + 4모서리 핸들**(비율 기반, gesture-handler+reanimated, 영역 밖 딤). `useAnalysis`에 `regionSelect`·`imageParsing` 상태 + `submitRegion`/`cancelRegion`/`reopenRegion`. 크롭 = 선택 영역 → 긴 변 ≤1024 resize → JPEG 0.8 → base64. `parsed`에 `source:'image_region'` 기록. 실패 시 시트 재열기.
+- **NFR-3 개정 최종 문구(4곳)**: "AI 정제엔 인식된 텍스트만 전송. 단, 텍스트를 찾지 못한 경우 사용자가 직접 선택한 제품 영역만 확인 후 전송하며 저장하지 않음." — `src/constants/privacy.ts`·`docs/legal/privacy.html`(§2·§3)·`README.md`·`CLAUDE.md` 정합. 과장 문구("기기를 떠나지 않는다" 등) 라이브 표면 0. **Notion 게시본 동기화는 사람.**
+- **검색 구현 여부·범위**: 구현. 클라이언트 필터(제품명·브랜드·태그·메모, 대소문자·공백 무시, 300ms 디바운스) → 3열 그리드 → 상세(단일). 빈 상태 2종. 서버 쿼리·인덱스 없음.
+- **최종 빌드 번호 / 영상 / 랜딩 URL / 제출 완료 시각**: 사람 진행(Step 8).
+- **발생한 이슈와 해결**: 테스트를 **옛 TestFlight(프로덕션) 빌드**로 진행해 JS 변경이 반영 안 되던 혼선 → **Expo Go**로 검증 전환(새 모듈이 Expo Go에 포함돼 dev 재빌드 없이 Step 5~7 검증, EAS 빌드 절약). 키보드는 여러 시도 끝에 `automaticallyAdjustKeyboardInsets`가 정답으로 확인. 크롭 UI는 React Compiler `react-hooks/immutability`와의 충돌을 shared value를 비율로 다루고 deps에서 제외해 해소, 제스처 콜백은 `'worklet'` 명시.
+- **다음(Phase 7)으로 넘길 것**: 찜·New·배지 · OCR 탭-투-필 오버레이(bbox 모듈) · 피사체 분리(VisionKit) · 빠른 담기 · 필름스트립 · 공유 · 출처 앱 · 다크 모드 · 이메일 승격 · 새로고침·스켈레톤 · 아이콘 개선 · iCloud 2차(`expo-media-library` getAssetInfoAsync — 필요 시)
