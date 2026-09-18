@@ -75,7 +75,8 @@ npx tsc --noEmit
 ## OCR 정제 Edge Function (`parse-screenshot-text`)
 
 온디바이스 OCR(Apple Vision)로 뽑은 **텍스트만** Edge Function으로 보내 Claude Haiku가
-제품명·가격·브랜드를 정제합니다. 이미지는 기기를 떠나지 않습니다(NFR-3).
+제품명·가격·브랜드를 정제합니다. 원본 이미지는 비공개 저장소까지만 가고, AI 정제엔 텍스트만 전송합니다.
+단, 텍스트를 찾지 못한 경우에 한해 사용자가 직접 선택한 **제품 영역 크롭만** 확인 후 전송하며 저장하지 않습니다(NFR-3, Phase 6 개정).
 
 **시크릿 등록 & 배포** (Claude 키는 함수 시크릿에만 — 앱·커밋 금지):
 

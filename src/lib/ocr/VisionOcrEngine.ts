@@ -8,7 +8,7 @@ import type { OcrEngine, OcrResult } from './OcrEngine';
  * 로컬 Expo 네이티브 모듈(expo-vision-ocr) 기반 온디바이스 OCR 엔진.
  *
  * - iOS: Apple Vision(OS 내장, 온디바이스). 한국어+영어 인식(recognitionLanguages 지정).
- * - 이미지는 기기를 떠나지 않는다(NFR-3).
+ * - OCR은 온디바이스라 이미지가 서버로 가지 않는다(NFR-3). 단, 텍스트 부족 시 사용자가 고른 제품 영역 크롭은 OCR 밖(RegionSelectSheet)에서 동의 후 전송될 수 있다.
  *
  * 네이티브 모듈이므로 Expo Go에서는 동작하지 않는다. 개발/시뮬레이터에서 화면 로직을
  * 검증할 때는 MockOcrEngine을 쓴다(엔진 선택은 ./index 참고).
