@@ -79,8 +79,9 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
     case 'parsing':
       return state.phase === 'ocrRunning' ? { ...state, phase: 'parsing' } : state;
     case 'regionSelect':
-      // OCR 후(텍스트 부족) 또는 이미지 분석 실패 후 재시도 시 시트를 (다시) 연다.
-      return state.phase === 'ocrRunning' || state.phase === 'error'
+      // 자동(OCR 텍스트 부족) 외에, 사용자가 "제품 영역으로 분석" 버튼으로 언제든 연다
+      // (자동채움이 원하던 제품이 아니거나 사진에 제품이 여럿일 때). 진행 중/제출 후엔 무시.
+      return ['imageReceived', 'ocrRunning', 'parsing', 'filled', 'error'].includes(state.phase)
         ? { ...state, phase: 'regionSelect', errorKind: null }
         : state;
     case 'imageParsing':
@@ -192,8 +193,12 @@ export function useAnalysis() {
   // 시트 취소 → 수동 입력 폴백(E-1 경로).
   const cancelRegion = useCallback((rawText: string) => dispatch({ type: 'error', kind: 'ocr_empty', rawText }), []);
 
-  // 이미지 분석 실패 후 "다시 시도" → 시트 재열기.
-  const reopenRegion = useCallback(() => dispatch({ type: 'regionSelect' }), []);
+  // "제품 영역으로 분석" 버튼(및 이미지 실패 후 재시도) → 시트 열기.
+  // 진행 중이던 자동 분석(analyze/parse)이 뒤늦게 filled 를 던지지 않도록 run 토큰을 무효화한다.
+  const reopenRegion = useCallback(() => {
+    runRef.current++;
+    dispatch({ type: 'regionSelect' });
+  }, []);
 
   const markSubmitted = useCallback(() => dispatch({ type: 'submitted' }), []);
   const reset = useCallback(() => dispatch({ type: 'reset' }), []);

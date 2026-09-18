@@ -420,6 +420,19 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
 
+          {/* 제품 영역으로 분석: OCR 성공/실패와 무관하게 언제든 영역을 골라 AI 분석(제품 여럿·오채움 대비). */}
+          {imageUri ? (
+            <TouchableOpacity
+              onPress={reopenRegion}
+              style={styles.regionBtn}
+              accessibilityRole="button"
+              accessibilityLabel="제품 영역으로 분석"
+            >
+              <SymbolView name="crop" size={15} tintColor={colors.primary} />
+              <Text style={styles.regionBtnText}>제품 영역으로 분석</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {/* 분석 상태 인디케이터 (인라인) */}
           {analysisStatus ? (
             <View style={styles.status} accessibilityLiveRegion="polite">
@@ -603,6 +616,16 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.one },
   imageHint: { fontSize: 13, color: colors.textSub },
+  regionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.one,
+    alignSelf: 'center',
+    paddingVertical: spacing.one,
+    paddingHorizontal: spacing.three,
+  },
+  regionBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
   changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
   status: {
     flexDirection: 'row',
