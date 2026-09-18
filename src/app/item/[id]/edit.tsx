@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
+import { ImageZoomModal } from '@/components/ImageZoomModal';
 import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
 import { TagInput } from '@/components/TagInput';
 import { colors, radius, spacing, type } from '@/constants/theme';
@@ -46,6 +47,7 @@ export default function ItemEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [loading, setLoading] = useState(true);
+  const [zoomVisible, setZoomVisible] = useState(false); // 원본 확대 보기(롱프레스)
   const [imageUrl, setImageUrl] = useState<string | null>(null); // 기존 이미지(signed URL)
   // 새로 고른 교체 이미지(로컬 uri). null 이면 기존 이미지 유지.
   const [newImage, setNewImage] = useState<{ uri: string; contentType: string } | null>(null);
@@ -204,7 +206,14 @@ export default function ItemEditScreen() {
           automaticallyAdjustKeyboardInsets
         >
             {/* 이미지 미리보기 / 교체 (중앙 정사각) */}
-            <TouchableOpacity style={styles.imageBox} onPress={pickImage} accessibilityRole="button" accessibilityLabel="사진 바꾸기">
+            <TouchableOpacity
+              style={styles.imageBox}
+              onPress={pickImage}
+              onLongPress={() => (newImage?.uri ?? imageUrl) && setZoomVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="사진 바꾸기"
+              accessibilityHint="길게 누르면 원본을 확대해 봅니다"
+            >
               {newImage || imageUrl ? (
                 <Image source={{ uri: newImage?.uri ?? imageUrl! }} style={styles.image} contentFit="cover" transition={150} />
               ) : (
@@ -280,6 +289,9 @@ export default function ItemEditScreen() {
             ) : null}
         </ScrollView>
       )}
+
+      {/* 원본 확대 보기(롱프레스) */}
+      <ImageZoomModal visible={zoomVisible} uri={newImage?.uri ?? imageUrl} onClose={() => setZoomVisible(false)} />
 
       <FolderPickerSheet
         visible={folderSheet}
