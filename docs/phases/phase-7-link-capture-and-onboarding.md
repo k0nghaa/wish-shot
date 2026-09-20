@@ -294,7 +294,8 @@ Safari/앱에서 URL 공유 → WishShot
   - **권한·삭제(`src/lib/photoLibrary.ts` `deletePhotoAsset`)**: `getPermissionsAsync()`로 무프롬프트 확인 → `accessPrivileges !== 'all'`이면 `requestPermissionsAsync()`(**writeOnly 기본 false = read-write 전체** 요청; writeOnly=true는 add-only라 삭제 불가라 넘기지 않음) → 그래도 `'all'`이 아니면 `'denied'` 반환(제한/거부: 특정 자산 삭제 불가, 앨범단위 권한은 iOS에 없음). 전체 접근이면 `deleteAssetsAsync([assetId])`(**iOS 시스템 "사진 삭제?" 확인창 강제, 억제 불가** — 사용자 확인해야 실제 삭제). 별도 앱 확인창은 띄우지 않음(HIG). 반환 `'deleted'|'denied'|'error'`. 사용자가 OS 확인창에서 취소하면 `deleteAssetsAsync`가 `false`(또는 throw) → `'error'`로 매핑해 조용히 넘긴다.
     - **API 확인(추측 금지)**: 설치본 `expo-media-library@57.0.5` 타입으로 확인 — `requestPermissionsAsync(writeOnly=false, …)`, `deleteAssetsAsync(assets): Promise<boolean>`, `PermissionResponse.accessPrivileges?: 'all'|'limited'|'none'`. top-level `deleteAssetsAsync`는 SDK 57에서 deprecated→런타임 throw라 **getRecentPhotoAsset과 동일하게 `expo-media-library/legacy`에서 import**(같은 파일이 이미 legacy 사용).
   - **회귀**: pickImage 결과 처리(`canceled`)·기존 저장·덮어쓰기 흐름 불변. 삭제 실패/거부는 저장을 되돌리지 않음(위시는 이미 저장됨).
-  - **실기기 검증(사람)**: 전체 접근 경로(사진 업로드 + 앨범 삭제 확인)는 실기기에서 정상 확인됨(로그 `delete permission {accessPrivileges:'all'}` → `deleteAssetsAsync {ok:true}`). 제한/거부·취소 폴백은 아래 체크리스트에서 계속 확인.
+  - **제한 접근 정책(사용자 결정)**: 제한(`limited`) 접근에서는 "방금 캡처한 사진 담기"(읽기)는 되지만 **저장 후 앨범 삭제 제안은 뜨지 않는다**(`canOfferAlbumDelete` 게이트) — 의도된 동작. 처음 전제("제한이면 assetId null")와 달리 방금 캡처한 사진은 허용 범위 안이라 assetId 가 non-null 이었지만, "삭제=전체 접근" 정책을 택해 제한/거부에는 제안을 조용히 생략(프라이버시 선택 존중·나그 방지, HIG). **후속 과제(미착수)**: 발견성 보완용으로 **설정 화면에 소극적 한 줄 안내**("앨범 정리를 원하면 전체 사진 접근을 허용하세요") 추가 — 매번 나그하지 않으면서 경로만 알리는 절충. 지금 범위엔 미포함(별도 작업).
+  - **실기기 검증(사람)**: 전체 접근 경로(사진 업로드 + 앨범 삭제 확인)는 실기기에서 정상 확인됨(로그 `delete permission {accessPrivileges:'all'}` → `deleteAssetsAsync {ok:true}`). 제한 접근에서 삭제 제안 미노출도 확인됨(의도대로). 거부·취소 폴백은 아래 체크리스트에서 계속 확인.
 
 ### Batch C — 실기기 검증(체크리스트, 사람)
 - [x] 앱에서 **사진 고르기**(PHPicker) → 저장 → "앨범에서 삭제" 제안이 뜬다. (**공유 시트 경로에선 안 뜨고**, "방금 캡처한 사진" 경로에선 뜬다.)
