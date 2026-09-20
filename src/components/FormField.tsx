@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   },
   labelWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   label: { ...type.body, color: colors.textMain },
-  required: { color: colors.accent },
+  required: { color: colors.error },
   value: { flex: 1 },
   aiBadge: {
     borderRadius: radius.pill,

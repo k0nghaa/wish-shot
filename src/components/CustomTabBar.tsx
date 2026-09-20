@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, shadow, spacing } from '@/constants/theme';
 
+import { useTabBarVisibility } from './tabBarVisibility';
+
 /**
  * 하단 플로팅 알약 탭바 (전체 / 폴더 / 검색). JS 전용 — 재빌드 없음.
  * 활성 = label(검정, 굵게), 비활성 = inactive. New 배지는 Phase 6.
@@ -15,13 +17,17 @@ type TabDef = { route: string; label: string; icon: SFSymbol };
 // 렌더 순서: 전체 | 폴더 | 검색 (파일 선언 순서와 무관하게 고정)
 const TABS: TabDef[] = [
   { route: 'all', label: '전체', icon: 'square.stack' },
-  { route: 'index', label: '폴더', icon: 'square.grid.2x2.fill' },
+  { route: 'index', label: '카테고리', icon: 'square.grid.2x2.fill' },
   { route: 'search', label: '검색', icon: 'magnifyingglass' },
 ];
 
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { hidden } = useTabBarVisibility();
   const activeRoute = state.routes[state.index]?.name;
+
+  // 다중 선택 중에는 숨겨 선택 액션바에 자리를 내준다.
+  if (hidden) return null;
 
   return (
     <View style={[styles.wrap, { paddingBottom: insets.bottom || spacing.two }]} pointerEvents="box-none">
@@ -49,7 +55,10 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
                 tintColor={tint}
                 weight={focused ? 'semibold' : 'regular'}
               />
-              <Text style={[styles.label, { color: tint, fontWeight: focused ? '700' : '500' }]}>
+              <Text
+                style={[styles.label, { color: tint, fontWeight: focused ? '700' : '500' }]}
+                numberOfLines={1}
+              >
                 {tab.label}
               </Text>
             </TouchableOpacity>
