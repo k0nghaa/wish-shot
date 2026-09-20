@@ -23,6 +23,14 @@ export async function getRecentPhotoAsset(): Promise<{ uri: string; assetId: str
   // 이미 허용됐으면 프롬프트 없이 통과, 아니면 이 시점에만 요청한다.
   let perm = await MediaLibrary.getPermissionsAsync();
   if (!perm.granted) perm = await MediaLibrary.requestPermissionsAsync();
+  if (__DEV__) {
+    console.log('[WishShot/photo] permission', {
+      granted: perm.granted,
+      status: perm.status,
+      accessPrivileges: perm.accessPrivileges,
+      canAskAgain: perm.canAskAgain,
+    });
+  }
   if (!perm.granted) return null;
 
   try {
@@ -36,12 +44,25 @@ export async function getRecentPhotoAsset(): Promise<{ uri: string; assetId: str
     };
     const page = await MediaLibrary.getAssetsAsync(options);
     const asset = page.assets[0];
+    if (__DEV__) {
+      console.log('[WishShot/photo] getAssetsAsync', {
+        totalCount: page.totalCount,
+        returned: page.assets.length,
+        firstUri: asset?.uri,
+        firstMediaType: asset?.mediaType,
+      });
+    }
     if (!asset) return null;
     // ph:// → 읽을 수 있는 localUri(file://). 실패하면 원 uri 로 폴백(방어적).
-    const info = await MediaLibrary.getAssetInfoAsync(asset).catch(() => null);
+    const info = await MediaLibrary.getAssetInfoAsync(asset).catch((e) => {
+      if (__DEV__) console.warn('[WishShot/photo] getAssetInfoAsync 실패', e);
+      return null;
+    });
+    if (__DEV__) console.log('[WishShot/photo] localUri', { localUri: info?.localUri, fallback: !info?.localUri });
     return { uri: info?.localUri ?? asset.uri, assetId: asset.id };
-  } catch {
+  } catch (e) {
     // 자산 조회 실패는 제안을 감출 뿐 저장 흐름과 무관하다.
+    if (__DEV__) console.warn('[WishShot/photo] getAssetsAsync 실패', e);
     return null;
   }
 }
