@@ -27,7 +27,7 @@ import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
-import { getRecentPhotoAsset } from '@/lib/photoLibrary';
+import { deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
   createCategory,
@@ -108,6 +108,9 @@ export default function RegisterScreen() {
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
+  // 앨범 원본 삭제(기능 2): 앱 내 picker 로 고른 사진의 자산 id. 전체 접근이 아니면 null → 삭제 옵션 비노출.
+  // 공유 시트 경로(params.imageUri)·최근사진 제안은 이 값을 세우지 않아 자연히 제외된다.
+  const [pickedAssetId, setPickedAssetId] = useState<string | null>(null);
   // "방금 캡처한 사진" 제안(기능 1): 최근 사진 로드 중 표시 / 실패 시 숨김.
   const [recentLoading, setRecentLoading] = useState(false);
   const [recentHidden, setRecentHidden] = useState(false);
@@ -275,6 +278,8 @@ export default function RegisterScreen() {
     logImageDiag('pickImage', asset.uri, { fileSize: asset.fileSize, mimeType: asset.mimeType });
     setImageUri(asset.uri);
     if (asset.mimeType) setContentType(asset.mimeType);
+    // assetId 는 전체 접근이 아니면 null 일 수 있다(문서: limited 권한 시 null). null 이면 삭제 옵션을 감춘다.
+    setPickedAssetId(asset.assetId ?? null);
   }
 
   // "방금 캡처한 사진 담기"(기능 1): 탭할 때만 최근 사진 읽기 권한을 요청한다(HIG 적시 요청).
@@ -309,6 +314,29 @@ export default function RegisterScreen() {
     setDupItem(existing);
     setDupThumb(url);
     setDupVisible(true);
+  }
+
+  // 저장 성공 직후 원본 스크린샷 앨범 삭제를 제안한다(기능 2). picker 로 고른 사진(assetId 있음)만.
+  // 공유 시트·최근사진 경로는 pickedAssetId 가 null 이라 자연히 제외된다. 이미 저장된 뒤라 삭제는 선택.
+  async function offerAlbumDelete() {
+    if (!pickedAssetId) return;
+    const wantsDelete = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        '앨범에서 삭제',
+        '이 스크린샷을 아이폰 앨범에서도 삭제할까요?',
+        [
+          { text: '유지', style: 'cancel', onPress: () => resolve(false) },
+          { text: '삭제', style: 'destructive', onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      );
+    });
+    if (!wantsDelete) return;
+    const result = await deletePhotoAsset(pickedAssetId);
+    if (result === 'denied') {
+      Alert.alert('앨범 삭제 불가', "앨범 삭제는 '모든 사진' 접근이 필요합니다. 설정 > 위시샷 > 사진에서 허용하세요.");
+    }
+    // 'deleted' 는 OS 확인창으로 충분(별도 안내 없음), 'error'(취소 포함)는 위시가 이미 저장돼 조용히 넘긴다.
   }
 
   async function handleSave() {
@@ -363,6 +391,7 @@ export default function RegisterScreen() {
     recordAnalysisLog(id);
     markSubmitted();
     setSaving(false);
+    await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
     goToSavedCategory();
   }
 
@@ -395,6 +424,7 @@ export default function RegisterScreen() {
       markSubmitted();
       setDupVisible(false);
       setOverwriteBusy(false);
+      await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
       goToSavedCategory();
     } catch (e) {
       setOverwriteBusy(false);
