@@ -126,7 +126,7 @@ export default function HomeScreen() {
   function enterDeleteMode() {
     const deletable = (rows ?? []).filter((r) => !r.isUncat);
     if (deletable.length === 0) {
-      Alert.alert('폴더 없음', '삭제할 폴더가 없습니다.');
+      Alert.alert('카테고리 없음', '삭제할 카테고리가 없습니다.');
       return;
     }
     setDeleteMode(true);
@@ -217,7 +217,7 @@ export default function HomeScreen() {
       />
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>폴더</Text>
+        <Text style={styles.title}>카테고리</Text>
         {deleteMode ? (
           <TouchableOpacity
             onPress={() => setDeleteMode(false)}
@@ -235,7 +235,7 @@ export default function HomeScreen() {
               style={styles.pillBtn}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="새 폴더"
+              accessibilityLabel="새 카테고리"
             >
               <SymbolView name="plus" size={22} tintColor={colors.textMain} />
             </TouchableOpacity>
@@ -245,7 +245,7 @@ export default function HomeScreen() {
               style={styles.pillBtn}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="폴더 삭제"
+              accessibilityLabel="카테고리 삭제"
             >
               <SymbolView name="ellipsis" size={22} tintColor={colors.textMain} />
             </TouchableOpacity>

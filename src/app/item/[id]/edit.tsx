@@ -107,11 +107,7 @@ export default function ItemEditScreen() {
   }, [id, router]);
 
   async function pickImage() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('사진 접근 필요', '설정에서 사진 접근을 허용하세요.');
-      return;
-    }
+    // PHPicker 는 권한이 없어도 열린다 — 사전 권한 요청을 하지 않아 불필요한 권한창을 없앤다.
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1, exif: false });
     if (result.canceled) return;
     const asset = result.assets[0];
@@ -269,7 +265,7 @@ export default function ItemEditScreen() {
 
             {/* 그룹 카드 2: 폴더·메모 */}
             <FormCard>
-              <DisclosureRow label="폴더" value={folderName} onPress={() => setFolderSheet(true)} />
+              <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
               <FormBlock label="메모">
                 <TextInput
                   style={formInput.memo}

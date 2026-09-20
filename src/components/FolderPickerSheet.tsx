@@ -96,7 +96,7 @@ export function FolderPickerSheet({
       }
     } catch (e) {
       setBusy(false);
-      Alert.alert('오류', e instanceof Error ? e.message : '폴더를 만들지 못했습니다.');
+      Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했습니다.');
     }
   }
 
@@ -114,7 +114,7 @@ export function FolderPickerSheet({
           }}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>폴더 선택</Text>
+            <Text style={styles.title}>카테고리 선택</Text>
             {busy ? <ActivityIndicator color={colors.primary} /> : null}
           </View>
           <CategoryPicker
@@ -128,7 +128,7 @@ export function FolderPickerSheet({
           <View style={styles.newRow}>
             <TextInput
               style={styles.input}
-              placeholder="새 폴더 이름"
+              placeholder="새 카테고리 이름"
               placeholderTextColor={colors.textDisabled}
               value={name}
               onChangeText={setName}

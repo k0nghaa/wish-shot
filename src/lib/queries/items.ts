@@ -161,6 +161,26 @@ export async function updateItem(id: string, input: UpdateItemInput): Promise<It
 }
 
 /**
+ * 여러 아이템의 카테고리를 한 번에 바꾼다(전체 탭 다중 선택 이동). `categoryId === null` 이면 미분류로.
+ * `moveItemCategory` 와 같이 category_id 만 바꾸므로 normalized_name·중복 위험이 없다.
+ */
+export async function moveItems(ids: string[], categoryId: string | null): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('items').update({ category_id: categoryId }).in('id', ids);
+  if (error) throw new Error(`카테고리를 옮기지 못했습니다: ${error.message}`);
+}
+
+/**
+ * 여러 아이템 행을 한 번에 삭제한다(전체 탭 다중 선택 삭제). Storage 객체 삭제는 별도로
+ * `deleteItemImages` 를 호출한다(단건 `deleteItem` 과 동일한 분리 원칙).
+ */
+export async function deleteItems(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('items').delete().in('id', ids);
+  if (error) throw new Error(`아이템을 삭제하지 못했습니다: ${error.message}`);
+}
+
+/**
  * 아이템의 카테고리만 바꾼다(FR-15 빠른 이동). `categoryId === null` 이면 미분류로 이동.
  * 다른 필드·normalized_name 은 건드리지 않으므로 중복 위험이 없다. updated_at 은 트리거가 갱신.
  */

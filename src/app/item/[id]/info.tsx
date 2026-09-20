@@ -72,7 +72,7 @@ export default function ItemInfoScreen() {
           </View>
 
           <View style={styles.card}>
-            <InfoRow label="폴더" value={folderName} last={!item.memo && !(item.tags && item.tags.length > 0)} />
+            <InfoRow label="카테고리" value={folderName} last={!item.memo && !(item.tags && item.tags.length > 0)} />
             {item.memo ? (
               <View style={[styles.block, (item.tags && item.tags.length > 0) ? styles.blockDivider : null]}>
                 <Text style={styles.blockLabel}>메모</Text>

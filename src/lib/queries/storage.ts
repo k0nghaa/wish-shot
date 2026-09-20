@@ -111,3 +111,11 @@ export async function deleteItemImage(imageKey: string): Promise<void> {
   if (error) throw new Error(`이미지를 삭제하지 못했습니다: ${error.message}`);
   invalidateSignedUrl(imageKey);
 }
+
+/** 여러 Storage 객체를 한 번에 삭제한다(전체 탭 다중 선택 삭제 시 행과 함께 지운다). */
+export async function deleteItemImages(imageKeys: string[]): Promise<void> {
+  if (imageKeys.length === 0) return;
+  const { error } = await supabase.storage.from(BUCKET).remove(imageKeys);
+  if (error) throw new Error(`이미지를 삭제하지 못했습니다: ${error.message}`);
+  imageKeys.forEach(invalidateSignedUrl);
+}
