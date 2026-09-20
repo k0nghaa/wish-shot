@@ -1,4 +1,6 @@
-import * as MediaLibrary from 'expo-media-library';
+// SDK 57 부터 top-level 의 getAssetsAsync/getAssetInfoAsync 는 deprecated 라 런타임 에러를 던진다.
+// 자산 조회는 legacy 서브패스에서 가져온다(권한·상수·타입 모두 여기 포함). 근거: 배포 경고 메시지 + docs.
+import * as MediaLibrary from 'expo-media-library/legacy';
 
 /**
  * 사진 앨범 접근 유틸(기능 1·2 공용). 네이티브 준비는 Batch A(expo-media-library)에서 끝났고,

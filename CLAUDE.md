@@ -58,8 +58,7 @@ src/
     supabase.ts         # createClient<Database> (타입 클라이언트)
     normalize.ts        # normalizeName(brand,productName) — 중복 판정 정규화(단일 소스)
     imageBytes.ts       # uri → ArrayBuffer(File.arrayBuffer) + file:// 정규화
-    photoLibrary.ts     # 앨범 접근(Phase 7, expo-media-library, 순수 JS). getRecentPhotoAsset: 최근 사진 1장의 읽을 수 있는 localUri(ph://→file://)+assetId, 적시 권한. (deletePhotoAsset은 Batch C)
-    shareGuard.ts       # 공유 재진입 가드(Phase 7): 등록/편집 폼 "작성 중" 모듈 전역 플래그(언마운트 경합 회피). 홈이 URL 공유 처리 시 소비해 "링크 저장으로 이동?" 확인
+    photoLibrary.ts     # 앨범 접근(Phase 7, expo-media-library/legacy, 순수 JS). getRecentPhotoAsset: 최근 사진 1장의 읽을 수 있는 localUri(ph://→file://)+assetId, 적시 권한. (deletePhotoAsset은 Batch C)
     emptyCategory.ts    # promptDeleteIfCategoryEmpty — 이동·편집·삭제로 카테고리가 0이 되면 삭제/유지 안내(응답 대기 후 반환)
     formatDate.ts / formatPrice.ts
     ocr/                # OcrEngine 인터페이스 + VisionOcrEngine(Apple Vision)·MockOcrEngine + index(환경별 엔진 선택). 화면은 @/lib/ocr만 import

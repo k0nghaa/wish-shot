@@ -18,7 +18,6 @@ import {
   listItems,
   renameCategory,
 } from '@/lib/queries';
-import { consumeFormInProgress } from '@/lib/shareGuard';
 
 // 하단 플로팅 탭바에 가리지 않도록 목록 하단 여백 확보.
 const TABBAR_SPACE = 96;
@@ -64,19 +63,13 @@ export default function HomeScreen() {
     if (!isFocused || shareHandled.current) return;
 
     // 1) URL/웹페이지 공유 → 링크붙이기 모드. 앱이 URL 을 text 로 넘기는 경우도 흡수한다.
+    // 연속 공유(이미지 폼이 떠 있던 중 URL 공유 등)는 딥링크가 앱을 홈으로 재진입시키며 기존 폼을 정리하므로
+    // 여기서는 소리 없이 새 공유 화면으로 이동한다(저장 전이라 고아 파일 없음). 폼 보존은 후속(재빌드 시).
     const url = shareIntent?.webUrl ?? firstUrl(shareIntent?.text);
     if ((shareIntent?.type === 'weburl' || shareIntent?.type === 'text') && url) {
       shareHandled.current = true;
       resetShareIntent();
-      // 작성 중이던 등록/편집 폼이 있었으면(딥링크로 이미 정리됨) 소리 없이 넘기지 않고 확인받는다.
-      if (consumeFormInProgress()) {
-        Alert.alert('작성 중인 항목', '작성 중이던 항목이 있습니다. 링크 저장으로 이동할까요?', [
-          { text: '취소', style: 'cancel' },
-          { text: '이동', onPress: () => router.push({ pathname: '/all', params: { attachLink: url } }) },
-        ]);
-      } else {
-        router.push({ pathname: '/all', params: { attachLink: url } });
-      }
+      router.push({ pathname: '/all', params: { attachLink: url } });
       return;
     }
 
