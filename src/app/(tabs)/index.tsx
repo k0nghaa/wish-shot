@@ -18,6 +18,7 @@ import {
   listItems,
   renameCategory,
 } from '@/lib/queries';
+import { consumeFormInProgress } from '@/lib/shareGuard';
 
 // 하단 플로팅 탭바에 가리지 않도록 목록 하단 여백 확보.
 const TABBAR_SPACE = 96;
@@ -67,7 +68,15 @@ export default function HomeScreen() {
     if ((shareIntent?.type === 'weburl' || shareIntent?.type === 'text') && url) {
       shareHandled.current = true;
       resetShareIntent();
-      router.push({ pathname: '/all', params: { attachLink: url } });
+      // 작성 중이던 등록/편집 폼이 있었으면(딥링크로 이미 정리됨) 소리 없이 넘기지 않고 확인받는다.
+      if (consumeFormInProgress()) {
+        Alert.alert('작성 중인 항목', '작성 중이던 항목이 있습니다. 링크 저장으로 이동할까요?', [
+          { text: '취소', style: 'cancel' },
+          { text: '이동', onPress: () => router.push({ pathname: '/all', params: { attachLink: url } }) },
+        ]);
+      } else {
+        router.push({ pathname: '/all', params: { attachLink: url } });
+      }
       return;
     }
 

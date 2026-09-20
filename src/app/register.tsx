@@ -28,6 +28,7 @@ import { colors, radius, spacing, type } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { getRecentPhotoAsset } from '@/lib/photoLibrary';
+import { setFormInProgress } from '@/lib/shareGuard';
 import {
   createAnalysisLog,
   createCategory,
@@ -157,6 +158,17 @@ export default function RegisterScreen() {
   useEffect(() => {
     if (imageUri) analyze(imageUri);
   }, [imageUri, analyze]);
+
+  // 공유 재진입 가드(기능 1): 이미지가 들어오면 "작성 중"으로 표시한다. 딥링크로 폼이 정리돼도
+  // 홈이 이 값을 보고 URL 공유 전 "링크 저장으로 이동할까요?"를 묻는다. 저장/취소에서 해제.
+  useEffect(() => {
+    if (imageUri) setFormInProgress(true);
+  }, [imageUri]);
+
+  function handleCancel() {
+    setFormInProgress(false);
+    router.back();
+  }
 
   // 개인정보 고지(NFR-3): 첫 이미지 업로드 시 1회만. 플래그를 먼저 세워 중복 노출을 막는다.
   useEffect(() => {
@@ -362,6 +374,7 @@ export default function RegisterScreen() {
     }
     recordAnalysisLog(id);
     markSubmitted();
+    setFormInProgress(false); // 저장 완료 → 작성 중 해제
     setSaving(false);
     goToSavedCategory();
   }
@@ -393,6 +406,7 @@ export default function RegisterScreen() {
       });
       recordAnalysisLog(existing.id);
       markSubmitted();
+      setFormInProgress(false); // 덮어쓰기 저장 완료 → 작성 중 해제
       setDupVisible(false);
       setOverwriteBusy(false);
       goToSavedCategory();
@@ -408,6 +422,7 @@ export default function RegisterScreen() {
 
   function handleViewExisting() {
     const existing = dupItem;
+    setFormInProgress(false); // 기존 위시 보기로 이탈 → 작성 중 해제
     setDupVisible(false);
     if (existing) {
       router.replace({ pathname: '/item/[id]', params: { id: existing.id } });
@@ -417,7 +432,7 @@ export default function RegisterScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="취소">
+        <TouchableOpacity onPress={handleCancel} hitSlop={8} accessibilityRole="button" accessibilityLabel="취소">
           <Text style={styles.cancel}>취소</Text>
         </TouchableOpacity>
         <Text style={styles.title}>위시 담기</Text>

@@ -22,6 +22,7 @@ import { TagInput } from '@/components/TagInput';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
 import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
+import { setFormInProgress } from '@/lib/shareGuard';
 import {
   createCategory,
   DuplicateItemError,
@@ -101,6 +102,8 @@ export default function ItemEditScreen() {
         setCategories(cats);
         setAllTags(allTagList);
         setLoading(false);
+        // 공유 재진입 가드(기능 1): 편집 폼도 "작성 중"으로 표시(저장/취소에서 해제).
+        setFormInProgress(true);
         getItemImageSignedUrl(item.image_key)
           .then((url) => {
             if (!cancelled) setImageUrl(url);
@@ -138,6 +141,11 @@ export default function ItemEditScreen() {
   const folderName = categoryId ? (categories.find((c) => c.id === categoryId)?.name ?? '미분류') : '미분류';
   const canSave = !loading && !saving && productName.trim().length > 0;
 
+  function handleCancel() {
+    setFormInProgress(false); // 취소 → 작성 중 해제
+    router.back();
+  }
+
   async function handleSave() {
     if (!canSave) return;
     setSaving(true);
@@ -159,6 +167,7 @@ export default function ItemEditScreen() {
         const bytes = await readImageBytes(newImage.uri);
         await uploadItemImage(userId, id, bytes, newImage.contentType);
       }
+      setFormInProgress(false); // 저장 완료 → 작성 중 해제
       // 편집으로 카테고리를 옮겨 원래 카테고리가 비었으면 삭제 안내. 비었으면 목록(홈)으로, 아니면 상세로.
       if (categoryId !== initialCategoryId) {
         const fromName = categories.find((c) => c.id === initialCategoryId)?.name;
@@ -189,7 +198,7 @@ export default function ItemEditScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="취소">
+        <TouchableOpacity onPress={handleCancel} hitSlop={8} accessibilityRole="button" accessibilityLabel="취소">
           <Text style={styles.cancel}>취소</Text>
         </TouchableOpacity>
         <Text style={styles.title}>위시 편집</Text>
