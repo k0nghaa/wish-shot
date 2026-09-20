@@ -288,18 +288,19 @@ Safari/앱에서 URL 공유 → WishShot
   - **회귀**: 이미지 공유 경로는 URL 분기 뒤에 그대로 유지(`type==='media'` → webUrl null → 이미지 branch). 문서: `CLAUDE.md` 데이터 흐름·라우트·`src/lib` 갱신.
   - **실기기 검증(사람 체크리스트 — "검증 완료" 단정 아님)**: 아래 "실기기 검증(체크리스트)" 참조.
 - **Batch C** (2026-09-20 구현 완료, 실기기 검증은 사람): 브랜치 `feat/phase-7-album-photo-delete`(B 머지된 dev에서 분기). 새 네이티브 모듈 없음(순수 JS — A-3의 `expo-media-library` 위에 얹음). `tsc`·`expo lint` 통과.
-  - **assetId 취득(`register.tsx`)**: `pickImage`에서 `result.assets[0].assetId ?? null`을 `pickedAssetId` 상태로 보관(null 가드 — 문서상 limited 권한 시 null 가능). **공유 시트 경로**(`params.imageUri`)와 **최근사진 제안**(`useRecentPhoto`)은 `pickedAssetId`를 세우지 않아 삭제 옵션이 자연히 비노출된다(기능 2는 앱 내 picker 한정 — 문서 확정 결정). 최근사진 경로는 Batch B 영역이자 문서 Batch C 범위 밖이라 이번엔 삭제 대상에서 제외했다(getRecentPhotoAsset은 assetId를 돌려주므로 향후 확장 가능).
-  - **삭제 옵션(`register.tsx` `offerAlbumDelete`)**: 저장 성공 직후(`performNewSave`·`handleOverwrite` 양쪽) `pickedAssetId`가 있으면 `Alert`(`앨범에서 삭제` · 유지/삭제, destructive)로 제안 → 수락 시 `deletePhotoAsset(pickedAssetId)`. iOS `Alert`는 모달이라 제안이 뜬 동안 뒤 화면의 재저장 터치가 막힌다(중복 저장 방지). 결정 후 `goToSavedCategory()`로 이동(제안을 이동 **전에** 띄워 화면이 살아있게 함). 반환 매핑: `denied`→"앨범 삭제는 '모든 사진' 접근이 필요합니다…" 안내, `deleted`→무안내(OS 확인창으로 충분), `error`(취소 포함)→무안내(위시는 이미 저장).
+  - **assetId 취득(`register.tsx`)**: `pickImage`에서 `result.assets[0].assetId ?? null`을, **"방금 캡처한 사진"**(`useRecentPhoto`)에서 `recent.assetId`를 `pickedAssetId` 상태로 보관(null 가드 — picker 는 문서상 limited 권한 시 null 가능). **공유 시트 경로**(`params.imageUri`)만 원본 참조가 없어 `pickedAssetId`를 세우지 않아 삭제 옵션이 자연히 비노출된다(기능 2는 앱 내 선택 경로 한정). **결정(사용자 피드백 반영)**: 최근사진 경로는 처음엔 문서 Batch C 범위(pickImage)에 맞춰 제외했으나, `getRecentPhotoAsset`이 assetId 를 돌려주고 "방금 찍은 스크린샷 정리"라는 기능 취지에 가장 부합하므로 **삭제 대상에 포함**하도록 확장했다.
+  - **삭제 옵션(`register.tsx` `offerAlbumDelete`)**: 저장 성공 직후(`performNewSave`·`handleOverwrite` 양쪽) `pickedAssetId`가 있고 **`canOfferAlbumDelete()`가 true 일 때만** `Alert`(`앨범에서 삭제` · 유지/삭제, destructive)로 제안 → 수락 시 `deletePhotoAsset(pickedAssetId)`. iOS `Alert`는 모달이라 제안이 뜬 동안 뒤 화면의 재저장 터치가 막힌다(중복 저장 방지). 결정 후 `goToSavedCategory()`로 이동(제안을 이동 **전에** 띄워 화면이 살아있게 함). 반환 매핑: `denied`→"앨범 삭제는 '모든 사진' 접근이 필요합니다…" 안내(최초 획득 시점의 거부에 한해 1회), `deleted`→무안내(OS 확인창으로 충분), `error`(취소 포함)→무안내(위시는 이미 저장).
+  - **제안 게이트(`canOfferAlbumDelete`, 사용자 피드백 반영)**: 무프롬프트 `getPermissionsAsync()`로 사전 판별 — **미결정(`undetermined`)**(수락이 곧 최초 권한 획득 시점) 또는 **전체 접근(`all`)** 이면 제안, **제한(`limited`)/거부(`denied`)** 면 제안 자체를 건너뛴다. 이전 구조는 저장할 때마다 "삭제?"를 띄우고 수락해야 "전체 접근 필요"를 알려 제한/거부자를 매번 나그했다 → 이제 "전체 접근 필요" 안내는 **최초 획득 시점에 1회만** 뜨고 이후 제한/거부자에겐 안 뜬다. (`status` 는 string enum 이라 `MediaLibrary.PermissionStatus.UNDETERMINED` 로 비교, `accessPrivileges` 는 문자열 유니언이라 `=== 'all'`.)
   - **권한·삭제(`src/lib/photoLibrary.ts` `deletePhotoAsset`)**: `getPermissionsAsync()`로 무프롬프트 확인 → `accessPrivileges !== 'all'`이면 `requestPermissionsAsync()`(**writeOnly 기본 false = read-write 전체** 요청; writeOnly=true는 add-only라 삭제 불가라 넘기지 않음) → 그래도 `'all'`이 아니면 `'denied'` 반환(제한/거부: 특정 자산 삭제 불가, 앨범단위 권한은 iOS에 없음). 전체 접근이면 `deleteAssetsAsync([assetId])`(**iOS 시스템 "사진 삭제?" 확인창 강제, 억제 불가** — 사용자 확인해야 실제 삭제). 별도 앱 확인창은 띄우지 않음(HIG). 반환 `'deleted'|'denied'|'error'`. 사용자가 OS 확인창에서 취소하면 `deleteAssetsAsync`가 `false`(또는 throw) → `'error'`로 매핑해 조용히 넘긴다.
     - **API 확인(추측 금지)**: 설치본 `expo-media-library@57.0.5` 타입으로 확인 — `requestPermissionsAsync(writeOnly=false, …)`, `deleteAssetsAsync(assets): Promise<boolean>`, `PermissionResponse.accessPrivileges?: 'all'|'limited'|'none'`. top-level `deleteAssetsAsync`는 SDK 57에서 deprecated→런타임 throw라 **getRecentPhotoAsset과 동일하게 `expo-media-library/legacy`에서 import**(같은 파일이 이미 legacy 사용).
   - **회귀**: pickImage 결과 처리(`canceled`)·기존 저장·덮어쓰기 흐름 불변. 삭제 실패/거부는 저장을 되돌리지 않음(위시는 이미 저장됨).
-  - **실기기 검증(사람 체크리스트 — "검증 완료" 단정 아님)**: 아래 "실기기 검증(체크리스트)" 참조.
+  - **실기기 검증(사람)**: 전체 접근 경로(사진 업로드 + 앨범 삭제 확인)는 실기기에서 정상 확인됨(로그 `delete permission {accessPrivileges:'all'}` → `deleteAssetsAsync {ok:true}`). 제한/거부·취소 폴백은 아래 체크리스트에서 계속 확인.
 
 ### Batch C — 실기기 검증(체크리스트, 사람)
-- [ ] 앱에서 **사진 고르기**(PHPicker) → 저장 → "앨범에서 삭제" 제안이 뜬다. (공유 시트/최근사진 경로에선 안 뜬다.)
-- [ ] 수락 → **전체 접근이 아직 없으면** 사진 권한 요청 → 허용 → iOS "사진 삭제?" 시스템 확인창 → 확인 시 앨범에서 원본이 사라진다.
-- [ ] **전체 접근 시 `assetId`가 실제로 non-null**인지 확인(문서가 "full→non-null"을 보장하진 않음 — `__DEV__` 로그 `[WishShot/photo] delete permission`·pickImage assetId로 확인). null이면 삭제 옵션이 안 뜨는지.
-- [ ] **제한 접근/거부**: 삭제 제안 수락 후 "앨범 삭제는 '모든 사진' 접근이 필요합니다…" 안내가 뜨고, **위시는 정상 저장**돼 있는지(앱 정상).
+- [x] 앱에서 **사진 고르기**(PHPicker) → 저장 → "앨범에서 삭제" 제안이 뜬다. (**공유 시트 경로에선 안 뜨고**, "방금 캡처한 사진" 경로에선 뜬다.)
+- [x] 수락 → **전체 접근이 아직 없으면** 사진 권한 요청 → 허용 → iOS "사진 삭제?" 시스템 확인창 → 확인 시 앨범에서 원본이 사라진다. (터미널 로그 확인: `delete permission {accessPrivileges: 'all', granted: true}` → `deleteAssetsAsync {ok: true}`.)
+- [x] **전체 접근 시 `assetId`가 실제로 non-null**(전체 접근으로 업로드+삭제 정상 동작 확인).
+- [ ] **제한 접근/거부**: 최초 획득 시점에 거부하면 "앨범 삭제는 '모든 사진' 접근이 필요합니다…" 안내가 1회 뜨고 **위시는 정상 저장**되며, **이후 저장부터는 삭제 제안이 더 이상 뜨지 않는다**(`canOfferAlbumDelete` 게이트).
 - [ ] OS 확인창에서 **취소** 시 오류 알림 없이 조용히 넘어가고 위시는 저장돼 있는지.
 - [ ] 덮어쓰기(중복) 저장 경로에서도 동일하게 삭제 제안이 뜨는지.
 - **Batch D**: (완료일 / 카드·스포트라이트 구현 / 대상·문구 / 접근성 / 이슈)

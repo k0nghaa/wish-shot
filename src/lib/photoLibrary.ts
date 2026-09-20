@@ -70,6 +70,21 @@ export async function getRecentPhotoAsset(): Promise<{ uri: string; assetId: str
 }
 
 /**
+ * 앨범 삭제 옵션을 제안해도 되는지 무프롬프트로 판별한다(기능 2, 호출부가 헛제안을 막는 게이트).
+ *
+ * - **미결정(`undetermined`)**: 아직 안 물어봄 → 제안한다(사용자가 수락하면 그때가 최초 권한 획득 시점).
+ * - **전체 접근(`all`)**: 바로 삭제 가능 → 제안한다.
+ * - **제한(`limited`)/거부(`denied`)**: 전체 접근이 아니라 삭제 불가 → 제안하지 않는다.
+ *   (이미 "전체 접근 필요"를 최초에 안내했으므로, 저장할 때마다 헛제안으로 나그하지 않는다.)
+ *
+ * `getPermissionsAsync` 는 권한창을 띄우지 않는다(순수 조회).
+ */
+export async function canOfferAlbumDelete(): Promise<boolean> {
+  const perm = await MediaLibrary.getPermissionsAsync();
+  return perm.status === MediaLibrary.PermissionStatus.UNDETERMINED || perm.accessPrivileges === 'all';
+}
+
+/**
  * 앱 내에서 고른 원본 스크린샷을 아이폰 앨범에서 삭제한다(기능 2, 앱 내 picker 경로 한정).
  *
  * - **전체 접근이 필수**다. 제한 접근(`limited`)이면 특정 자산을 삭제할 수 없고, 앨범 단위 권한은

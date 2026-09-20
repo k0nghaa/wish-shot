@@ -27,7 +27,7 @@ import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
-import { deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
+import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
   createCategory,
@@ -108,8 +108,9 @@ export default function RegisterScreen() {
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
-  // 앨범 원본 삭제(기능 2): 앱 내 picker 로 고른 사진의 자산 id. 전체 접근이 아니면 null → 삭제 옵션 비노출.
-  // 공유 시트 경로(params.imageUri)·최근사진 제안은 이 값을 세우지 않아 자연히 제외된다.
+  // 앨범 원본 삭제(기능 2): 앱 내에서 고른 사진의 자산 id(picker·"방금 캡처한 사진"). 전체 접근이 아니면
+  // picker 결과가 null 일 수 있어 그 경우 삭제 옵션 비노출. 공유 시트(params.imageUri)는 원본 참조가
+  // 없어 이 값을 세우지 않아 자연히 제외된다.
   const [pickedAssetId, setPickedAssetId] = useState<string | null>(null);
   // "방금 캡처한 사진" 제안(기능 1): 최근 사진 로드 중 표시 / 실패 시 숨김.
   const [recentLoading, setRecentLoading] = useState(false);
@@ -296,6 +297,8 @@ export default function RegisterScreen() {
       }
       logImageDiag('recentPhoto', recent.uri);
       setContentType(guessContentType(recent.uri));
+      // "방금 캡처한 사진"도 원본 assetId 가 있으므로 저장 후 앨범 삭제 대상에 포함한다(기능 2 취지에 부합).
+      setPickedAssetId(recent.assetId);
       setImageUri(recent.uri); // 설정되면 기존 OCR/AI 파이프라인이 자동으로 돈다.
     } finally {
       setRecentLoading(false);
@@ -320,6 +323,8 @@ export default function RegisterScreen() {
   // 공유 시트·최근사진 경로는 pickedAssetId 가 null 이라 자연히 제외된다. 이미 저장된 뒤라 삭제는 선택.
   async function offerAlbumDelete() {
     if (!pickedAssetId) return;
+    // 제한/거부한 사용자에겐 제안 자체를 건너뛴다(무프롬프트 판별). 매 저장마다 헛제안 방지.
+    if (!(await canOfferAlbumDelete())) return;
     const wantsDelete = await new Promise<boolean>((resolve) => {
       Alert.alert(
         '앨범에서 삭제',
