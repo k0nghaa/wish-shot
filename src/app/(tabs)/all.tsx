@@ -1,4 +1,4 @@
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
@@ -32,6 +32,16 @@ export default function AllScreen() {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Category[]>([]);
 
+  // 링크붙이기 모드(기능 1): 공유 URL 을 기존 위시에 달거나 "새로 담기". 선택 모드와 상호 배타.
+  // 별도 상태 없이 라우트 파라미터를 단일 소스로 삼는다(재진입 시 새 URL 이 그대로 반영됨).
+  const params = useLocalSearchParams<{ attachLink?: string }>();
+  const attachLink = params.attachLink || null;
+  const attachMode = !!attachLink;
+
+  function exitAttach() {
+    router.setParams({ attachLink: '' });
+  }
+
   const load = useCallback(async () => {
     try {
       const [list, cats] = await Promise.all([listItems(), listCategories().catch(() => [] as Category[])]);
@@ -53,6 +63,26 @@ export default function AllScreen() {
 
   const selection = useItemSelection({ items, categories, setCategories, reload: load });
 
+  // 링크붙이기 모드로 들어오면 진행 중이던 선택 모드는 접는다(두 모드 상호 배타).
+  const { selectMode, exitSelect } = selection;
+  useEffect(() => {
+    if (attachMode && selectMode) exitSelect();
+  }, [attachMode, selectMode, exitSelect]);
+
+  // 링크붙이기: 기존 위시 탭 → 편집 폼(링크 프리필). 선택 후 모드 종료(돌아오면 일반 탭).
+  function attachToItem(id: string) {
+    const link = attachLink;
+    exitAttach();
+    router.push({ pathname: '/item/[id]/edit', params: { id, linkPrefill: link ?? '' } });
+  }
+
+  // 링크붙이기: "새로 담기" → 등록 폼(링크 프리필 + 최근사진 제안).
+  function startNewWithLink() {
+    const link = attachLink;
+    exitAttach();
+    router.push({ pathname: '/register', params: { sourceLink: link ?? '' } });
+  }
+
   // 선택 모드에선 플로팅 탭바를 숨겨 선택 액션바에 자리를 내준다. 탭을 떠나면 복구.
   useEffect(() => {
     setHidden(selection.selectMode);
@@ -68,10 +98,16 @@ export default function AllScreen() {
       <TabHeaderLogo />
       <View style={styles.titleRow}>
         <View style={styles.titleLeft}>
-          <Text style={styles.title}>{selection.selectMode ? `${selection.selected.size}개 선택` : '전체'}</Text>
-          {!selection.selectMode && items ? <Text style={styles.count}>{items.length}개</Text> : null}
+          <Text style={styles.title}>
+            {attachMode ? '링크 저장' : selection.selectMode ? `${selection.selected.size}개 선택` : '전체'}
+          </Text>
+          {!attachMode && !selection.selectMode && items ? <Text style={styles.count}>{items.length}개</Text> : null}
         </View>
-        {items && items.length > 0 ? (
+        {attachMode ? (
+          <TouchableOpacity onPress={exitAttach} hitSlop={8} accessibilityRole="button" accessibilityLabel="링크 저장 취소">
+            <Text style={styles.action}>취소</Text>
+          </TouchableOpacity>
+        ) : items && items.length > 0 ? (
           <TouchableOpacity
             onPress={() => (selection.selectMode ? selection.exitSelect() : selection.enterSelect())}
             hitSlop={8}
@@ -83,17 +119,43 @@ export default function AllScreen() {
         ) : null}
       </View>
 
+      {/* 링크붙이기 안내 배너 + 새로 담기(기능 1) */}
+      {attachMode ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText} numberOfLines={2}>
+            링크를 저장할 스크린샷을 선택하세요.
+          </Text>
+          <TouchableOpacity
+            onPress={startNewWithLink}
+            style={styles.bannerBtn}
+            accessibilityRole="button"
+            accessibilityLabel="새로 담기"
+          >
+            <Text style={styles.bannerBtnText}>새로 담기</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {items === null ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : items.length === 0 ? (
-        <EmptyState
-          title="아직 담은 위시가 없습니다"
-          description="마음에 든 스크린샷을 담아 위시리스트를 시작하세요."
-          ctaLabel="위시 담기"
-          onCta={() => router.push('/register')}
-        />
+        attachMode ? (
+          <EmptyState
+            title="저장할 스크린샷이 없습니다"
+            description="'새로 담기'로 링크와 사진을 함께 저장하세요."
+            ctaLabel="새로 담기"
+            onCta={startNewWithLink}
+          />
+        ) : (
+          <EmptyState
+            title="아직 담은 위시가 없습니다"
+            description="마음에 든 스크린샷을 담아 위시리스트를 시작하세요."
+            ctaLabel="위시 담기"
+            onCta={() => router.push('/register')}
+          />
+        )
       ) : (
         <FlatList
           data={items}
@@ -106,20 +168,23 @@ export default function AllScreen() {
               url={urls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
-              selectionMode={selection.selectMode}
+              selectionMode={!attachMode && selection.selectMode}
               selected={selection.selected.has(item.id)}
               onPress={() =>
-                selection.selectMode
-                  ? selection.toggle(item.id)
-                  : router.push({ pathname: '/item/[id]', params: { id: item.id, ctx: 'all' } })
+                attachMode
+                  ? attachToItem(item.id)
+                  : selection.selectMode
+                    ? selection.toggle(item.id)
+                    : router.push({ pathname: '/item/[id]', params: { id: item.id, ctx: 'all' } })
               }
-              onLongPress={() => selection.enterSelect(item.id)}
+              onLongPress={attachMode ? undefined : () => selection.enterSelect(item.id)}
             />
           )}
         />
       )}
 
-      {selection.selectMode ? (
+      {/* 링크붙이기 모드에선 선택 액션바·FAB 를 숨긴다(배너의 "새로 담기"만 노출). */}
+      {attachMode ? null : selection.selectMode ? (
         <ItemSelectionControls selection={selection} categories={categories} />
       ) : (
         <TouchableOpacity
@@ -149,6 +214,26 @@ const styles = StyleSheet.create({
   title: { ...type.largeTitle, color: colors.textMain },
   count: { ...type.subhead, color: colors.textSub },
   action: { fontSize: 16, fontWeight: '600', color: colors.primary },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.two,
+    marginHorizontal: spacing.three,
+    marginBottom: spacing.two,
+    paddingVertical: spacing.two,
+    paddingHorizontal: spacing.three,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgCard,
+  },
+  bannerText: { flex: 1, ...type.subhead, color: colors.textMain },
+  bannerBtn: {
+    paddingVertical: spacing.one,
+    paddingHorizontal: spacing.three,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+  },
+  bannerBtnText: { fontSize: 14, fontWeight: '700', color: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingBottom: TABBAR_SPACE }, // 그리드는 가장자리까지(여백 없음)
   fab: {

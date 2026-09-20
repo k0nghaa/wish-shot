@@ -44,7 +44,8 @@ function parsePrice(text: string): number | null {
 
 export default function ItemEditScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // linkPrefill: 링크붙이기 모드(기능 1)에서 넘어온 공유 URL. 기존 링크가 없으면 채우고, 있으면 확인 후 교체.
+  const { id, linkPrefill } = useLocalSearchParams<{ id: string; linkPrefill?: string }>();
 
   const [loading, setLoading] = useState(true);
   const [zoomVisible, setZoomVisible] = useState(false); // 원본 확대 보기(롱프레스)
@@ -80,7 +81,19 @@ export default function ItemEditScreen() {
         setProductName(item.product_name);
         setBrand(item.brand ?? '');
         setPrice(item.price != null ? String(item.price) : '');
-        setSourceLink(item.source_link ?? '');
+        const existingLink = item.source_link ?? '';
+        setSourceLink(existingLink);
+        // 링크붙이기(기능 1): 기존 링크가 없으면 프리필, 있으면(다르면) 무단 덮어쓰기 없이 확인 후 교체.
+        if (linkPrefill) {
+          if (!existingLink) {
+            setSourceLink(linkPrefill);
+          } else if (existingLink !== linkPrefill) {
+            Alert.alert('링크 교체', '기존 링크가 있습니다. 교체할까요?', [
+              { text: '유지', style: 'cancel' },
+              { text: '교체', onPress: () => setSourceLink(linkPrefill) },
+            ]);
+          }
+        }
         setMemo(item.memo ?? '');
         setTags(item.tags ?? []);
         setCategoryId(item.category_id);
@@ -104,7 +117,7 @@ export default function ItemEditScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, router]);
+  }, [id, router, linkPrefill]);
 
   async function pickImage() {
     // PHPicker 는 권한이 없어도 열린다 — 사전 권한 요청을 하지 않아 불필요한 권한창을 없앤다.

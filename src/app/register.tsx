@@ -27,6 +27,7 @@ import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
+import { getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
   createCategory,
@@ -55,6 +56,11 @@ const REGION_NOTICE_KEY = 'wishshot.regionNoticeShown';
 function parsePrice(text: string): number | null {
   const digits = text.replace(/[^\d]/g, '');
   return digits ? Number(digits) : null;
+}
+
+// 최근 사진 uri 확장자로 콘텐츠 타입을 추정한다(iOS 스크린샷은 png). picker 결과와 달리 mimeType 이 없다.
+function guessContentType(uri: string): string {
+  return /\.png(\?|$)/i.test(uri) ? 'image/png' : 'image/jpeg';
 }
 
 /** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
@@ -97,16 +103,20 @@ function analysisStatusInfo(
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string }>();
+  // sourceLink: 링크붙이기 모드(기능 1) "새로 담기"로 넘어온 공유 URL 프리필.
+  const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string }>();
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
+  // "방금 캡처한 사진" 제안(기능 1): 최근 사진 로드 중 표시 / 실패 시 숨김.
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [recentHidden, setRecentHidden] = useState(false);
 
   // 자동채움과 공존시키기 위해 "사용자 편집분"만 상태로 둔다. null = 아직 손대지 않음.
   const [productNameEdit, setProductNameEdit] = useState<string | null>(null);
   const [brandEdit, setBrandEdit] = useState<string | null>(null);
   const [priceEdit, setPriceEdit] = useState<string | null>(null);
-  const [sourceLink, setSourceLink] = useState('');
+  const [sourceLink, setSourceLink] = useState(params.sourceLink ?? '');
   const [memo, setMemo] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]); // 기존 태그(선택 칩용)
@@ -267,6 +277,26 @@ export default function RegisterScreen() {
     if (asset.mimeType) setContentType(asset.mimeType);
   }
 
+  // "방금 캡처한 사진 담기"(기능 1): 탭할 때만 최근 사진 읽기 권한을 요청한다(HIG 적시 요청).
+  // 권한 거부·제한이거나 사진이 없으면 제안을 감추고 일반 "사진 선택"만 남긴다.
+  async function useRecentPhoto() {
+    if (recentLoading) return;
+    setRecentLoading(true);
+    try {
+      const recent = await getRecentPhotoAsset();
+      if (!recent) {
+        setRecentHidden(true);
+        Alert.alert('최근 사진 없음', "최근 사진을 불러오지 못했습니다. '사진 선택'으로 담거나, 설정에서 사진 접근을 허용하세요.");
+        return;
+      }
+      logImageDiag('recentPhoto', recent.uri);
+      setContentType(guessContentType(recent.uri));
+      setImageUri(recent.uri); // 설정되면 기존 OCR/AI 파이프라인이 자동으로 돈다.
+    } finally {
+      setRecentLoading(false);
+    }
+  }
+
   // 폴더 시트의 인라인 생성 — 만든 폴더를 목록에 추가하고 반환한다(시트가 선택·닫기 처리).
   async function createCategoryInline(name: string): Promise<Category> {
     const created = await createCategory(name);
@@ -425,6 +455,24 @@ export default function RegisterScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+          {/* "방금 캡처한 사진 담기"(기능 1): 이미지가 없을 때만. 탭 시점에만 사진 접근을 요청한다. */}
+          {!imageUri && !recentHidden ? (
+            <TouchableOpacity
+              onPress={useRecentPhoto}
+              disabled={recentLoading}
+              style={styles.recentBtn}
+              accessibilityRole="button"
+              accessibilityLabel="방금 캡처한 사진 담기"
+            >
+              {recentLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} style={styles.statusSpinner} />
+              ) : (
+                <SymbolView name="clock.arrow.circlepath" size={15} tintColor={colors.primary} />
+              )}
+              <Text style={styles.recentBtnText}>방금 캡처한 사진 담기</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* 제품 영역으로 분석: OCR 성공/실패와 무관하게 언제든 영역을 골라 AI 분석(제품 여럿·오채움 대비). */}
           {imageUri ? (
@@ -635,6 +683,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.three,
   },
   regionBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
+  recentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.one,
+    alignSelf: 'center',
+    paddingVertical: spacing.one,
+    paddingHorizontal: spacing.three,
+  },
+  recentBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
   changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
   status: {
     flexDirection: 'row',
