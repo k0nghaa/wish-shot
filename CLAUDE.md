@@ -36,17 +36,17 @@ src/
     _layout.tsx         # ShareIntentProvider + AuthGate(익명 부트스트랩 — 세션 없으면 signInAnonymouslyIfNeeded; 첫 세션 후엔 세션이 잠깐 null이어도 네비게이터 유지). 등록·편집=모달, 상세=세로 풀스크린 모달, info=formSheet(네이티브 반시트)
     (tabs)/             # 하단 알약 탭바 그룹 (Expo Router Tabs + CustomTabBar). 상세·등록·편집·설정·태그는 이 그룹 위 스택으로 push
       _layout.tsx       # Tabs 레이아웃(기본 탭=index/폴더). tabBar=CustomTabBar(플로팅 알약, JS 전용)
-      index.tsx         # 폴더 홈: 카테고리 2×2 모자이크 카드(개수·대표 4장, 빈 카테고리도 노출)·미분류·설정 진입. 공유 인텐트 소비 → /register. 롱프레스/··· = 폴더 이름변경·삭제
-      all.tsx           # 전체: 모든 위시 3열 정사각 그리드(최신순) + 업로드 FAB. (찜 필터·New 배지는 Phase 6)
+      index.tsx         # 폴더 홈: 카테고리 2×2 모자이크 카드(개수·대표 4장, 빈 카테고리도 노출)·미분류·설정 진입. 공유 인텐트 소비 → 이미지=/register, URL/웹페이지=/all(링크붙이기 모드) (Phase 7, useIsFocused+ref 재진입 가드). 롱프레스/··· = 폴더 이름변경·삭제
+      all.tsx           # 전체: 모든 위시 3열 정사각 그리드(최신순) + 업로드 FAB + 다중 선택. 링크붙이기 모드(Phase 7, attachLink 파라미터): 배너+새로담기, 타일 탭→편집(링크 프리필). 선택 모드와 상호 배타. (찜 필터·New 배지는 Phase 6)
       search.tsx        # 검색: "검색 기능 추가 예정" 플레이스홀더 (실제 검색은 Phase 6)
     login.tsx           # 이메일 로그인(익명 도입으로 정상 흐름 미도달; __DEV__ 왕복용). 성공 시 홈 복귀 + 취소 버튼
-    register.tsx        # 등록(저장): 이미지 선택/미리보기 + OCR 자동채움("AI가 채움") + 수동 입력 + 폴더 선택·생성·**FR-8 추천 미리선택** + 메모/**태그** + 중복 덮어쓰기 + 개인정보 고지(NFR-3)
+    register.tsx        # 등록(저장): 이미지 선택/미리보기 + OCR 자동채움("AI가 채움") + 수동 입력 + 폴더 선택·생성·**FR-8 추천 미리선택** + 메모/**태그** + 중복 덮어쓰기 + 개인정보 고지(NFR-3). Phase 7: sourceLink 프리필(링크붙이기 새로담기) + "방금 캡처한 사진 담기"(getRecentPhotoAsset, 탭 시점 권한 요청)
     settings.tsx        # 설정: 개인정보 안내(NFR-3) 열람. (익명이라 로그아웃·계정 섹션 없음.) __DEV__ 전용: 세션 리셋 · 이메일 로그인 왕복
     category/[id].tsx   # 카테고리(폴더)별 아이템 목록(3열 그리드, 최신순). id='uncategorized'=미분류. 삭제된 카테고리 진입 시 홈으로 리다이렉트
     tag/[name].tsx      # 태그별 모아보기(FR-15a): 그 태그가 달린 아이템만(카테고리 무관, 3열 그리드, 최신순)
     item/[id]/index.tsx # 상세 뷰어(세로 풀스크린 모달): 큰 이미지 탭 → 풀스크린 뷰어(원본 비율·핀치 줌) + 하단 액션바(정보(i)·링크·편집·삭제) + 카테고리 이동
     item/[id]/info.tsx  # 정보(i) 하프시트(M7, expo-router formSheet — 네이티브 반시트): 제품명/브랜드/가격/링크·폴더/메모/태그·담은 시각 + 편집 진입
-    item/[id]/edit.tsx  # 편집(FR-14): 제품명/브랜드/가격/링크/메모/태그/폴더 + 이미지 교체. OCR·분석 없음. 중복 시 차단·안내
+    item/[id]/edit.tsx  # 편집(FR-14): 제품명/브랜드/가격/링크/메모/태그/폴더 + 이미지 교체. OCR·분석 없음. 중복 시 차단·안내. Phase 7: linkPrefill 파라미터(링크붙이기) — 기존 링크 없으면 프리필, 있으면 교체 확인
     +native-intent.ts   # 공유 딥링크 → / (홈이 인텐트 처리)
   components/           # CategoryCard(폴더 모자이크), PhotoTile(그리드 정사각 썸네일), CustomTabBar(플로팅 탭바), TabHeaderLogo(헤더 로고), EmptyState, OverwriteDialog, Thumbnail, FormField(FormCard/FormRow/DisclosureRow/FormBlock), FolderPickerSheet(폴더 선택 반시트 — 키보드 회피·슬라이드업), TagInput
   constants/
@@ -58,6 +58,7 @@ src/
     supabase.ts         # createClient<Database> (타입 클라이언트)
     normalize.ts        # normalizeName(brand,productName) — 중복 판정 정규화(단일 소스)
     imageBytes.ts       # uri → ArrayBuffer(File.arrayBuffer) + file:// 정규화
+    photoLibrary.ts     # 앨범 접근(Phase 7, expo-media-library/legacy, 순수 JS). getRecentPhotoAsset: 최근 사진 1장의 읽을 수 있는 localUri(ph://→file://)+assetId, 적시 권한. (deletePhotoAsset은 Batch C)
     emptyCategory.ts    # promptDeleteIfCategoryEmpty — 이동·편집·삭제로 카테고리가 0이 되면 삭제/유지 안내(응답 대기 후 반환)
     formatDate.ts / formatPrice.ts
     ocr/                # OcrEngine 인터페이스 + VisionOcrEngine(Apple Vision)·MockOcrEngine + index(환경별 엔진 선택). 화면은 @/lib/ocr만 import
@@ -146,11 +147,16 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 ## 데이터 흐름 (목표)
 
 ```
-[iOS 공유 시트 / 앱 내 사진 선택]
+[iOS 공유 시트 (이미지) / 앱 내 사진 선택]
   → Expo 앱 → OcrEngine(Apple Vision, 온디바이스)
        ├ (텍스트 충분) 텍스트만 → Edge Function(Claude Haiku 정제)
        └ (텍스트 부족) 제품 영역 지정 시트 → 선택 영역 크롭만(동의 후) → Edge Function
   → 폼 자동채움("AI가 채움") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL, 원본 저장)
+
+[iOS 공유 시트 (URL/웹페이지) — Phase 7]  ※ 스크린샷 원본 URL 자동추출은 불가, 페이지 직접 공유만
+  → 홈이 인텐트 분기 → '전체' 탭 링크붙이기 모드
+       ├ 기존 위시 탭 → 편집(링크 프리필) → 저장
+       └ 새로 담기 → 등록(링크 프리필 + "방금 캡처한 사진" 제안) → 위 등록 흐름
 ```
 
 Phase 4까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR → 텍스트(+카테고리 이름)만 Edge Function으로 전송해 정제·**카테고리 추천(FR-8)**(**텍스트 부족 시엔 사용자가 고른 제품 영역 크롭만 동의 후 전송 — Phase 6**) → 폼 자동채움·추천 미리선택(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). 저장 후에는 **편집·카테고리 이동**, **하단 탭바(전체/폴더/검색)** 이동, **상세 풀스크린 뷰어·정보(i) 하프시트** 열람이 가능하고, **로그인 벽 없이 익명 세션**으로 바로 쓴다(설정=개인정보 열람). **기존 v1 데이터 이관은 범위에서 제외**(archive 보존만). Phase 5는 리스킨·탭바·정보 시트·익명 로그인 모두 **JS/설정 변경**이라 새 네이티브 모듈 없음(브랜딩 아이콘/스플래시 반영 + TestFlight 빌드만 EAS).

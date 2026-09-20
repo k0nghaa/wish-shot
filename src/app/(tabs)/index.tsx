@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -35,30 +35,55 @@ type Row = {
   isUncat: boolean;
 };
 
+// 공유가 text 로 올 때 첫 http(s) URL 만 뽑는다(webUrl 이 비어 있는 앱 대비). 없으면 null.
+function firstUrl(text?: string | null): string | null {
+  if (!text) return null;
+  const m = text.match(/https?:\/\/[^\s]+/i);
+  return m ? m[0] : null;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const cardSize = (width - GRID_PAD * 2 - GRID_GAP) / 2; // 2열 고정 크기(부분 행에서도 안 늘어남)
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const isFocused = useIsFocused();
   const shareHandled = useRef(false);
   const [rows, setRows] = useState<Row[] | null>(null); // null = 로딩 중
   const [deleteMode, setDeleteMode] = useState(false); // iOS 앨범 톤 폴더 삭제 모드
 
-  // 공유 시트로 이미지가 들어오면 등록 화면으로 넘긴다(FR-1b).
+  // 공유 시트 처리(기능 1): URL/웹페이지면 '전체' 탭 링크붙이기 모드로, 이미지면 등록으로(FR-1b).
+  // 재진입 가드: 홈이 포커스일 때만 처리하고(등록/링크붙이기 화면이 위에 떠 있으면 대기),
+  // 'shareHandled' ref 로 같은 인텐트의 중복 push 를 잠근다. hasShareIntent 가 내려가면 잠금 해제.
   useEffect(() => {
     if (!hasShareIntent) {
       shareHandled.current = false;
       return;
     }
+    if (!isFocused || shareHandled.current) return;
+
+    // 1) URL/웹페이지 공유 → 링크붙이기 모드. 앱이 URL 을 text 로 넘기는 경우도 흡수한다.
+    // 연속 공유(이미지 폼이 떠 있던 중 URL 공유 등)는 딥링크가 앱을 홈으로 재진입시키며 기존 폼을 정리하므로
+    // 여기서는 소리 없이 새 공유 화면으로 이동한다(저장 전이라 고아 파일 없음). 폼 보존은 후속(재빌드 시).
+    const url = shareIntent?.webUrl ?? firstUrl(shareIntent?.text);
+    if ((shareIntent?.type === 'weburl' || shareIntent?.type === 'text') && url) {
+      shareHandled.current = true;
+      resetShareIntent();
+      router.push({ pathname: '/all', params: { attachLink: url } });
+      return;
+    }
+
+    // 2) 이미지 공유 → 등록(기존 경로).
     const file = shareIntent?.files?.[0];
-    if (!file?.path || shareHandled.current) return;
-    shareHandled.current = true;
-    const imageUri = toFileUri(file.path);
-    const imageMime = file.mimeType ?? 'image/jpeg';
-    logImageDiag('shareIntent', file.path, { mimeType: file.mimeType });
-    resetShareIntent();
-    router.push({ pathname: '/register', params: { imageUri, imageMime } });
-  }, [hasShareIntent, shareIntent, resetShareIntent, router]);
+    if (file?.path) {
+      shareHandled.current = true;
+      const imageUri = toFileUri(file.path);
+      const imageMime = file.mimeType ?? 'image/jpeg';
+      logImageDiag('shareIntent', file.path, { mimeType: file.mimeType });
+      resetShareIntent();
+      router.push({ pathname: '/register', params: { imageUri, imageMime } });
+    }
+  }, [hasShareIntent, shareIntent, isFocused, resetShareIntent, router]);
 
   const load = useCallback(async () => {
     try {
