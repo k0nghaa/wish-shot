@@ -7,7 +7,7 @@ import * as MediaLibrary from 'expo-media-library/legacy';
  * 이 파일은 순수 JS 다(재빌드 없음).
  *
  * - `getRecentPhotoAsset`(Batch B): "방금 캡처한 사진" 제안용 최근 1장 읽기.
- * - `deletePhotoAsset`(Batch C): 앨범 원본 삭제 — 이 파일에 별도 추가 예정. 여기서는 만들지 않는다.
+ * - `deletePhotoAsset`(Batch C): 앱 내에서 고른 원본 스크린샷을 앨범에서 삭제.
  */
 
 /**
@@ -66,5 +66,64 @@ export async function getRecentPhotoAsset(): Promise<{ uri: string; assetId: str
     // 자산 조회 실패는 제안을 감출 뿐 저장 흐름과 무관하다.
     if (__DEV__) console.warn('[WishShot/photo] getAssetsAsync 실패', e);
     return null;
+  }
+}
+
+/**
+ * 앨범 삭제 옵션을 제안해도 되는지 무프롬프트로 판별한다(기능 2, 호출부가 헛제안을 막는 게이트).
+ *
+ * - **미결정(`undetermined`)**: 아직 안 물어봄 → 제안한다(사용자가 수락하면 그때가 최초 권한 획득 시점).
+ * - **전체 접근(`all`)**: 바로 삭제 가능 → 제안한다.
+ * - **제한(`limited`)/거부(`denied`)**: 전체 접근이 아니라 삭제 불가 → 제안하지 않는다.
+ *   (이미 "전체 접근 필요"를 최초에 안내했으므로, 저장할 때마다 헛제안으로 나그하지 않는다.)
+ *
+ * `getPermissionsAsync` 는 권한창을 띄우지 않는다(순수 조회).
+ */
+export async function canOfferAlbumDelete(): Promise<boolean> {
+  const perm = await MediaLibrary.getPermissionsAsync();
+  return perm.status === MediaLibrary.PermissionStatus.UNDETERMINED || perm.accessPrivileges === 'all';
+}
+
+/**
+ * 앱 내에서 고른 원본 스크린샷을 아이폰 앨범에서 삭제한다(기능 2, 앱 내 picker 경로 한정).
+ *
+ * - **전체 접근이 필수**다. 제한 접근(`limited`)이면 특정 자산을 삭제할 수 없고, 앨범 단위 권한은
+ *   iOS 에 없다 → 전체 접근이 아니면 `'denied'` 로 돌려 호출부가 안내하게 한다.
+ *   권한은 `requestPermissionsAsync()`(writeOnly 기본 false = read-write)로 요청한다
+ *   (writeOnly=true 는 "추가"만 허용해 삭제 불가라 넘기지 않는다).
+ * - iOS 는 실제 삭제 시 **시스템 "사진 삭제?" 확인창을 강제로 띄운다**(억제 불가). 사용자가
+ *   확인해야 실제로 지워진다. 우리 앱은 별도 "정말 삭제?" 창을 또 띄우지 않는다(HIG).
+ * - 사용자가 시스템 확인창에서 취소하면 `deleteAssetsAsync` 가 `false` 를 돌려주며(또는 throw),
+ *   여기서는 `'error'` 로 매핑한다 — 위시는 이미 저장돼 있어 호출부가 조용히 넘기도록 한다.
+ *
+ * 근거: Expo Media Library https://docs.expo.dev/versions/latest/sdk/media-library/ ,
+ * Apple `PHAssetChangeRequest.deleteAssets` https://developer.apple.com/documentation/photos/phassetchangerequest
+ *
+ * @returns `'deleted'` 삭제 성공 · `'denied'` 전체 접근 아님(권한) · `'error'` 취소/실패
+ */
+export async function deletePhotoAsset(assetId: string): Promise<'deleted' | 'denied' | 'error'> {
+  // 이미 전체 접근이면 프롬프트 없이 통과, 아니면 이 시점에만 전체(read-write) 접근을 요청한다.
+  let perm = await MediaLibrary.getPermissionsAsync();
+  if (perm.accessPrivileges !== 'all') perm = await MediaLibrary.requestPermissionsAsync();
+  if (__DEV__) {
+    console.log('[WishShot/photo] delete permission', {
+      granted: perm.granted,
+      status: perm.status,
+      accessPrivileges: perm.accessPrivileges,
+      canAskAgain: perm.canAskAgain,
+    });
+  }
+  // 전체 접근이 아니면 특정 자산 삭제 불가 → 호출부가 "전체 접근 필요"를 안내한다.
+  if (perm.accessPrivileges !== 'all') return 'denied';
+
+  try {
+    // 여기서 iOS 시스템 "사진 삭제?" 확인창이 뜬다. 사용자가 확인해야 true, 취소하면 false.
+    const ok = await MediaLibrary.deleteAssetsAsync([assetId]);
+    if (__DEV__) console.log('[WishShot/photo] deleteAssetsAsync', { ok });
+    return ok ? 'deleted' : 'error';
+  } catch (e) {
+    // 취소·실패 모두 여기로 올 수 있다. 위시는 이미 저장됐으므로 조용히 넘긴다.
+    if (__DEV__) console.warn('[WishShot/photo] deleteAssetsAsync 실패', e);
+    return 'error';
   }
 }
