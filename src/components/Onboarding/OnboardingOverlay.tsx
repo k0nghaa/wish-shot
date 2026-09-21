@@ -40,7 +40,7 @@ const CARDS: Card[] = [
   {
     icon: 'square.grid.2x2',
     title: '카테고리로 정리',
-    body: '담은 위시를 카테고리로 정리해\n한눈에 모아 봅니다.',
+    body: '담은 위시를 카테고리별로 \n한눈에 모아 보세요.',
     mock: 'organize',
   },
 ];
@@ -141,29 +141,34 @@ export function OnboardingOverlay({ onDone }: Props) {
             onScroll={scrollHandler}
             scrollEventThrottle={16}
             onMomentumScrollEnd={onMomentumEnd}
-            renderItem={({ item }) => (
-              <View style={[styles.card, { width }]}>
-                {item.mock === 'captureFlow' ? (
-                  <View style={styles.mockWrap}>
-                    <CaptureFlowMock />
-                  </View>
-                ) : item.mock === 'autoFill' ? (
-                  <View style={styles.mockWrap}>
-                    <AutoFillMock />
-                  </View>
-                ) : item.mock === 'organize' ? (
-                  <View style={styles.mockWrap}>
-                    <OrganizeMock />
-                  </View>
-                ) : (
-                  <View style={styles.iconWrap}>
-                    <SymbolView name={item.icon} size={72} tintColor={colors.primary} />
-                  </View>
-                )}
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardBody}>{item.body}</Text>
-              </View>
-            )}
+            extraData={index}
+            renderItem={({ item, index: i }) => {
+              // 해당 카드가 활성일 때만 모션이 돌아간다. key 를 active 로 바꿔 활성 시 처음부터 재생.
+              const active = index === i;
+              return (
+                <View style={[styles.card, { width }]}>
+                  {item.mock === 'captureFlow' ? (
+                    <View style={styles.mockWrap}>
+                      <CaptureFlowMock key={active ? 'on' : 'off'} active={active} />
+                    </View>
+                  ) : item.mock === 'autoFill' ? (
+                    <View style={styles.mockWrap}>
+                      <AutoFillMock key={active ? 'on' : 'off'} active={active} />
+                    </View>
+                  ) : item.mock === 'organize' ? (
+                    <View style={styles.mockWrap}>
+                      <OrganizeMock key={active ? 'on' : 'off'} active={active} />
+                    </View>
+                  ) : (
+                    <View style={styles.iconWrap}>
+                      <SymbolView name={item.icon} size={72} tintColor={colors.primary} />
+                    </View>
+                  )}
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.cardBody}>{item.body}</Text>
+                </View>
+              );
+            }}
           />
 
           <View style={styles.dots}>

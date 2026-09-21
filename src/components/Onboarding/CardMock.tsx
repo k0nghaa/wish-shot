@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -29,7 +30,7 @@ const CAP = { L: 0, T: 0, W: FRAME_W, H: FRAME_H, R: radius.lg };
 const THUMB = { L: spacing.two, T: 224, W: 46, H: 68, R: radius.sm };
 const EDIT = { L: spacing.two, T: 40, W: FRAME_W - spacing.two * 2, H: 216, R: radius.md };
 
-export function CaptureFlowMock() {
+export function CaptureFlowMock({ active }: { active: boolean }) {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [step, setStep] = useState(0);
 
@@ -48,10 +49,10 @@ export function CaptureFlowMock() {
   }, []);
 
   useEffect(() => {
-    if (reduceMotion) return; // 정적: 아래 activeStep 이 위시 담기 폼으로 고정
+    if (reduceMotion || !active) return; // 활성 카드일 때만 순환(정적/비활성은 고정)
     const id = setInterval(() => setStep((s) => (s + 1) % STEPS), STEP_MS);
     return () => clearInterval(id);
-  }, [reduceMotion]);
+  }, [reduceMotion, active]);
 
   const activeStep = reduceMotion ? 3 : step;
 
@@ -103,14 +104,14 @@ export function CaptureFlowMock() {
 
   // 캡처 순간 화면 플래시(스텝 0 진입마다).
   useEffect(() => {
-    if (reduceMotion || activeStep !== 0) return;
+    if (reduceMotion || !active || activeStep !== 0) return;
     flash.value = withSequence(withTiming(0.9, { duration: 120 }), withTiming(0, { duration: 320 }));
-  }, [activeStep, reduceMotion, flash]);
+  }, [activeStep, reduceMotion, active, flash]);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !active) return;
     pulse.value = withRepeat(withTiming(1, { duration: 700 }), -1, true);
-  }, [reduceMotion, pulse]);
+  }, [reduceMotion, active, pulse]);
 
   const feedStyle = useAnimatedStyle(() => ({ opacity: feedOpacity.value }));
   const editStyle = useAnimatedStyle(() => ({ opacity: editUp.value }));
@@ -254,7 +255,7 @@ const CATS: { name: string; count: number }[] = [
   { name: '리빙', count: 5 },
 ];
 
-export function OrganizeMock() {
+export function OrganizeMock({ active }: { active: boolean }) {
   const [reduceMotion, setReduceMotion] = useState(false);
   const p = useSharedValue(0);
 
@@ -273,12 +274,12 @@ export function OrganizeMock() {
   }, []);
 
   useEffect(() => {
-    if (reduceMotion) {
-      p.value = 0.6; // 모든 카드가 보이는 지점으로 고정
+    if (reduceMotion || !active) {
+      p.value = 0.6; // 정적/비활성: 모든 카드가 보이는 지점으로 고정
       return;
     }
     p.value = withRepeat(withTiming(1, { duration: 3400 }), -1, false);
-  }, [reduceMotion, p]);
+  }, [reduceMotion, active, p]);
 
   return (
     <View style={styles.frame}>
@@ -309,15 +310,18 @@ function CatCard({ cat, index, p }: { cat: { name: string; count: number }; inde
   });
   return (
     <Animated.View style={[styles.catCard, style]}>
-      <View style={styles.mosaic}>
+      {/* 실제 카테고리 카드처럼 2×2 모자이크(정사각) + 하단 이름 오버레이 */}
+      <View style={styles.catMosaic}>
         {[0, 1, 2, 3].map((k) => (
-          <View key={k} style={styles.mosaicCell} />
+          <View key={k} style={styles.catTileWrap}>
+            <View style={styles.catTile} />
+          </View>
         ))}
       </View>
+      <LinearGradient colors={['transparent', colors.overlay]} style={styles.catFade} pointerEvents="none" />
       <Text style={styles.catName} numberOfLines={1}>
         {cat.name}
       </Text>
-      <Text style={styles.catCount}>{cat.count}</Text>
     </Animated.View>
   );
 }
@@ -338,7 +342,7 @@ const APPS: { icon: SymbolViewProps['name']; label: string }[] = [
 // Card1 의 폰 프레임/톤을 이어받아 저장 폼을 흉내낸다. reduce-motion 이면 채워진 상태로 정적 표시.
 const AF_STEP_MS = 1900;
 
-export function AutoFillMock() {
+export function AutoFillMock({ active }: { active: boolean }) {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [phase, setPhase] = useState(0); // 0: 분석 중 / 1: 채움 완료
 
@@ -357,12 +361,12 @@ export function AutoFillMock() {
   }, []);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !active) return; // 활성 카드일 때만 순환
     const id = setInterval(() => setPhase((p) => (p === 0 ? 1 : 0)), AF_STEP_MS);
     return () => clearInterval(id);
-  }, [reduceMotion]);
+  }, [reduceMotion, active]);
 
-  const active = reduceMotion ? 1 : phase;
+  const shownPhase = reduceMotion ? 1 : phase;
 
   const f1 = useSharedValue(0);
   const f2 = useSharedValue(0);
@@ -372,9 +376,9 @@ export function AutoFillMock() {
 
   useEffect(() => {
     const d = reduceMotion ? 0 : 380;
-    analyzingO.value = withTiming(active === 0 ? 1 : 0, { duration: reduceMotion ? 0 : 250 });
-    doneO.value = withTiming(active === 1 ? 1 : 0, { duration: reduceMotion ? 0 : 250 });
-    if (active === 1) {
+    analyzingO.value = withTiming(shownPhase === 0 ? 1 : 0, { duration: reduceMotion ? 0 : 250 });
+    doneO.value = withTiming(shownPhase === 1 ? 1 : 0, { duration: reduceMotion ? 0 : 250 });
+    if (shownPhase === 1) {
       // 필드가 순차로 채워지는 느낌(제품명 → 브랜드 → 가격).
       f1.value = withDelay(0, withTiming(1, { duration: d }));
       f2.value = withDelay(reduceMotion ? 0 : 150, withTiming(1, { duration: d }));
@@ -384,7 +388,7 @@ export function AutoFillMock() {
       f2.value = withTiming(0, { duration: 200 });
       f3.value = withTiming(0, { duration: 200 });
     }
-  }, [active, reduceMotion, f1, f2, f3, analyzingO, doneO]);
+  }, [shownPhase, reduceMotion, f1, f2, f3, analyzingO, doneO]);
 
   const f1s = useAnimatedStyle(() => ({ opacity: f1.value }));
   const f2s = useAnimatedStyle(() => ({ opacity: f2.value }));
@@ -558,11 +562,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   orgGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.two },
-  catCard: { width: '48%', backgroundColor: colors.bgCard, borderRadius: radius.md, padding: spacing.two, gap: spacing.one },
-  mosaic: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.half },
-  mosaicCell: { width: '47%', aspectRatio: 1, borderRadius: 4, backgroundColor: colors.placeholder },
-  catName: { ...type.caption, fontWeight: '700', color: colors.textMain },
-  catCount: { fontSize: 11, color: colors.textSub },
+  // 실제 CategoryCard 처럼 정사각 + 2×2 모자이크 + 하단 이름 오버레이(테두리 있는 폴더형).
+  catCard: {
+    width: '48%',
+    aspectRatio: 1,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.silver,
+    borderWidth: 1,
+    borderColor: colors.silver,
+  },
+  catMosaic: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
+  catTileWrap: { width: '50%', height: '50%', padding: StyleSheet.hairlineWidth },
+  catTile: { flex: 1, backgroundColor: colors.placeholder },
+  catFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
+  catName: { position: 'absolute', left: spacing.two, bottom: spacing.one, fontSize: 13, fontWeight: '700', color: colors.bg },
 
   // 위시 담기 폼
   formLayer: { backgroundColor: colors.bg, padding: spacing.two, gap: spacing.two },
