@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   tooltipActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   skip: { fontSize: 14, color: colors.textSub },
   tooltipBtn: {
-    minHeight: 40,
+    minHeight: 32,
     paddingVertical: spacing.two,
     paddingHorizontal: spacing.four,
     borderRadius: radius.pill,
