@@ -1,16 +1,7 @@
 import { useRouter } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AccessibilityInfo,
-  ActivityIndicator,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Extrapolation,
@@ -22,19 +13,15 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors, radius, spacing, type } from '@/constants/theme';
-import { ShareSheetMock } from './CardMock';
+import { CaptureFlowMock } from './CardMock';
 import { CoachmarkSpotlight } from './CoachmarkSpotlight';
 import { useOnboardingTarget, type TargetRect } from './onboardingTarget';
 
-// 코치마크 단계별 대상 key·문구. 대상 미마운트/측정 실패 시 해당 단계는 안전하게 스킵된다.
+// 홈 "카테고리 추가" 알약 코치마크 대상. 미마운트/측정 실패면 스킵되고 바로 등록 투어로 넘어간다.
 const CATEGORY_KEY = 'home.addCategory';
-const REG_IMAGE_KEY = 'register.imageBox';
-const REG_RECENT_KEY = 'register.recentPhoto';
 const CATEGORY_TEXT = '여기서 카테고리를 추가하고 관리합니다.';
-const REG_IMAGE_TEXT = '사진을 선택하면 AI가 제품명·가격을 채우고, 원하는 영역만 크롭해 다시 분석할 수 있습니다.';
-const REG_RECENT_TEXT = '방금 캡처한 스크린샷은 여기서 바로 담을 수 있습니다.';
 
-type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'shareSheet' };
+type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'captureFlow' };
 
 // 문구는 실제 기능과 일치(없는 기능 홍보 금지) · 앱 톤 단답("~습니다").
 const CARDS: Card[] = [
@@ -42,7 +29,7 @@ const CARDS: Card[] = [
     icon: 'square.and.arrow.up',
     title: '스크린샷으로 담기',
     body: '공유 시트에서 위시샷을 선택하면 스크린샷이 바로 담깁니다.',
-    mock: 'shareSheet',
+    mock: 'captureFlow',
   },
   {
     icon: 'sparkles',
@@ -56,24 +43,16 @@ const CARDS: Card[] = [
   },
 ];
 
-// 등록 폼은 push 직후 아직 레이아웃 전이라 좌표가 안 나올 수 있어 재시도하며 측정한다.
-const MEASURE_RETRIES = 8;
-const MEASURE_GAP_MS = 200;
-
-type Phase =
-  | { kind: 'cards' }
-  | { kind: 'transition' } // 폼 push·측정 중 매끄러운 딤
-  | { kind: 'category'; target: TargetRect }
-  | { kind: 'regImage'; target: TargetRect }
-  | { kind: 'regRecent'; target: TargetRect };
+type Phase = { kind: 'cards' } | { kind: 'transition' } | { kind: 'category'; target: TargetRect };
 
 type Props = { onDone: () => void };
 
 /**
- * 첫 실행 온보딩 오버레이.
- * 1) 카드 캐러셀(FlatList + reanimated 도트) → 2) 홈 "카테고리 추가" 코치마크 →
- * 3) 등록 폼을 자동으로 열어 "사진 선택/영역 크롭"·"방금 캡처한 사진" 코치마크 2스텝.
- * 완료·건너뛰기·측정 실패는 모두 finish() 로 수렴(열었던 폼은 닫고 종료). reduce-motion 대응.
+ * 첫 실행 온보딩 오버레이(카드 + 홈 카테고리 코치마크).
+ * 카드 캐러셀(FlatList + reanimated 도트, 첫 카드=캡처 흐름 모션 그래픽) → 홈 "카테고리 추가" 코치마크
+ * → "다음"에서 등록 폼을 열며(onboarding 파라미터) 완료. 등록 폼 위 코치마크는 등록 화면이 직접 띄운다
+ * (RN Modal 위로 네이티브 모달이 얹히는 순서 문제 회피 — RegisterCoachmarkTour).
+ * 완료·건너뛰기·측정 실패 모두 onDone 으로 수렴. reduce-motion 이면 전환 애니메이션을 끈다.
  */
 export function OnboardingOverlay({ onDone }: Props) {
   const { width } = useWindowDimensions();
@@ -85,8 +64,6 @@ export function OnboardingOverlay({ onDone }: Props) {
   const [index, setIndex] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: 'cards' });
-  // 등록 폼을 우리가 열었으면 종료 시 되돌린다.
-  const pushedRegister = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,56 +92,19 @@ export function OnboardingOverlay({ onDone }: Props) {
 
   const isLast = index >= CARDS.length - 1;
 
-  // 온보딩 종료: 우리가 연 등록 폼이면 닫고, 완료 콜백을 부른다.
-  const finish = useCallback(() => {
-    if (pushedRegister.current) {
-      pushedRegister.current = false;
-      try {
-        router.back();
-      } catch {
-        /* 되돌리기 실패는 무시(그대로 종료) */
-      }
-    }
+  // 등록 폼을 열어(onboarding 파라미터) 등록 화면이 자체 코치마크 투어를 띄우게 하고, 이 오버레이는 종료한다.
+  const openRegisterTour = useCallback(() => {
+    router.push({ pathname: '/register', params: { onboarding: '1' } });
     onDone();
-  }, [onDone, router]);
-
-  const measureWithRetry = useCallback(
-    async (key: string): Promise<TargetRect | null> => {
-      for (let i = 0; i < MEASURE_RETRIES; i++) {
-        const r = await measure(key);
-        if (r) return r;
-        await new Promise((res) => setTimeout(res, MEASURE_GAP_MS));
-      }
-      return null;
-    },
-    [measure],
-  );
-
-  // 등록 폼을 열어 코치마크 2스텝을 시작한다. 측정 실패면 조용히 종료.
-  const startRegisterTour = useCallback(async () => {
-    setPhase({ kind: 'transition' });
-    router.push('/register');
-    pushedRegister.current = true;
-    const target = await measureWithRetry(REG_IMAGE_KEY);
-    if (target) setPhase({ kind: 'regImage', target });
-    else finish();
-  }, [router, measureWithRetry, finish]);
+  }, [router, onDone]);
 
   // 카드 끝 → 카테고리 코치마크(측정 성공 시) → 없으면 바로 등록 투어로.
   const finishCards = useCallback(async () => {
     setPhase({ kind: 'transition' });
     const target = await measure(CATEGORY_KEY);
     if (target) setPhase({ kind: 'category', target });
-    else void startRegisterTour();
-  }, [measure, startRegisterTour]);
-
-  // 등록 폼 이미지 코치마크 → "방금 캡처한 사진" 코치마크.
-  const nextToRecent = useCallback(async () => {
-    setPhase({ kind: 'transition' });
-    const target = await measureWithRetry(REG_RECENT_KEY);
-    if (target) setPhase({ kind: 'regRecent', target });
-    else finish();
-  }, [measureWithRetry, finish]);
+    else openRegisterTour();
+  }, [measure, openRegisterTour]);
 
   function handlePrimary() {
     if (isLast) void finishCards();
@@ -172,22 +112,18 @@ export function OnboardingOverlay({ onDone }: Props) {
   }
 
   return (
-    <Modal visible transparent animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={finish}>
+    <Modal visible transparent animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={onDone}>
       {phase.kind === 'transition' ? (
         <View style={styles.transition}>
           <ActivityIndicator color={colors.bg} />
         </View>
       ) : phase.kind === 'category' ? (
-        <CoachmarkSpotlight target={phase.target} text={CATEGORY_TEXT} primaryLabel="다음" onPrimary={() => void startRegisterTour()} onSkip={finish} />
-      ) : phase.kind === 'regImage' ? (
-        <CoachmarkSpotlight target={phase.target} text={REG_IMAGE_TEXT} primaryLabel="다음" onPrimary={() => void nextToRecent()} onSkip={finish} />
-      ) : phase.kind === 'regRecent' ? (
-        <CoachmarkSpotlight target={phase.target} text={REG_RECENT_TEXT} primaryLabel="시작하기" onPrimary={finish} onSkip={finish} />
+        <CoachmarkSpotlight target={phase.target} text={CATEGORY_TEXT} primaryLabel="다음" onPrimary={openRegisterTour} onSkip={onDone} />
       ) : (
         <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           {/* Modal 안에서는 SafeAreaView top edge 가 0 으로 잡힐 수 있어 인셋을 명시 적용(헤더/노치 가림 방지). */}
           <View style={styles.skipRow}>
-            <TouchableOpacity onPress={finish} hitSlop={8} accessibilityRole="button" accessibilityLabel="건너뛰기">
+            <TouchableOpacity onPress={onDone} hitSlop={8} accessibilityRole="button" accessibilityLabel="건너뛰기">
               <Text style={styles.skip}>건너뛰기</Text>
             </TouchableOpacity>
           </View>
@@ -204,9 +140,9 @@ export function OnboardingOverlay({ onDone }: Props) {
             onMomentumScrollEnd={onMomentumEnd}
             renderItem={({ item }) => (
               <View style={[styles.card, { width }]}>
-                {item.mock === 'shareSheet' ? (
+                {item.mock === 'captureFlow' ? (
                   <View style={styles.mockWrap}>
-                    <ShareSheetMock />
+                    <CaptureFlowMock />
                   </View>
                 ) : (
                   <View style={styles.iconWrap}>

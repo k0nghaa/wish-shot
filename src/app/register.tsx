@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
+import { RegisterCoachmarkTour } from '@/components/Onboarding/RegisterCoachmarkTour';
 import { useOnboardingTarget, type Measurable } from '@/components/Onboarding/onboardingTarget';
 import { ImageZoomModal } from '@/components/ImageZoomModal';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
@@ -105,12 +106,20 @@ function analysisStatusInfo(
 export default function RegisterScreen() {
   const router = useRouter();
   // sourceLink: 링크붙이기 모드(기능 1) "새로 담기"로 넘어온 공유 URL 프리필.
-  const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string }>();
+  // onboarding: 첫 실행 온보딩이 이 폼을 열었으면 '1' — 폼 위에 코치마크 투어를 띄운다(Phase 7 Batch D).
+  const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string; onboarding?: string }>();
 
   // 온보딩 코치마크 대상 등록(첫 실행 투어). 온보딩이 없을 땐 아무 영향 없음.
   const { register: registerTarget } = useOnboardingTarget();
   const setImageBoxRef = useCallback((n: Measurable | null) => registerTarget('register.imageBox', n), [registerTarget]);
   const setRecentRef = useCallback((n: Measurable | null) => registerTarget('register.recentPhoto', n), [registerTarget]);
+
+  // 온보딩 투어 종료: 파라미터를 내려 코치마크를 닫고 홈으로 돌아간다(폼은 온보딩이 열었던 것).
+  function endOnboardingTour() {
+    router.setParams({ onboarding: '' });
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
@@ -683,6 +692,9 @@ export default function RegisterScreen() {
         onSubmit={(image) => submitRegion(image, analysisState.rawText ?? '')}
         onCancel={() => cancelRegion(analysisState.rawText ?? '')}
       />
+
+      {/* 첫 실행 온보딩(Phase 7 Batch D): 이 폼 위 코치마크 2스텝(사진 선택·방금 캡처한 사진). */}
+      {params.onboarding === '1' ? <RegisterCoachmarkTour onDone={endOnboardingTour} /> : null}
     </SafeAreaView>
   );
 }
