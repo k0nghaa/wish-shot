@@ -1,9 +1,12 @@
 import type { Session } from '@supabase/supabase-js';
 import { Stack, useRouter } from 'expo-router';
-import { ShareIntentProvider } from 'expo-share-intent';
-import { useEffect, useState } from 'react';
+import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
+import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
+import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
 import { colors } from '@/constants/theme';
 import { signInAnonymouslyIfNeeded } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
@@ -77,22 +80,66 @@ function AuthGate() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      {/* 등록·편집 = 모달 시트(아래서 위로). 취소/저장 헤더 관습과 맞춤. */}
-      <Stack.Screen name="register" options={{ presentation: 'modal' }} />
-      <Stack.Screen name="item/[id]/edit" options={{ presentation: 'modal' }} />
-      {/* 상세 사진 뷰어 — 세로 모달(열 때 위로, 닫을 때 아래로). 갤러리의 아래 스와이프 닫기와 이어짐. */}
-      <Stack.Screen name="item/[id]/index" options={{ presentation: 'fullScreenModal' }} />
-      {/* 정보(i) 하프시트 — react-native-screens 네이티브 반시트(formSheet). 재빌드 불필요. */}
-      <Stack.Screen
-        name="item/[id]/info"
-        options={{
-          presentation: 'formSheet',
-          sheetAllowedDetents: [0.5, 1],
-          sheetGrabberVisible: true,
-        }}
-      />
-    </Stack>
+    // OnboardingTargetProvider: 코치마크 스포트라이트 대상(예: 홈의 "카테고리 추가" 알약) 등록소.
+    // 스택과 온보딩 오버레이를 함께 감싸, 화면이 등록한 대상을 오버레이가 측정할 수 있게 한다.
+    <OnboardingTargetProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* 등록·편집 = 모달 시트(아래서 위로). 취소/저장 헤더 관습과 맞춤. */}
+        <Stack.Screen name="register" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="item/[id]/edit" options={{ presentation: 'modal' }} />
+        {/* 상세 사진 뷰어 — 세로 모달(열 때 위로, 닫을 때 아래로). 갤러리의 아래 스와이프 닫기와 이어짐. */}
+        <Stack.Screen name="item/[id]/index" options={{ presentation: 'fullScreenModal' }} />
+        {/* 정보(i) 하프시트 — react-native-screens 네이티브 반시트(formSheet). 재빌드 불필요. */}
+        <Stack.Screen
+          name="item/[id]/info"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.5, 1],
+            sheetGrabberVisible: true,
+          }}
+        />
+      </Stack>
+      <OnboardingGate />
+    </OnboardingTargetProvider>
+  );
+}
+
+// 첫 실행 온보딩 게이트: 최초 마운트 1회만 판단해 오버레이를 띄운다.
+// - 공유 인텐트로 열렸으면 온보딩을 건너뛴다(인텐트 처리 우선). 플래그를 세우지 않아 다음 일반 실행에서 노출.
+// - 이미 본 적이 있으면 노출하지 않는다.
+function OnboardingGate() {
+  const { hasShareIntent } = useShareIntentContext();
+  const [visible, setVisible] = useState(false);
+  const decided = useRef(false);
+
+  useEffect(() => {
+    if (decided.current) return;
+    // 인텐트로 진입한 세션이면 이번엔 스킵(다음 실행에 노출).
+    if (hasShareIntent) {
+      decided.current = true;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const seen = await hasSeenOnboarding();
+      // 판단 사이에 인텐트가 도착했거나 언마운트됐으면 스킵.
+      if (cancelled || decided.current || hasShareIntent) return;
+      decided.current = true;
+      if (!seen) setVisible(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasShareIntent]);
+
+  if (!visible) return null;
+  return (
+    <OnboardingOverlay
+      onDone={() => {
+        setVisible(false);
+        void markOnboardingSeen();
+      }}
+    />
   );
 }
 

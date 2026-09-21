@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uuid } from 'expo-modules-core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
+import { RegisterCoachmarkTour } from '@/components/Onboarding/RegisterCoachmarkTour';
+import { useOnboardingTarget, type Measurable } from '@/components/Onboarding/onboardingTarget';
 import { ImageZoomModal } from '@/components/ImageZoomModal';
 import { OverwriteDialog } from '@/components/OverwriteDialog';
 import { RegionSelectSheet } from '@/components/RegionSelectSheet';
@@ -104,7 +106,20 @@ function analysisStatusInfo(
 export default function RegisterScreen() {
   const router = useRouter();
   // sourceLink: 링크붙이기 모드(기능 1) "새로 담기"로 넘어온 공유 URL 프리필.
-  const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string }>();
+  // onboarding: 첫 실행 온보딩이 이 폼을 열었으면 '1' — 폼 위에 코치마크 투어를 띄운다(Phase 7 Batch D).
+  const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string; onboarding?: string }>();
+
+  // 온보딩 코치마크 대상 등록(첫 실행 투어). 온보딩이 없을 땐 아무 영향 없음.
+  const { register: registerTarget } = useOnboardingTarget();
+  const setImageBoxRef = useCallback((n: Measurable | null) => registerTarget('register.imageBox', n), [registerTarget]);
+  const setRecentRef = useCallback((n: Measurable | null) => registerTarget('register.recentPhoto', n), [registerTarget]);
+
+  // 온보딩 투어 종료: 파라미터를 내려 코치마크를 닫고 홈으로 돌아간다(폼은 온보딩이 열었던 것).
+  const endOnboardingTour = useCallback(() => {
+    router.setParams({ onboarding: '' });
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }, [router]);
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
@@ -474,6 +489,7 @@ export default function RegisterScreen() {
       >
           {/* 이미지 미리보기 / 선택 (중앙 정사각) */}
           <TouchableOpacity
+            ref={setImageBoxRef}
             style={styles.imageBox}
             onPress={pickImage}
             onLongPress={() => imageUri && setZoomVisible(true)}
@@ -494,6 +510,7 @@ export default function RegisterScreen() {
           {/* "방금 캡처한 사진 담기"(기능 1): 이미지가 없을 때만. 탭 시점에만 사진 접근을 요청한다. */}
           {!imageUri && !recentHidden ? (
             <TouchableOpacity
+              ref={setRecentRef}
               onPress={useRecentPhoto}
               disabled={recentLoading}
               style={styles.recentBtn}
@@ -675,6 +692,9 @@ export default function RegisterScreen() {
         onSubmit={(image) => submitRegion(image, analysisState.rawText ?? '')}
         onCancel={() => cancelRegion(analysisState.rawText ?? '')}
       />
+
+      {/* 첫 실행 온보딩(Phase 7 Batch D): 이 폼 위 코치마크 2스텝(사진 선택·방금 캡처한 사진). */}
+      {params.onboarding === '1' ? <RegisterCoachmarkTour onDone={endOnboardingTour} /> : null}
     </SafeAreaView>
   );
 }
