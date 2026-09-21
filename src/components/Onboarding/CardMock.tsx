@@ -54,7 +54,8 @@ export function CaptureFlowMock({ active }: { active: boolean }) {
     return () => clearInterval(id);
   }, [reduceMotion, active]);
 
-  const activeStep = reduceMotion ? 3 : step;
+  // reduce-motion 이면 대표 정적 프레임 = 공유 시트(카드1 헤드라인과 일치). 위시 담기 폼(3) 아님.
+  const activeStep = reduceMotion ? 2 : step;
 
   const feedOpacity = useSharedValue(1);
   const editUp = useSharedValue(0);

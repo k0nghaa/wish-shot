@@ -115,11 +115,11 @@ export default function RegisterScreen() {
   const setRecentRef = useCallback((n: Measurable | null) => registerTarget('register.recentPhoto', n), [registerTarget]);
 
   // 온보딩 투어 종료: 파라미터를 내려 코치마크를 닫고 홈으로 돌아간다(폼은 온보딩이 열었던 것).
-  function endOnboardingTour() {
+  const endOnboardingTour = useCallback(() => {
     router.setParams({ onboarding: '' });
     if (router.canGoBack()) router.back();
     else router.replace('/');
-  }
+  }, [router]);
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');

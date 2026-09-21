@@ -30,6 +30,13 @@ export function RegisterCoachmarkTour({ onDone }: { onDone: () => void }) {
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: 'transition' });
   const started = useRef(false);
+  // onDone 은 부모(register) 재렌더로 정체성이 바뀔 수 있다(예: 카테고리/태그 로드 완료).
+  // 첫 스텝 effect 가 그 때문에 재실행·취소돼 측정 완료 후 종료를 못 부르는(스피너 고착) 문제를 막기 위해
+  // 최신 onDone 을 ref 로 들고, 측정 effect 는 onDone 을 의존하지 않는다.
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   // 오버레이 루트의 윈도우 좌표(시트 오프셋 보정용).
   const measureRoot = useCallback(
@@ -70,19 +77,19 @@ export function RegisterCoachmarkTour({ onDone }: { onDone: () => void }) {
       const target = await measureRel(IMAGE_KEY);
       if (cancelled) return;
       if (target) setPhase({ kind: 'image', target });
-      else onDone();
+      else onDoneRef.current();
     })();
     return () => {
       cancelled = true;
     };
-  }, [measureRel, onDone]);
+  }, [measureRel]);
 
   const toRecent = useCallback(async () => {
     setPhase({ kind: 'transition' });
     const target = await measureRel(RECENT_KEY);
     if (target) setPhase({ kind: 'recent', target });
-    else onDone();
-  }, [measureRel, onDone]);
+    else onDoneRef.current();
+  }, [measureRel]);
 
   return (
     <View
