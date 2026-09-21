@@ -121,6 +121,9 @@ export function CaptureFlowMock() {
     height: capH.value,
     borderRadius: capR.value,
   }));
+  // 공유 아이콘·WishShot 타일: 활성 단계에서 살짝 커졌다 작아졌다(pulse 0↔1) + Glow.
+  const shareIconPulse = useAnimatedStyle(() => ({ transform: [{ scale: activeStep === 1 ? 1 + pulse.value * 0.14 : 1 }] }));
+  const wishPulse = useAnimatedStyle(() => ({ transform: [{ scale: activeStep === 2 ? 1 + pulse.value * 0.14 : 1 }] }));
 
   return (
     <View style={styles.frame}>
@@ -144,7 +147,6 @@ export function CaptureFlowMock() {
           <View style={styles.flex} />
           <SymbolView name="bookmark" size={16} tintColor={colors.textMain} />
         </View>
-        <View style={styles.line80} />
       </Animated.View>
 
       {/* 편집 배경(피드 위로 흰 배경 페이드) */}
@@ -162,10 +164,10 @@ export function CaptureFlowMock() {
           <SymbolView name="xmark.circle.fill" size={22} tintColor={colors.silverDark} />
           <View style={styles.flex} />
           <SymbolView name="pencil.tip.crop.circle" size={20} tintColor={colors.textMain} />
-          <View style={styles.editShare}>
+          <Animated.View style={[styles.editShare, shareIconPulse]}>
             <SymbolView name="square.and.arrow.up" size={16} tintColor={colors.bg} />
             <Glow active={activeStep === 1} pulse={pulse} />
-          </View>
+          </Animated.View>
           <SymbolView name="checkmark.circle.fill" size={22} tintColor={colors.textMain} />
         </View>
         <View style={styles.flex} />
@@ -187,10 +189,10 @@ export function CaptureFlowMock() {
           </View>
           <View style={styles.appsRow}>
             <View style={styles.app}>
-              <View style={styles.appIconActive}>
+              <Animated.View style={[styles.appIconActive, wishPulse]}>
                 <SymbolView name="heart.fill" size={20} tintColor={colors.bg} />
                 <Glow active={activeStep === 2} pulse={pulse} />
-              </View>
+              </Animated.View>
               <Text style={[styles.appLabel, styles.appLabelActive]} numberOfLines={1}>
                 WishShot
               </Text>
@@ -246,10 +248,10 @@ function Glow({ active, pulse }: { active: boolean; pulse: SharedValue<number> }
   return <Animated.View pointerEvents="none" style={[styles.glow, style]} />;
 }
 
+// WishShot + 아래 앱들이 시트 폭에 들어가도록 개수를 제한(오른쪽 넘침 방지).
 const APPS: { icon: SymbolViewProps['name']; label: string }[] = [
   { icon: 'doc.on.doc', label: '복사' },
   { icon: 'person.crop.circle', label: '연락처' },
-  { icon: 'printer', label: '프린트' },
 ];
 
 const styles = StyleSheet.create({
@@ -309,7 +311,7 @@ const styles = StyleSheet.create({
 
   // 공유 시트
   shareLayer: { backgroundColor: colors.overlay, justifyContent: 'flex-end', padding: spacing.two },
-  sheet: { width: '100%', backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.two, gap: spacing.two, ...shadow.card },
+  sheet: { width: '100%', backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.two, gap: spacing.two, overflow: 'hidden', ...shadow.card },
   grabber: { alignSelf: 'center', width: 32, height: 4, borderRadius: radius.pill, backgroundColor: colors.silver },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   previewThumb: {
@@ -341,8 +343,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
     overflow: 'hidden',
   },
   appLabel: { ...type.caption, color: colors.textSub },

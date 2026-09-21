@@ -27,8 +27,8 @@ type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?:
 const CARDS: Card[] = [
   {
     icon: 'square.and.arrow.up',
-    title: '스크린샷으로 담기',
-    body: '공유 시트에서 위시샷을 선택하면 스크린샷이 바로 담깁니다.',
+    title: '스크린샷 바로 담기',
+    body: '캡처 직후 스크린샷을 눌러 WishShot에 진입해보세요.\n바로 위시리스트를 저장할 수 있습니다.',
     mock: 'captureFlow',
   },
   {
