@@ -2,6 +2,8 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Animated, {
+  Extrapolation,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -243,6 +245,83 @@ export function CaptureFlowMock() {
   );
 }
 
+// Card3 데모: 위시들이 카테고리 카드로 정리되는 흐름. 홈(카테고리 탭)을 흉내 낸 2×2 카드 그리드가
+// 순차로 채워지며 나타난다(정리되는 느낌). reduce-motion 이면 채워진 상태로 정적 표시.
+const CATS: { name: string; count: number }[] = [
+  { name: '패션', count: 4 },
+  { name: '가전', count: 3 },
+  { name: '뷰티', count: 2 },
+  { name: '리빙', count: 5 },
+];
+
+export function OrganizeMock() {
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const p = useSharedValue(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((v) => {
+        if (!cancelled) setReduceMotion(v);
+      })
+      .catch(() => {
+        /* 조회 실패는 기본값 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      p.value = 0.6; // 모든 카드가 보이는 지점으로 고정
+      return;
+    }
+    p.value = withRepeat(withTiming(1, { duration: 3400 }), -1, false);
+  }, [reduceMotion, p]);
+
+  return (
+    <View style={styles.frame}>
+      <View style={styles.afInner}>
+        <View style={styles.orgHeader}>
+          <Text style={styles.orgTitle}>카테고리</Text>
+          <View style={styles.orgAdd}>
+            <SymbolView name="plus" size={14} tintColor={colors.textMain} />
+          </View>
+        </View>
+        <View style={styles.orgGrid}>
+          {CATS.map((c, i) => (
+            <CatCard key={c.name} cat={c} index={i} p={p} />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// 카테고리 카드: 순차로 페이드+슬라이드업하며 나타난다(정리되는 흐름). 안에는 미니 모자이크 + 이름 + 개수.
+function CatCard({ cat, index, p }: { cat: { name: string; count: number }; index: number; p: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => {
+    const start = index * 0.1;
+    const opacity = interpolate(p.value, [start, start + 0.2, 0.85, 0.96], [0, 1, 1, 0], Extrapolation.CLAMP);
+    const translateY = interpolate(p.value, [start, start + 0.2], [10, 0], Extrapolation.CLAMP);
+    return { opacity, transform: [{ translateY }] };
+  });
+  return (
+    <Animated.View style={[styles.catCard, style]}>
+      <View style={styles.mosaic}>
+        {[0, 1, 2, 3].map((k) => (
+          <View key={k} style={styles.mosaicCell} />
+        ))}
+      </View>
+      <Text style={styles.catName} numberOfLines={1}>
+        {cat.name}
+      </Text>
+      <Text style={styles.catCount}>{cat.count}</Text>
+    </Animated.View>
+  );
+}
+
 // 대상 도형 자체가 밝아지는 펄스(탭 지점 강조). 부모의 테두리까지 덮도록 -2 확장 + 부모 overflow 클리핑.
 function Glow({ active, pulse }: { active: boolean; pulse: SharedValue<number> }) {
   const style = useAnimatedStyle(() => ({ opacity: active ? pulse.value * 0.55 : 0 }));
@@ -466,6 +545,24 @@ const styles = StyleSheet.create({
   afStatus: { height: 20, justifyContent: 'center' },
   afStatusRow: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.one },
   afStatusText: { ...type.caption, color: colors.textSub },
+
+  // Card3 정리 그리드(OrganizeMock)
+  orgHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.one },
+  orgTitle: { fontSize: 17, fontWeight: '700', color: colors.textMain },
+  orgAdd: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    backgroundColor: colors.bgCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orgGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.two },
+  catCard: { width: '48%', backgroundColor: colors.bgCard, borderRadius: radius.md, padding: spacing.two, gap: spacing.one },
+  mosaic: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.half },
+  mosaicCell: { width: '47%', aspectRatio: 1, borderRadius: 4, backgroundColor: colors.placeholder },
+  catName: { ...type.caption, fontWeight: '700', color: colors.textMain },
+  catCount: { fontSize: 11, color: colors.textSub },
 
   // 위시 담기 폼
   formLayer: { backgroundColor: colors.bg, padding: spacing.two, gap: spacing.two },

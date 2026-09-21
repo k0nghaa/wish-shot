@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors, radius, spacing, type } from '@/constants/theme';
-import { AutoFillMock, CaptureFlowMock } from './CardMock';
+import { AutoFillMock, CaptureFlowMock, OrganizeMock } from './CardMock';
 import { CoachmarkSpotlight } from './CoachmarkSpotlight';
 import { useOnboardingTarget, type TargetRect } from './onboardingTarget';
 
@@ -21,7 +21,7 @@ import { useOnboardingTarget, type TargetRect } from './onboardingTarget';
 const CATEGORY_KEY = 'home.addCategory';
 const CATEGORY_TEXT = '여기서 카테고리를 추가하고 관리합니다.';
 
-type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'captureFlow' | 'autoFill' };
+type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'captureFlow' | 'autoFill' | 'organize' };
 
 // 문구는 실제 기능과 일치(없는 기능 홍보 금지) · 앱 톤 단답("~습니다").
 const CARDS: Card[] = [
@@ -34,13 +34,14 @@ const CARDS: Card[] = [
   {
     icon: 'sparkles',
     title: 'AI가 자동 정리',
-    body: '담기만 하면 제품명·가격·브랜드를 AI가 읽어 채우고 카테고리까지 추천합니다.',
+    body: '담기만 하면 제품 정보를 AI가 읽어 채우고\n 카테고리까지 추천합니다.',
     mock: 'autoFill',
   },
   {
     icon: 'square.grid.2x2',
-    title: '모아서 관리',
-    body: '카테고리로 정리하고, 링크를 저장하고, 원본은 앨범에서 정리합니다.',
+    title: '카테고리로 정리',
+    body: '담은 위시를 카테고리로 정리해\n한눈에 모아 봅니다.',
+    mock: 'organize',
   },
 ];
 
@@ -149,6 +150,10 @@ export function OnboardingOverlay({ onDone }: Props) {
                 ) : item.mock === 'autoFill' ? (
                   <View style={styles.mockWrap}>
                     <AutoFillMock />
+                  </View>
+                ) : item.mock === 'organize' ? (
+                  <View style={styles.mockWrap}>
+                    <OrganizeMock />
                   </View>
                 ) : (
                   <View style={styles.iconWrap}>
