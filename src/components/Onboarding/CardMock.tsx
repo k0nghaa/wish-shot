@@ -1,9 +1,10 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withTiming,
@@ -254,6 +255,107 @@ const APPS: { icon: SymbolViewProps['name']; label: string }[] = [
   { icon: 'person.crop.circle', label: '연락처' },
 ];
 
+// Card2 데모: 사진이 들어온 폼에서 "AI 분석 중…" 스피너 → 분석 완료 후 필드가 순차로 자동 채워짐.
+// Card1 의 폰 프레임/톤을 이어받아 저장 폼을 흉내낸다. reduce-motion 이면 채워진 상태로 정적 표시.
+const AF_STEP_MS = 1900;
+
+export function AutoFillMock() {
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [phase, setPhase] = useState(0); // 0: 분석 중 / 1: 채움 완료
+
+  useEffect(() => {
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((v) => {
+        if (!cancelled) setReduceMotion(v);
+      })
+      .catch(() => {
+        /* 조회 실패는 기본값 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    const id = setInterval(() => setPhase((p) => (p === 0 ? 1 : 0)), AF_STEP_MS);
+    return () => clearInterval(id);
+  }, [reduceMotion]);
+
+  const active = reduceMotion ? 1 : phase;
+
+  const f1 = useSharedValue(0);
+  const f2 = useSharedValue(0);
+  const f3 = useSharedValue(0);
+  const analyzingO = useSharedValue(1);
+  const doneO = useSharedValue(0);
+
+  useEffect(() => {
+    const d = reduceMotion ? 0 : 380;
+    analyzingO.value = withTiming(active === 0 ? 1 : 0, { duration: reduceMotion ? 0 : 250 });
+    doneO.value = withTiming(active === 1 ? 1 : 0, { duration: reduceMotion ? 0 : 250 });
+    if (active === 1) {
+      // 필드가 순차로 채워지는 느낌(제품명 → 브랜드 → 가격).
+      f1.value = withDelay(0, withTiming(1, { duration: d }));
+      f2.value = withDelay(reduceMotion ? 0 : 150, withTiming(1, { duration: d }));
+      f3.value = withDelay(reduceMotion ? 0 : 300, withTiming(1, { duration: d }));
+    } else {
+      f1.value = withTiming(0, { duration: 200 });
+      f2.value = withTiming(0, { duration: 200 });
+      f3.value = withTiming(0, { duration: 200 });
+    }
+  }, [active, reduceMotion, f1, f2, f3, analyzingO, doneO]);
+
+  const f1s = useAnimatedStyle(() => ({ opacity: f1.value }));
+  const f2s = useAnimatedStyle(() => ({ opacity: f2.value }));
+  const f3s = useAnimatedStyle(() => ({ opacity: f3.value }));
+  const analyzingS = useAnimatedStyle(() => ({ opacity: analyzingO.value }));
+  const doneS = useAnimatedStyle(() => ({ opacity: doneO.value }));
+
+  return (
+    <View style={styles.frame}>
+      <View style={styles.afInner}>
+        <View style={styles.formHeader}>
+          <Text style={styles.formCancel}>취소</Text>
+          <Text style={styles.formTitle}>위시 담기</Text>
+          <Text style={styles.formSave}>저장</Text>
+        </View>
+        <View style={styles.afImageBox}>
+          <SymbolView name="photo" size={28} tintColor={colors.silverDark} />
+        </View>
+        <View style={styles.afStatus}>
+          <Animated.View style={[styles.afStatusRow, analyzingS]} pointerEvents="none">
+            <ActivityIndicator size="small" color={colors.textSub} />
+            <Text style={styles.afStatusText}>AI 분석 중…</Text>
+          </Animated.View>
+          <Animated.View style={[styles.afStatusRow, doneS]} pointerEvents="none">
+            <SymbolView name="checkmark.circle.fill" size={14} tintColor={colors.textMain} />
+            <Text style={styles.afStatusText}>AI가 채웠습니다</Text>
+          </Animated.View>
+        </View>
+        <View style={styles.formCard}>
+          <View style={styles.formRow}>
+            <Text style={styles.formLabel}>제품명</Text>
+            <Animated.View style={[styles.aiBadge, f1s]}>
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </Animated.View>
+            <Animated.View style={[styles.formValueLine, { flex: 1 }, f1s]} />
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.formLabel}>브랜드</Text>
+            <Animated.View style={[styles.formValueLine, { flex: 1 }, f2s]} />
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.formLabel}>가격</Text>
+            <Animated.View style={[styles.formValueLine, { width: '40%' }, f3s]} />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   // Glow: 부모 테두리까지 덮어 도형 전체가 밝아지게(부모 overflow:'hidden' 이 둥근 모서리로 클리핑).
@@ -347,6 +449,23 @@ const styles = StyleSheet.create({
   },
   appLabel: { ...type.caption, color: colors.textSub },
   appLabelActive: { color: colors.textMain, fontWeight: '700' },
+
+  // Card2 자동 채움 폼(AutoFillMock)
+  afInner: { flex: 1, padding: spacing.two, gap: spacing.two },
+  afImageBox: {
+    alignSelf: 'center',
+    width: 72,
+    height: 72,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.silver,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  afStatus: { height: 20, justifyContent: 'center' },
+  afStatusRow: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.one },
+  afStatusText: { ...type.caption, color: colors.textSub },
 
   // 위시 담기 폼
   formLayer: { backgroundColor: colors.bg, padding: spacing.two, gap: spacing.two },

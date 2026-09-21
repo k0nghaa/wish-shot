@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors, radius, spacing, type } from '@/constants/theme';
-import { CaptureFlowMock } from './CardMock';
+import { AutoFillMock, CaptureFlowMock } from './CardMock';
 import { CoachmarkSpotlight } from './CoachmarkSpotlight';
 import { useOnboardingTarget, type TargetRect } from './onboardingTarget';
 
@@ -21,7 +21,7 @@ import { useOnboardingTarget, type TargetRect } from './onboardingTarget';
 const CATEGORY_KEY = 'home.addCategory';
 const CATEGORY_TEXT = '여기서 카테고리를 추가하고 관리합니다.';
 
-type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'captureFlow' };
+type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'captureFlow' | 'autoFill' };
 
 // 문구는 실제 기능과 일치(없는 기능 홍보 금지) · 앱 톤 단답("~습니다").
 const CARDS: Card[] = [
@@ -34,7 +34,8 @@ const CARDS: Card[] = [
   {
     icon: 'sparkles',
     title: 'AI가 자동 정리',
-    body: '제품명·가격·브랜드를 AI가 읽어 채우고 카테고리를 추천합니다.',
+    body: '담기만 하면 제품명·가격·브랜드를 AI가 읽어 채우고 카테고리까지 추천합니다.',
+    mock: 'autoFill',
   },
   {
     icon: 'square.grid.2x2',
@@ -144,6 +145,10 @@ export function OnboardingOverlay({ onDone }: Props) {
                 {item.mock === 'captureFlow' ? (
                   <View style={styles.mockWrap}>
                     <CaptureFlowMock />
+                  </View>
+                ) : item.mock === 'autoFill' ? (
+                  <View style={styles.mockWrap}>
+                    <AutoFillMock />
                   </View>
                 ) : (
                   <View style={styles.iconWrap}>
