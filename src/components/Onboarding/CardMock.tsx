@@ -1,20 +1,29 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { colors, radius, shadow, spacing, type } from '@/constants/theme';
 
-// 첫 카드 데모: "캡처 순간 → 편집 화면 → 공유 시트 속 WishShot" 3장면을 크로스페이드로 반복하는
-// 코드 모션 그래픽. 실제 스크린샷(인물·브랜드 포함)을 싣지 않고 흐름만 재현 — 에셋 불필요·토큰 기반.
-const SCENE_MS = 2200;
-
+// 첫 카드 데모: "피드에서 캡처 → 좌하단 썸네일 탭 → 편집 화면이 올라옴 → 공유 아이콘 탭 → 공유 시트가 올라옴"
+// 을 하나의 연결된 흐름으로 반복하는 코드 모션 그래픽. 레이어를 쌓고 단계마다 탭 링 힌트 + 슬라이드업으로
+// 인과를 잇는다. 실제 스크린샷(인물·브랜드 포함)을 싣지 않고 흐름만 재현 — 에셋 불필요·토큰 기반.
+const STEP_MS = 1700;
+const STEPS = 4; // 0: 피드 캡처 / 1: 썸네일 탭 / 2: 편집→공유 탭 / 3: 공유 시트
 const FRAME_W = 200;
 const FRAME_H = 316;
 
+// 탭 링을 각 단계의 상호작용 지점에 놓는다(프레임 좌표, 실기기 미세조정 전제).
+const RING = 44;
+const RING_POS: Record<number, { left: number; top: number }> = {
+  1: { left: 12, top: 236 }, // 좌하단 캡처 썸네일
+  2: { left: 126, top: 6 }, // 편집 상단바 공유 아이콘
+  3: { left: 20, top: 244 }, // 공유 시트 WishShot 타일
+};
+
 export function CaptureFlowMock() {
   const [reduceMotion, setReduceMotion] = useState(false);
-  const [scene, setScene] = useState(0);
+  const [step, setStep] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,108 +40,100 @@ export function CaptureFlowMock() {
   }, []);
 
   useEffect(() => {
-    // reduce-motion 이면 순환하지 않는다(아래 shown 이 공유 시트 장면으로 고정).
-    if (reduceMotion) return;
-    const id = setInterval(() => setScene((s) => (s + 1) % 3), SCENE_MS);
+    if (reduceMotion) return; // 정적: 아래 activeStep 이 공유 시트로 고정
+    const id = setInterval(() => setStep((s) => (s + 1) % STEPS), STEP_MS);
     return () => clearInterval(id);
   }, [reduceMotion]);
 
-  // reduce-motion 이면 마지막 장면(공유 시트)만 정적 표시.
-  const shown = reduceMotion ? 2 : scene;
+  const activeStep = reduceMotion ? 3 : step;
+
+  // 레이어 상태(0~1)를 단계에 맞춰 부드럽게 전환. 편집·공유는 아래에서 위로 슬라이드업.
+  const feedOpacity = useSharedValue(1);
+  const thumbUp = useSharedValue(0);
+  const editUp = useSharedValue(0);
+  const shareUp = useSharedValue(0);
+  const pulse = useSharedValue(0);
+
+  useEffect(() => {
+    const d = reduceMotion ? 0 : 450;
+    feedOpacity.value = withTiming(activeStep >= 2 ? 0 : 1, { duration: d });
+    thumbUp.value = withTiming(activeStep >= 1 ? 1 : 0, { duration: d });
+    editUp.value = withTiming(activeStep >= 2 ? 1 : 0, { duration: d });
+    shareUp.value = withTiming(activeStep >= 3 ? 1 : 0, { duration: d });
+  }, [activeStep, reduceMotion, feedOpacity, thumbUp, editUp, shareUp]);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    pulse.value = withRepeat(withTiming(1, { duration: 900 }), -1, false);
+  }, [reduceMotion, pulse]);
+
+  const feedStyle = useAnimatedStyle(() => ({ opacity: feedOpacity.value }));
+  const thumbStyle = useAnimatedStyle(() => ({ opacity: thumbUp.value, transform: [{ translateY: (1 - thumbUp.value) * 40 }] }));
+  const editStyle = useAnimatedStyle(() => ({ opacity: editUp.value, transform: [{ translateY: (1 - editUp.value) * FRAME_H }] }));
+  const shareStyle = useAnimatedStyle(() => ({ opacity: shareUp.value, transform: [{ translateY: (1 - shareUp.value) * FRAME_H }] }));
+  const ringStyle = useAnimatedStyle(() => ({ transform: [{ scale: 0.7 + pulse.value * 0.6 }], opacity: 0.7 * (1 - pulse.value) }));
+
+  const ringPos = RING_POS[activeStep];
 
   return (
     <View style={styles.frame}>
-      <Scene active={shown === 0} reduceMotion={reduceMotion}>
-        <FeedScene />
-      </Scene>
-      <Scene active={shown === 1} reduceMotion={reduceMotion}>
-        <EditScene />
-      </Scene>
-      <Scene active={shown === 2} reduceMotion={reduceMotion}>
-        <ShareScene />
-      </Scene>
-      {/* 3단계 진행 힌트 */}
+      {/* 피드 레이어(캡처 썸네일 포함) */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.layer, feedStyle]} pointerEvents="none">
+        <View style={styles.statusRow}>
+          <Text style={styles.statusTime}>9:41</Text>
+          <SymbolView name="wifi" size={11} tintColor={colors.textSub} />
+        </View>
+        <View style={styles.feedHeader}>
+          <View style={styles.avatar} />
+          <View style={styles.line60} />
+        </View>
+        <View style={styles.feedImage}>
+          <SymbolView name="photo" size={30} tintColor={colors.silverDark} />
+        </View>
+        <View style={styles.feedActions}>
+          <SymbolView name="heart" size={16} tintColor={colors.textMain} />
+          <SymbolView name="bubble.right" size={16} tintColor={colors.textMain} />
+          <SymbolView name="paperplane" size={16} tintColor={colors.textMain} />
+          <View style={styles.flex} />
+          <SymbolView name="bookmark" size={16} tintColor={colors.textMain} />
+        </View>
+        <View style={styles.line80} />
+        <Animated.View style={[styles.capturedThumb, thumbStyle]}>
+          <SymbolView name="photo" size={16} tintColor={colors.silverDark} />
+        </Animated.View>
+      </Animated.View>
+
+      {/* 편집 레이어(아래서 위로) */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.layer, editStyle]} pointerEvents="none">
+        <View style={styles.editBar}>
+          <SymbolView name="xmark.circle.fill" size={22} tintColor={colors.silverDark} />
+          <View style={styles.flex} />
+          <SymbolView name="pencil.tip.crop.circle" size={20} tintColor={colors.textMain} />
+          <View style={styles.editShare}>
+            <SymbolView name="square.and.arrow.up" size={16} tintColor={colors.bg} />
+          </View>
+          <SymbolView name="checkmark.circle.fill" size={22} tintColor={colors.textMain} />
+        </View>
+        <View style={styles.editImage}>
+          <SymbolView name="photo" size={34} tintColor={colors.silverDark} />
+        </View>
+        <Text style={styles.editCaption}>자르기 및 크기 조절</Text>
+      </Animated.View>
+
+      {/* 공유 시트 레이어(아래서 위로, 뒤 딤) */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.shareLayer, shareStyle]} pointerEvents="none">
+        <ShareSheetMock />
+      </Animated.View>
+
+      {/* 탭 링 힌트(상호작용 지점) */}
+      {ringPos ? <Animated.View style={[styles.ring, ringPos, ringStyle]} pointerEvents="none" /> : null}
+
+      {/* 단계 진행 힌트 */}
       <View style={styles.progress}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={[styles.progressDot, shown === i && styles.progressDotOn]} />
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={[styles.progressDot, activeStep === i && styles.progressDotOn]} />
         ))}
       </View>
-    </View>
-  );
-}
-
-// 장면 크로스페이드 래퍼. reduce-motion 이면 즉시 전환(모션 없음).
-function Scene({ active, reduceMotion, children }: { active: boolean; reduceMotion: boolean; children: ReactNode }) {
-  const opacity = useSharedValue(active ? 1 : 0);
-  useEffect(() => {
-    opacity.value = withTiming(active ? 1 : 0, { duration: reduceMotion ? 0 : 350 });
-  }, [active, reduceMotion, opacity]);
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  return (
-    <Animated.View style={[StyleSheet.absoluteFill, style]} pointerEvents="none">
-      {children}
-    </Animated.View>
-  );
-}
-
-// 장면 1: 피드 보는 중 스크린샷 캡처(좌하단 캡처 썸네일이 뜬 순간).
-function FeedScene() {
-  return (
-    <View style={styles.sceneFill}>
-      <View style={styles.statusRow}>
-        <Text style={styles.statusTime}>9:41</Text>
-        <SymbolView name="wifi" size={11} tintColor={colors.textSub} />
-      </View>
-      <View style={styles.feedHeader}>
-        <View style={styles.avatar} />
-        <View style={styles.line60} />
-      </View>
-      <View style={styles.feedImage}>
-        <SymbolView name="photo" size={30} tintColor={colors.silverDark} />
-      </View>
-      <View style={styles.feedActions}>
-        <SymbolView name="heart" size={16} tintColor={colors.textMain} />
-        <SymbolView name="bubble.right" size={16} tintColor={colors.textMain} />
-        <SymbolView name="paperplane" size={16} tintColor={colors.textMain} />
-        <View style={styles.flex} />
-        <SymbolView name="bookmark" size={16} tintColor={colors.textMain} />
-      </View>
-      <View style={styles.line80} />
-      {/* 방금 캡처된 스크린샷 썸네일(iOS) */}
-      <View style={styles.capturedThumb}>
-        <SymbolView name="photo" size={16} tintColor={colors.silverDark} />
-      </View>
-    </View>
-  );
-}
-
-// 장면 2: 캡처 썸네일을 탭한 편집 화면(마크업·공유·완료 상단바).
-function EditScene() {
-  return (
-    <View style={styles.sceneFill}>
-      <View style={styles.editBar}>
-        <SymbolView name="xmark.circle.fill" size={22} tintColor={colors.silverDark} />
-        <View style={styles.flex} />
-        <SymbolView name="pencil.tip.crop.circle" size={20} tintColor={colors.textMain} />
-        {/* 공유 아이콘(다음 장면으로 이어지는 지점) */}
-        <View style={styles.editShare}>
-          <SymbolView name="square.and.arrow.up" size={16} tintColor={colors.bg} />
-        </View>
-        <SymbolView name="checkmark.circle.fill" size={22} tintColor={colors.textMain} />
-      </View>
-      <View style={styles.editImage}>
-        <SymbolView name="photo" size={34} tintColor={colors.silverDark} />
-      </View>
-      <Text style={styles.editCaption}>자르기 및 크기 조절</Text>
-    </View>
-  );
-}
-
-// 장면 3: 공유 시트 속 WishShot 강조.
-function ShareScene() {
-  return (
-    <View style={styles.shareFill}>
-      <ShareSheetMock />
     </View>
   );
 }
@@ -185,7 +186,6 @@ export function ShareSheetMock() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
 
-  // 모션 그래픽 프레임(폰 화면 축소본)
   frame: {
     width: FRAME_W,
     height: FRAME_H,
@@ -196,10 +196,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...shadow.card,
   },
-  sceneFill: { flex: 1, backgroundColor: colors.bg, padding: spacing.two, gap: spacing.two },
+  layer: { backgroundColor: colors.bg, padding: spacing.two, gap: spacing.two },
   progress: {
     position: 'absolute',
-    bottom: spacing.two,
+    bottom: spacing.one,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -208,8 +208,16 @@ const styles = StyleSheet.create({
   },
   progressDot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.silver },
   progressDotOn: { backgroundColor: colors.primary },
+  ring: {
+    position: 'absolute',
+    width: RING,
+    height: RING,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
 
-  // 장면 1: 피드
+  // 피드
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusTime: { fontSize: 11, fontWeight: '600', color: colors.textSub },
   feedHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
@@ -233,7 +241,7 @@ const styles = StyleSheet.create({
     ...shadow.floating,
   },
 
-  // 장면 2: 편집
+  // 편집
   editBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   editShare: {
     width: 28,
@@ -246,16 +254,9 @@ const styles = StyleSheet.create({
   editImage: { flex: 1, borderRadius: radius.md, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center' },
   editCaption: { ...type.caption, color: colors.textSub, textAlign: 'center' },
 
-  // 장면 3: 공유 시트
-  shareFill: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end', padding: spacing.two },
-  sheet: {
-    width: '100%',
-    backgroundColor: colors.bg,
-    borderRadius: radius.lg,
-    padding: spacing.two,
-    gap: spacing.two,
-    ...shadow.card,
-  },
+  // 공유 시트
+  shareLayer: { backgroundColor: colors.overlay, justifyContent: 'flex-end', padding: spacing.two },
+  sheet: { width: '100%', backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.two, gap: spacing.two, ...shadow.card },
   grabber: { alignSelf: 'center', width: 32, height: 4, borderRadius: radius.pill, backgroundColor: colors.silver },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   previewThumb: {
