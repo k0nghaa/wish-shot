@@ -1,25 +1,25 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 
 import { colors, radius, shadow, spacing, type } from '@/constants/theme';
 
-// 첫 카드 데모: "피드에서 캡처 → 좌하단 썸네일 탭 → 편집 화면이 올라옴 → 공유 아이콘 탭 → 공유 시트가 올라옴"
-// 을 하나의 연결된 흐름으로 반복하는 코드 모션 그래픽. 레이어를 쌓고 단계마다 탭 링 힌트 + 슬라이드업으로
-// 인과를 잇는다. 실제 스크린샷(인물·브랜드 포함)을 싣지 않고 흐름만 재현 — 에셋 불필요·토큰 기반.
+// 첫 카드 데모: "캡처(좌하단 스크린샷 썸네일) → 썸네일 탭 → 편집 화면이 올라옴 → 공유 아이콘 탭 →
+// 공유 시트가 올라옴 → WishShot 탭 → 위시 담기 폼이 올라옴"을 하나의 연결된 흐름으로 반복.
+// 레이어를 쌓고 위 레이어가 아래서 위로 슬라이드업하며, 탭 대상은 도형 자체가 밝아지는 펄스로 강조한다.
+// 실제 스크린샷(인물·브랜드 포함)을 싣지 않고 흐름만 재현 — 에셋 불필요·토큰 기반.
 const STEP_MS = 1700;
-const STEPS = 4; // 0: 피드 캡처 / 1: 썸네일 탭 / 2: 편집→공유 탭 / 3: 공유 시트
+const STEPS = 4; // 0: 캡처 / 1: 편집(공유 탭) / 2: 공유 시트(WishShot 탭) / 3: 위시 담기 폼
 const FRAME_W = 200;
 const FRAME_H = 316;
-
-// 탭 링을 각 단계의 상호작용 지점에 놓는다(프레임 좌표, 실기기 미세조정 전제).
-const RING = 44;
-const RING_POS: Record<number, { left: number; top: number }> = {
-  1: { left: 12, top: 236 }, // 좌하단 캡처 썸네일
-  2: { left: 126, top: 6 }, // 편집 상단바 공유 아이콘
-  3: { left: 20, top: 244 }, // 공유 시트 WishShot 타일
-};
 
 export function CaptureFlowMock() {
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -40,40 +40,47 @@ export function CaptureFlowMock() {
   }, []);
 
   useEffect(() => {
-    if (reduceMotion) return; // 정적: 아래 activeStep 이 공유 시트로 고정
+    if (reduceMotion) return; // 정적: 아래 activeStep 이 위시 담기 폼으로 고정
     const id = setInterval(() => setStep((s) => (s + 1) % STEPS), STEP_MS);
     return () => clearInterval(id);
   }, [reduceMotion]);
 
   const activeStep = reduceMotion ? 3 : step;
 
-  // 레이어 상태(0~1)를 단계에 맞춰 부드럽게 전환. 편집·공유는 아래에서 위로 슬라이드업.
   const feedOpacity = useSharedValue(1);
   const thumbUp = useSharedValue(0);
   const editUp = useSharedValue(0);
   const shareUp = useSharedValue(0);
-  const pulse = useSharedValue(0);
+  const formUp = useSharedValue(0);
+  const flash = useSharedValue(0);
+  const pulse = useSharedValue(0); // 밝아짐 펄스(0↔1 breathing)
 
   useEffect(() => {
     const d = reduceMotion ? 0 : 450;
-    feedOpacity.value = withTiming(activeStep >= 2 ? 0 : 1, { duration: d });
-    thumbUp.value = withTiming(activeStep >= 1 ? 1 : 0, { duration: d });
-    editUp.value = withTiming(activeStep >= 2 ? 1 : 0, { duration: d });
-    shareUp.value = withTiming(activeStep >= 3 ? 1 : 0, { duration: d });
-  }, [activeStep, reduceMotion, feedOpacity, thumbUp, editUp, shareUp]);
+    feedOpacity.value = withTiming(activeStep >= 1 ? 0 : 1, { duration: d });
+    thumbUp.value = withTiming(activeStep === 0 ? 1 : 0, { duration: d });
+    editUp.value = withTiming(activeStep >= 1 ? 1 : 0, { duration: d });
+    shareUp.value = withTiming(activeStep >= 2 ? 1 : 0, { duration: d });
+    formUp.value = withTiming(activeStep >= 3 ? 1 : 0, { duration: d });
+  }, [activeStep, reduceMotion, feedOpacity, thumbUp, editUp, shareUp, formUp]);
+
+  // 캡처 순간의 화면 플래시(스텝 0 진입마다).
+  useEffect(() => {
+    if (reduceMotion || activeStep !== 0) return;
+    flash.value = withSequence(withTiming(0.9, { duration: 120 }), withTiming(0, { duration: 320 }));
+  }, [activeStep, reduceMotion, flash]);
 
   useEffect(() => {
     if (reduceMotion) return;
-    pulse.value = withRepeat(withTiming(1, { duration: 900 }), -1, false);
+    pulse.value = withRepeat(withTiming(1, { duration: 700 }), -1, true);
   }, [reduceMotion, pulse]);
 
   const feedStyle = useAnimatedStyle(() => ({ opacity: feedOpacity.value }));
   const thumbStyle = useAnimatedStyle(() => ({ opacity: thumbUp.value, transform: [{ translateY: (1 - thumbUp.value) * 40 }] }));
   const editStyle = useAnimatedStyle(() => ({ opacity: editUp.value, transform: [{ translateY: (1 - editUp.value) * FRAME_H }] }));
   const shareStyle = useAnimatedStyle(() => ({ opacity: shareUp.value, transform: [{ translateY: (1 - shareUp.value) * FRAME_H }] }));
-  const ringStyle = useAnimatedStyle(() => ({ transform: [{ scale: 0.7 + pulse.value * 0.6 }], opacity: 0.7 * (1 - pulse.value) }));
-
-  const ringPos = RING_POS[activeStep];
+  const formStyle = useAnimatedStyle(() => ({ opacity: formUp.value, transform: [{ translateY: (1 - formUp.value) * FRAME_H }] }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
 
   return (
     <View style={styles.frame}>
@@ -100,6 +107,7 @@ export function CaptureFlowMock() {
         <View style={styles.line80} />
         <Animated.View style={[styles.capturedThumb, thumbStyle]}>
           <SymbolView name="photo" size={16} tintColor={colors.silverDark} />
+          <Glow active={activeStep === 0} pulse={pulse} r={radius.sm} />
         </Animated.View>
       </Animated.View>
 
@@ -111,6 +119,7 @@ export function CaptureFlowMock() {
           <SymbolView name="pencil.tip.crop.circle" size={20} tintColor={colors.textMain} />
           <View style={styles.editShare}>
             <SymbolView name="square.and.arrow.up" size={16} tintColor={colors.bg} />
+            <Glow active={activeStep === 1} pulse={pulse} r={radius.pill} />
           </View>
           <SymbolView name="checkmark.circle.fill" size={22} tintColor={colors.textMain} />
         </View>
@@ -120,68 +129,85 @@ export function CaptureFlowMock() {
         <Text style={styles.editCaption}>자르기 및 크기 조절</Text>
       </Animated.View>
 
-      {/* 공유 시트 레이어(아래서 위로, 뒤 딤) */}
+      {/* 공유 시트 레이어(아래서 위로, 뒤 딤) — WishShot 타일 강조 */}
       <Animated.View style={[StyleSheet.absoluteFill, styles.shareLayer, shareStyle]} pointerEvents="none">
-        <ShareSheetMock />
+        <View style={styles.sheet}>
+          <View style={styles.grabber} />
+          <View style={styles.previewRow}>
+            <View style={styles.previewThumb}>
+              <SymbolView name="photo" size={18} tintColor={colors.silverDark} />
+            </View>
+            <View style={styles.previewMeta}>
+              <View style={[styles.metaLine, { width: '70%' }]} />
+              <View style={[styles.metaLine, { width: '45%' }]} />
+            </View>
+          </View>
+          <View style={styles.appsRow}>
+            <View style={styles.app}>
+              <View style={styles.appIconActive}>
+                <SymbolView name="heart.fill" size={20} tintColor={colors.bg} />
+                <Glow active={activeStep === 2} pulse={pulse} r={radius.md} />
+              </View>
+              <Text style={[styles.appLabel, styles.appLabelActive]} numberOfLines={1}>
+                WishShot
+              </Text>
+            </View>
+            {APPS.map((a) => (
+              <View key={a.label} style={styles.app}>
+                <View style={styles.appIcon}>
+                  <SymbolView name={a.icon} size={18} tintColor={colors.silverDark} />
+                </View>
+                <Text style={styles.appLabel} numberOfLines={1}>
+                  {a.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
       </Animated.View>
 
-      {/* 탭 링 힌트(상호작용 지점) */}
-      {ringPos ? <Animated.View style={[styles.ring, ringPos, ringStyle]} pointerEvents="none" /> : null}
+      {/* 위시 담기 폼 레이어(WishShot 탭 결과, 아래서 위로) */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.formLayer, formStyle]} pointerEvents="none">
+        <View style={styles.formHeader}>
+          <Text style={styles.formCancel}>취소</Text>
+          <Text style={styles.formTitle}>위시 담기</Text>
+          <Text style={styles.formSave}>저장</Text>
+        </View>
+        <View style={styles.formImageBox}>
+          <SymbolView name="photo" size={26} tintColor={colors.silverDark} />
+        </View>
+        <View style={styles.formCard}>
+          <View style={styles.formRow}>
+            <Text style={styles.formLabel}>제품명</Text>
+            <View style={styles.aiBadge}>
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </View>
+            <View style={[styles.formValueLine, { flex: 1 }]} />
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.formLabel}>가격</Text>
+            <View style={[styles.formValueLine, { width: '40%' }]} />
+          </View>
+        </View>
+      </Animated.View>
 
-      {/* 단계 진행 힌트 */}
-      <View style={styles.progress}>
-        {[0, 1, 2, 3].map((i) => (
-          <View key={i} style={[styles.progressDot, activeStep === i && styles.progressDotOn]} />
-        ))}
-      </View>
+      {/* 캡처 플래시(최상단) */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.flash, flashStyle]} pointerEvents="none" />
     </View>
   );
 }
 
-// 공유 시트 앱 행 목업(위시샷 타일 강조). 장면 3 및 단독 사용 가능.
+// 대상 도형 자체가 밝아지는 펄스(탭 지점 강조). 요소 위에 흰색 오버레이를 얹어 밝게 한다.
+function Glow({ active, pulse, r }: { active: boolean; pulse: SharedValue<number>; r: number }) {
+  const style = useAnimatedStyle(() => ({ opacity: active ? pulse.value * 0.55 : 0 }));
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: r, backgroundColor: colors.bg }, style]} />;
+}
+
 const APPS: { icon: SymbolViewProps['name']; label: string }[] = [
   { icon: 'doc.on.doc', label: '복사' },
   { icon: 'person.crop.circle', label: '연락처' },
   { icon: 'printer', label: '프린트' },
 ];
-
-export function ShareSheetMock() {
-  return (
-    <View style={styles.sheet}>
-      <View style={styles.grabber} />
-      <View style={styles.previewRow}>
-        <View style={styles.previewThumb}>
-          <SymbolView name="photo" size={18} tintColor={colors.silverDark} />
-        </View>
-        <View style={styles.previewMeta}>
-          <View style={[styles.metaLine, { width: '70%' }]} />
-          <View style={[styles.metaLine, { width: '45%' }]} />
-        </View>
-      </View>
-      <View style={styles.appsRow}>
-        {/* 위시샷 타일 — 강조(검정 배경 + 링) */}
-        <View style={styles.app}>
-          <View style={styles.appIconActive}>
-            <SymbolView name="heart.fill" size={20} tintColor={colors.bg} />
-          </View>
-          <Text style={[styles.appLabel, styles.appLabelActive]} numberOfLines={1}>
-            WishShot
-          </Text>
-        </View>
-        {APPS.map((a) => (
-          <View key={a.label} style={styles.app}>
-            <View style={styles.appIcon}>
-              <SymbolView name={a.icon} size={18} tintColor={colors.silverDark} />
-            </View>
-            <Text style={styles.appLabel} numberOfLines={1}>
-              {a.label}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
@@ -197,25 +223,7 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   layer: { backgroundColor: colors.bg, padding: spacing.two, gap: spacing.two },
-  progress: {
-    position: 'absolute',
-    bottom: spacing.one,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.one,
-  },
-  progressDot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.silver },
-  progressDotOn: { backgroundColor: colors.primary },
-  ring: {
-    position: 'absolute',
-    width: RING,
-    height: RING,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
+  flash: { backgroundColor: colors.bg },
 
   // 피드
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -238,6 +246,7 @@ const styles = StyleSheet.create({
     borderColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     ...shadow.floating,
   },
 
@@ -250,6 +259,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   editImage: { flex: 1, borderRadius: radius.md, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center' },
   editCaption: { ...type.caption, color: colors.textSub, textAlign: 'center' },
@@ -290,7 +300,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: colors.primary,
+    overflow: 'hidden',
   },
   appLabel: { ...type.caption, color: colors.textSub },
   appLabelActive: { color: colors.textMain, fontWeight: '700' },
+
+  // 위시 담기 폼
+  formLayer: { backgroundColor: colors.bg, padding: spacing.two, gap: spacing.two },
+  formHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  formCancel: { fontSize: 12, color: colors.primary },
+  formTitle: { fontSize: 13, fontWeight: '700', color: colors.textMain },
+  formSave: { fontSize: 12, fontWeight: '700', color: colors.primary },
+  formImageBox: {
+    alignSelf: 'center',
+    width: 96,
+    height: 96,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.silver,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: spacing.one,
+  },
+  formCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.md,
+    padding: spacing.two,
+    gap: spacing.two,
+  },
+  formRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
+  formLabel: { fontSize: 11, color: colors.textSub, width: 44 },
+  formValueLine: { height: 8, borderRadius: radius.pill, backgroundColor: colors.silver },
+  aiBadge: { paddingHorizontal: spacing.one, paddingVertical: 1, borderRadius: radius.sm, backgroundColor: colors.primary },
+  aiBadgeText: { fontSize: 8, fontWeight: '700', color: colors.bg },
 });
