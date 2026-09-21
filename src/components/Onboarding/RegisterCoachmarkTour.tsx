@@ -8,7 +8,7 @@ import { useOnboardingTarget, type TargetRect } from './onboardingTarget';
 const IMAGE_KEY = 'register.imageBox';
 const RECENT_KEY = 'register.recentPhoto';
 const IMAGE_TEXT = '사진을 선택하면 AI가 제품 정보를 채웁니다.\n원하는 영역만 크롭해 다시 분석할 수 있습니다.';
-const RECENT_TEXT = '가장 최근에 저장한 사진은 여기서 바로 담을 수 있습니다.';
+const RECENT_TEXT = '가장 최근에 저장한 사진을 바로 담을 수 있습니다.';
 
 // 등록 폼은 push 직후 레이아웃 전이라 좌표가 안 나올 수 있어 재시도하며 측정한다.
 const RETRIES = 10;
