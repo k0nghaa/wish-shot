@@ -48,7 +48,7 @@ src/
     item/[id]/info.tsx  # 정보(i) 하프시트(M7, expo-router formSheet — 네이티브 반시트): 제품명/브랜드/가격/링크·폴더/메모/태그·담은 시각 + 편집 진입
     item/[id]/edit.tsx  # 편집(FR-14): 제품명/브랜드/가격/링크/메모/태그/폴더 + 이미지 교체. OCR·분석 없음. 중복 시 차단·안내. Phase 7: linkPrefill 파라미터(링크붙이기) — 기존 링크 없으면 프리필, 있으면 교체 확인
     +native-intent.ts   # 공유 딥링크 → / (홈이 인텐트 처리)
-  components/           # CategoryCard(폴더 모자이크), PhotoTile(그리드 정사각 썸네일), CustomTabBar(플로팅 탭바), TabHeaderLogo(헤더 로고), EmptyState, OverwriteDialog, Thumbnail, FormField(FormCard/FormRow/DisclosureRow/FormBlock), FolderPickerSheet(폴더 선택 반시트 — 키보드 회피·슬라이드업), TagInput, Onboarding/(첫 실행 온보딩 — onboardingStorage[플래그 wishshot.onboardingShown], onboardingTarget[코치마크 대상 등록소·measureInWindow·안전 스킵], CoachmarkSpotlight[react-native-svg 둥근 마스크 스포트라이트], OnboardingOverlay[카드 캐러셀 reanimated 도트 + 코치마크, reduce-motion 대응] — Phase 7 Batch D)
+  components/           # CategoryCard(폴더 모자이크), PhotoTile(그리드 정사각 썸네일), CustomTabBar(플로팅 탭바), TabHeaderLogo(헤더 로고), EmptyState, OverwriteDialog, Thumbnail, FormField(FormCard/FormRow/DisclosureRow/FormBlock), FolderPickerSheet(폴더 선택 반시트 — 키보드 회피·슬라이드업), TagInput, Onboarding/(첫 실행 온보딩 — onboardingStorage[플래그 wishshot.onboardingShown], onboardingTarget[코치마크 대상 등록소·measureInWindow·안전 스킵], CoachmarkSpotlight[react-native-svg 둥근 마스크 스포트라이트·다단계], CardMock[ShareSheetMock 공유 시트 데모 그래픽], OnboardingOverlay[카드 캐러셀 reanimated 도트 → 카테고리 코치마크 → 등록 폼 자동 open 후 이미지/최근사진 코치마크 2스텝, safe-area 인셋·reduce-motion 대응] — Phase 7 Batch D)
   constants/
     theme.ts            # 디자인 토큰 (Phase 5 목업 팔레트 — 흰 배경 모노톤, 이름 유지·값 교체) + colorsDark(준비만) + type/spacing/radius/shadow + overlay
     privacy.ts          # 개인정보 안내 문구 단일 소스(register 최초 고지 + 설정 열람 공유)

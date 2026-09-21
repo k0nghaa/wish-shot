@@ -12,15 +12,20 @@ const TOOLTIP_MAX_WIDTH = 300;
 type Props = {
   target: TargetRect;
   text: string;
-  onDone: () => void;
+  /** 다음/시작하기 등 주 버튼 라벨. */
+  primaryLabel: string;
+  /** 주 버튼·배경 탭 시 다음 단계로. */
+  onPrimary: () => void;
+  /** 있으면 툴팁에 "건너뛰기"를 노출하고 전체 투어를 종료한다. */
+  onSkip?: () => void;
 };
 
 /**
  * 둥근 마스크 코치마크 스포트라이트.
  * 전체 화면 딤(overlay) 위에 react-native-svg <Mask> 로 대상 요소 자리에 둥근(스타디움) 구멍을 뚫고,
- * 그 근처에 안내 툴팁을 띄운다. 아무 곳이나 탭하면 닫힌다.
+ * 그 근처에 안내 툴팁을 띄운다. 배경/버튼 탭 = 다음 단계, "건너뛰기" = 전체 종료.
  */
-export function CoachmarkSpotlight({ target, text, onDone }: Props) {
+export function CoachmarkSpotlight({ target, text, primaryLabel, onPrimary, onSkip }: Props) {
   const { width, height } = useWindowDimensions();
 
   // 구멍(패딩 포함). 화면 밖으로 나가지 않게 클램프.
@@ -35,7 +40,7 @@ export function CoachmarkSpotlight({ target, text, onDone }: Props) {
   const below = holeCenterY < height / 2;
 
   return (
-    <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onDone} accessibilityRole="button" accessibilityLabel="닫기">
+    <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onPrimary} accessibilityRole="button" accessibilityLabel={primaryLabel}>
       <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
         <Defs>
           <Mask id="spotlight-hole">
@@ -47,16 +52,25 @@ export function CoachmarkSpotlight({ target, text, onDone }: Props) {
         <Rect x={0} y={0} width={width} height={height} fill={colors.overlay} mask="url(#spotlight-hole)" />
       </Svg>
 
-      {/* 툴팁 + "시작하기". 구멍 위치에 따라 위/아래로 붙인다. */}
+      {/* 툴팁 + 버튼. 구멍 위치에 따라 위/아래로 붙인다. */}
       <View
         style={[styles.tooltipWrap, below ? { top: holeY + holeH + spacing.three } : { bottom: height - holeY + spacing.three }]}
         pointerEvents="box-none"
       >
         <View style={styles.tooltip}>
           <Text style={styles.tooltipText}>{text}</Text>
-          <TouchableOpacity style={styles.tooltipBtn} onPress={onDone} accessibilityRole="button" accessibilityLabel="시작하기">
-            <Text style={styles.tooltipBtnText}>시작하기</Text>
-          </TouchableOpacity>
+          <View style={styles.tooltipActions}>
+            {onSkip ? (
+              <TouchableOpacity onPress={onSkip} hitSlop={8} accessibilityRole="button" accessibilityLabel="건너뛰기">
+                <Text style={styles.skip}>건너뛰기</Text>
+              </TouchableOpacity>
+            ) : (
+              <View />
+            )}
+            <TouchableOpacity style={styles.tooltipBtn} onPress={onPrimary} accessibilityRole="button" accessibilityLabel={primaryLabel}>
+              <Text style={styles.tooltipBtnText}>{primaryLabel}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -76,12 +90,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     borderRadius: radius.lg,
     padding: spacing.three,
-    gap: spacing.two,
+    gap: spacing.three,
     ...shadow.floating,
   },
   tooltipText: { ...type.subhead, color: colors.textMain },
+  tooltipActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  skip: { fontSize: 14, color: colors.textSub },
   tooltipBtn: {
-    alignSelf: 'flex-end',
     paddingVertical: spacing.one,
     paddingHorizontal: spacing.three,
     borderRadius: radius.pill,

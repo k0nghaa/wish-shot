@@ -1,9 +1,8 @@
 import { createContext, useCallback, useContext, useRef, type ReactNode } from 'react';
-import type { View } from 'react-native';
 
 /**
  * 온보딩 코치마크 스포트라이트의 "대상 요소" 등록소.
- * 화면(예: 홈)이 강조하고 싶은 요소를 key 로 등록하면, 온보딩 오버레이가 그 요소를
+ * 화면(예: 홈·등록 폼)이 강조하고 싶은 요소를 key 로 등록하면, 온보딩 오버레이가 그 요소를
  * measureInWindow 로 측정해 둥근 마스크 구멍을 뚫는다.
  *
  * 대상이 미등록·미마운트·측정 실패면 measure() 가 null 을 돌려주고 코치마크는 안전하게 스킵된다
@@ -11,8 +10,13 @@ import type { View } from 'react-native';
  */
 export type TargetRect = { x: number; y: number; width: number; height: number };
 
+// View·TouchableOpacity 등 measureInWindow 를 가진 요소면 무엇이든 대상이 될 수 있다.
+export type Measurable = {
+  measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+};
+
 type Registry = {
-  register: (key: string, node: View | null) => void;
+  register: (key: string, node: Measurable | null) => void;
   measure: (key: string) => Promise<TargetRect | null>;
 };
 
@@ -25,9 +29,9 @@ const OnboardingTargetContext = createContext<Registry>({
 const MEASURE_TIMEOUT_MS = 400;
 
 export function OnboardingTargetProvider({ children }: { children: ReactNode }) {
-  const nodes = useRef<Map<string, View>>(new Map());
+  const nodes = useRef<Map<string, Measurable>>(new Map());
 
-  const register = useCallback((key: string, node: View | null) => {
+  const register = useCallback((key: string, node: Measurable | null) => {
     if (node) nodes.current.set(key, node);
     else nodes.current.delete(key);
   }, []);
