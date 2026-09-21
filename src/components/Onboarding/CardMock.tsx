@@ -12,14 +12,19 @@ import Animated, {
 
 import { colors, radius, shadow, spacing, type } from '@/constants/theme';
 
-// 첫 카드 데모: "캡처(좌하단 스크린샷 썸네일) → 썸네일 탭 → 편집 화면이 올라옴 → 공유 아이콘 탭 →
-// 공유 시트가 올라옴 → WishShot 탭 → 위시 담기 폼이 올라옴"을 하나의 연결된 흐름으로 반복.
-// 레이어를 쌓고 위 레이어가 아래서 위로 슬라이드업하며, 탭 대상은 도형 자체가 밝아지는 펄스로 강조한다.
+// 첫 카드 데모: "캡처(스크린샷이 화면 크기에서 좌하단으로 축소) → 좌하단 캡처 탭(다시 커지며 편집 화면)
+// → 공유 아이콘 탭(공유 시트 올라옴) → WishShot 탭(위시 담기 폼 올라옴)"을 하나의 연결된 흐름으로 반복.
+// 캡처 사진은 하나의 모핑 요소(레이아웃 애니메이션: 전체 → 좌하단 썸네일 → 편집 이미지)로 이어진다.
 // 실제 스크린샷(인물·브랜드 포함)을 싣지 않고 흐름만 재현 — 에셋 불필요·토큰 기반.
 const STEP_MS = 1700;
-const STEPS = 4; // 0: 캡처 / 1: 편집(공유 탭) / 2: 공유 시트(WishShot 탭) / 3: 위시 담기 폼
+const STEPS = 4; // 0: 캡처→썸네일 / 1: 편집 / 2: 공유 시트 / 3: 위시 담기 폼
 const FRAME_W = 200;
 const FRAME_H = 316;
+
+// 캡처 사진 모핑 키프레임(프레임 좌표). 전체(캡처 순간) → 좌하단 썸네일 → 편집 이미지.
+const CAP = { L: 0, T: 0, W: FRAME_W, H: FRAME_H, R: radius.lg };
+const THUMB = { L: spacing.two, T: 224, W: 46, H: 68, R: radius.sm };
+const EDIT = { L: spacing.two, T: 40, W: FRAME_W - spacing.two * 2, H: 216, R: radius.md };
 
 export function CaptureFlowMock() {
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -48,23 +53,52 @@ export function CaptureFlowMock() {
   const activeStep = reduceMotion ? 3 : step;
 
   const feedOpacity = useSharedValue(1);
-  const thumbUp = useSharedValue(0);
   const editUp = useSharedValue(0);
   const shareUp = useSharedValue(0);
   const formUp = useSharedValue(0);
   const flash = useSharedValue(0);
-  const pulse = useSharedValue(0); // 밝아짐 펄스(0↔1 breathing)
+  const pulse = useSharedValue(0);
+  // 캡처 사진 모핑(레이아웃). 초기값 = 캡처 순간(전체 화면).
+  const capL = useSharedValue(CAP.L);
+  const capT = useSharedValue(CAP.T);
+  const capW = useSharedValue(CAP.W);
+  const capH = useSharedValue(CAP.H);
+  const capR = useSharedValue<number>(CAP.R);
 
   useEffect(() => {
-    const d = reduceMotion ? 0 : 450;
-    feedOpacity.value = withTiming(activeStep >= 1 ? 0 : 1, { duration: d });
-    thumbUp.value = withTiming(activeStep === 0 ? 1 : 0, { duration: d });
+    const d = reduceMotion ? 0 : 500;
     editUp.value = withTiming(activeStep >= 1 ? 1 : 0, { duration: d });
     shareUp.value = withTiming(activeStep >= 2 ? 1 : 0, { duration: d });
     formUp.value = withTiming(activeStep >= 3 ? 1 : 0, { duration: d });
-  }, [activeStep, reduceMotion, feedOpacity, thumbUp, editUp, shareUp, formUp]);
+    feedOpacity.value = withTiming(activeStep >= 1 ? 0 : 1, { duration: d });
 
-  // 캡처 순간의 화면 플래시(스텝 0 진입마다).
+    if (reduceMotion) {
+      capL.value = EDIT.L;
+      capT.value = EDIT.T;
+      capW.value = EDIT.W;
+      capH.value = EDIT.H;
+      capR.value = EDIT.R;
+      return;
+    }
+    if (activeStep === 0) {
+      // 캡처: 전체 화면으로 스냅 후 좌하단 썸네일로 축소.
+      const shrink = (from: number, to: number) => withSequence(withTiming(from, { duration: 0 }), withTiming(to, { duration: 600 }));
+      capL.value = shrink(CAP.L, THUMB.L);
+      capT.value = shrink(CAP.T, THUMB.T);
+      capW.value = shrink(CAP.W, THUMB.W);
+      capH.value = shrink(CAP.H, THUMB.H);
+      capR.value = shrink(CAP.R, THUMB.R);
+    } else {
+      // 탭 → 다시 커지며 편집 이미지로(그 뒤 단계는 편집 이미지 유지).
+      capL.value = withTiming(EDIT.L, { duration: 550 });
+      capT.value = withTiming(EDIT.T, { duration: 550 });
+      capW.value = withTiming(EDIT.W, { duration: 550 });
+      capH.value = withTiming(EDIT.H, { duration: 550 });
+      capR.value = withTiming(EDIT.R, { duration: 550 });
+    }
+  }, [activeStep, reduceMotion, editUp, shareUp, formUp, feedOpacity, capL, capT, capW, capH, capR]);
+
+  // 캡처 순간 화면 플래시(스텝 0 진입마다).
   useEffect(() => {
     if (reduceMotion || activeStep !== 0) return;
     flash.value = withSequence(withTiming(0.9, { duration: 120 }), withTiming(0, { duration: 320 }));
@@ -76,15 +110,21 @@ export function CaptureFlowMock() {
   }, [reduceMotion, pulse]);
 
   const feedStyle = useAnimatedStyle(() => ({ opacity: feedOpacity.value }));
-  const thumbStyle = useAnimatedStyle(() => ({ opacity: thumbUp.value, transform: [{ translateY: (1 - thumbUp.value) * 40 }] }));
-  const editStyle = useAnimatedStyle(() => ({ opacity: editUp.value, transform: [{ translateY: (1 - editUp.value) * FRAME_H }] }));
+  const editStyle = useAnimatedStyle(() => ({ opacity: editUp.value }));
   const shareStyle = useAnimatedStyle(() => ({ opacity: shareUp.value, transform: [{ translateY: (1 - shareUp.value) * FRAME_H }] }));
   const formStyle = useAnimatedStyle(() => ({ opacity: formUp.value, transform: [{ translateY: (1 - formUp.value) * FRAME_H }] }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const capStyle = useAnimatedStyle(() => ({
+    left: capL.value,
+    top: capT.value,
+    width: capW.value,
+    height: capH.value,
+    borderRadius: capR.value,
+  }));
 
   return (
     <View style={styles.frame}>
-      {/* 피드 레이어(캡처 썸네일 포함) */}
+      {/* 피드 레이어(캡처 대상 콘텐츠) */}
       <Animated.View style={[StyleSheet.absoluteFill, styles.layer, feedStyle]} pointerEvents="none">
         <View style={styles.statusRow}>
           <Text style={styles.statusTime}>9:41</Text>
@@ -105,27 +145,30 @@ export function CaptureFlowMock() {
           <SymbolView name="bookmark" size={16} tintColor={colors.textMain} />
         </View>
         <View style={styles.line80} />
-        <Animated.View style={[styles.capturedThumb, thumbStyle]}>
-          <SymbolView name="photo" size={16} tintColor={colors.silverDark} />
-          <Glow active={activeStep === 0} pulse={pulse} r={radius.sm} />
-        </Animated.View>
       </Animated.View>
 
-      {/* 편집 레이어(아래서 위로) */}
-      <Animated.View style={[StyleSheet.absoluteFill, styles.layer, editStyle]} pointerEvents="none">
+      {/* 편집 배경(피드 위로 흰 배경 페이드) */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.editBg, editStyle]} pointerEvents="none" />
+
+      {/* 캡처 사진(모핑 요소): 전체 → 좌하단 썸네일 → 편집 이미지 */}
+      <Animated.View style={[styles.capturedEl, capStyle]} pointerEvents="none">
+        <SymbolView name="photo" size={26} tintColor={colors.silverDark} />
+        <Glow active={activeStep === 0} pulse={pulse} />
+      </Animated.View>
+
+      {/* 편집 크롬(상단바 + 캡션) */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.editChrome, editStyle]} pointerEvents="none">
         <View style={styles.editBar}>
           <SymbolView name="xmark.circle.fill" size={22} tintColor={colors.silverDark} />
           <View style={styles.flex} />
           <SymbolView name="pencil.tip.crop.circle" size={20} tintColor={colors.textMain} />
           <View style={styles.editShare}>
             <SymbolView name="square.and.arrow.up" size={16} tintColor={colors.bg} />
-            <Glow active={activeStep === 1} pulse={pulse} r={radius.pill} />
+            <Glow active={activeStep === 1} pulse={pulse} />
           </View>
           <SymbolView name="checkmark.circle.fill" size={22} tintColor={colors.textMain} />
         </View>
-        <View style={styles.editImage}>
-          <SymbolView name="photo" size={34} tintColor={colors.silverDark} />
-        </View>
+        <View style={styles.flex} />
         <Text style={styles.editCaption}>자르기 및 크기 조절</Text>
       </Animated.View>
 
@@ -146,7 +189,7 @@ export function CaptureFlowMock() {
             <View style={styles.app}>
               <View style={styles.appIconActive}>
                 <SymbolView name="heart.fill" size={20} tintColor={colors.bg} />
-                <Glow active={activeStep === 2} pulse={pulse} r={radius.md} />
+                <Glow active={activeStep === 2} pulse={pulse} />
               </View>
               <Text style={[styles.appLabel, styles.appLabelActive]} numberOfLines={1}>
                 WishShot
@@ -197,10 +240,10 @@ export function CaptureFlowMock() {
   );
 }
 
-// 대상 도형 자체가 밝아지는 펄스(탭 지점 강조). 요소 위에 흰색 오버레이를 얹어 밝게 한다.
-function Glow({ active, pulse, r }: { active: boolean; pulse: SharedValue<number>; r: number }) {
+// 대상 도형 자체가 밝아지는 펄스(탭 지점 강조). 부모의 테두리까지 덮도록 -2 확장 + 부모 overflow 클리핑.
+function Glow({ active, pulse }: { active: boolean; pulse: SharedValue<number> }) {
   const style = useAnimatedStyle(() => ({ opacity: active ? pulse.value * 0.55 : 0 }));
-  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: r, backgroundColor: colors.bg }, style]} />;
+  return <Animated.View pointerEvents="none" style={[styles.glow, style]} />;
 }
 
 const APPS: { icon: SymbolViewProps['name']; label: string }[] = [
@@ -211,6 +254,8 @@ const APPS: { icon: SymbolViewProps['name']; label: string }[] = [
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  // Glow: 부모 테두리까지 덮어 도형 전체가 밝아지게(부모 overflow:'hidden' 이 둥근 모서리로 클리핑).
+  glow: { position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, backgroundColor: colors.bg },
 
   frame: {
     width: FRAME_W,
@@ -234,14 +279,11 @@ const styles = StyleSheet.create({
   line80: { height: 8, width: '80%', borderRadius: radius.pill, backgroundColor: colors.silver },
   feedImage: { flex: 1, borderRadius: radius.sm, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center' },
   feedActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.three },
-  capturedThumb: {
+
+  // 캡처 사진 모핑 요소
+  capturedEl: {
     position: 'absolute',
-    left: spacing.two,
-    bottom: spacing.four,
-    width: 46,
-    height: 68,
-    borderRadius: radius.sm,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.bgCard,
     borderWidth: 2,
     borderColor: colors.bg,
     alignItems: 'center',
@@ -251,6 +293,8 @@ const styles = StyleSheet.create({
   },
 
   // 편집
+  editBg: { backgroundColor: colors.bg },
+  editChrome: { padding: spacing.two },
   editBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   editShare: {
     width: 28,
@@ -261,7 +305,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  editImage: { flex: 1, borderRadius: radius.md, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center' },
   editCaption: { ...type.caption, color: colors.textSub, textAlign: 'center' },
 
   // 공유 시트
@@ -323,12 +366,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: spacing.one,
   },
-  formCard: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.md,
-    padding: spacing.two,
-    gap: spacing.two,
-  },
+  formCard: { backgroundColor: colors.bgCard, borderRadius: radius.md, padding: spacing.two, gap: spacing.two },
   formRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   formLabel: { fontSize: 11, color: colors.textSub, width: 44 },
   formValueLine: { height: 8, borderRadius: radius.pill, backgroundColor: colors.silver },

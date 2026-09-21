@@ -135,6 +135,7 @@ export function OnboardingOverlay({ onDone }: Props) {
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
             onScroll={scrollHandler}
             scrollEventThrottle={16}
             onMomentumScrollEnd={onMomentumEnd}
