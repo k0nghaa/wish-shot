@@ -304,4 +304,23 @@ Safari/앱에서 URL 공유 → WishShot
 - [ ] **제한 접근/거부**: 최초 획득 시점에 거부하면 "앨범 삭제는 '모든 사진' 접근이 필요합니다…" 안내가 1회 뜨고 **위시는 정상 저장**되며, **이후 저장부터는 삭제 제안이 더 이상 뜨지 않는다**(`canOfferAlbumDelete` 게이트).
 - [ ] OS 확인창에서 **취소** 시 오류 알림 없이 조용히 넘어가고 위시는 저장돼 있는지.
 - [ ] 덮어쓰기(중복) 저장 경로에서도 동일하게 삭제 제안이 뜨는지.
-- **Batch D**: (완료일 / 카드·스포트라이트 구현 / 대상·문구 / 접근성 / 이슈)
+- **Batch D** (2026-09-21 구현 완료, 실기기 검증은 사람): 브랜치 `feat/phase-7-onboarding`(A 머지된 dev에서 분기). 새 네이티브 모듈 없음(순수 JS — A-3의 `react-native-svg`·`@react-native-async-storage/async-storage` 위에 얹음). `tsc`·`expo lint` 통과.
+  - **신규 `src/components/Onboarding/`**:
+    - `onboardingStorage.ts`: 첫 실행 플래그 `wishshot.onboardingShown`(register 의 `PRIVACY_NOTICE_KEY` 와 동일 패턴). `hasSeenOnboarding`(읽기 실패는 "봤음"으로 취급해 반복 노출 차단)·`markOnboardingSeen`·`resetOnboarding`(재검증용).
+    - `onboardingTarget.tsx`: 코치마크 대상 등록소(context). 화면이 `register(key, node)` 로 강조 요소를 등록하면 오버레이가 `measure(key)`→`measureInWindow` 로 좌표를 얻는다. **미등록·미마운트·측정 실패·레이아웃 전(0 크기)·콜백 미도착(400ms 타임아웃)** 은 모두 `null` 반환 → 코치마크 **안전 스킵(크래시 금지)**.
+    - `CoachmarkSpotlight.tsx`: 전체 화면 딤 위에 **react-native-svg `<Mask>` 로 둥근(스타디움) 구멍**(대상+8px 여백, `rx=높이/2`)을 뚫고 근처에 안내 툴팁+"시작하기". 구멍이 화면 위쪽이면 툴팁을 아래, 아래쪽이면 위에 배치. 아무 곳이나 탭하면 닫힘. 좌표는 실기기 튜닝 전제.
+    - `OnboardingOverlay.tsx`: RN `Modal`(transparent). **카드 캐러셀**(`Animated.FlatList` horizontal·pagingEnabled + reanimated 스크롤 연동 도트) → 마지막 카드 "시작하기" 시 대상 측정 → 성공하면 **코치마크**, 실패면 바로 완료. "건너뛰기"·완료·측정 실패 모두 `onDone` 으로 수렴. **reduce-motion**(`AccessibilityInfo.isReduceMotionEnabled`)이면 Modal 전환·스크롤 애니메이션·도트 보간을 끄고 정적 표시.
+    - **카드 3장(문구는 실제 기능과 일치·앱 톤 단답)**: ① "스크린샷으로 담기" — "공유 시트에서 위시샷을 선택하면 스크린샷이 바로 담깁니다."(`square.and.arrow.up`) ② "AI가 자동 정리" — "제품명·가격·브랜드를 AI가 읽어 채우고 카테고리를 추천합니다."(`sparkles`) ③ "모아서 관리" — "카테고리로 정리하고, 링크를 저장하고, 원본은 앨범에서 정리합니다."(`square.grid.2x2`).
+  - **게이트(`src/app/_layout.tsx` `OnboardingGate`)**: `OnboardingTargetProvider` 로 Stack+오버레이를 함께 감싸(화면 등록↔오버레이 측정 연결). AuthGate 준비 후 **최초 마운트 1회만** 판단하는 `decided` ref — (1) **공유 인텐트로 열렸으면 온보딩 스킵**(`hasShareIntent` 우선, 플래그 미설정 → 다음 일반 실행에서 노출), (2) 이미 봤으면 미노출. 판단 사이 인텐트 도착/언마운트는 `cancelled`·재확인으로 방어. 완료 시 `markOnboardingSeen`.
+  - **코치마크 대상(`src/app/(tabs)/index.tsx`)**: 홈의 "카테고리 추가/관리" 알약 `View` 에 안정적 콜백 ref(`useCallback`)로 `register('home.addCategory', …)`. 온보딩이 홈 포커스에서 뜨므로 이 요소는 마운트돼 있어 측정된다(툴팁 "여기서 카테고리를 추가하고 관리합니다."). 미마운트 시엔 자연히 스킵.
+  - **설정 리셋(`src/app/settings.tsx`)**: `__DEV__` 전용 "온보딩 다시 보기(개발용)" — `resetOnboarding()` 후 안내(게이트가 최초 마운트 1회 판단이라 **재시작 후** 노출됨을 명시).
+  - **결정/주의**: (a) 코치마크 대상은 홈에서 항상 마운트되는 "카테고리 추가" 알약으로 고정(FAB 는 '전체' 탭 포커스 때만 마운트라 launch 시 측정 불가 → 문서 예시 대비 대상 변경). 실기기에서 다른 대상으로 바꾸려면 대상 화면에서 `register` 추가 + `COACHMARK_TARGET_KEY` 교체로 확장 가능. (b) 좌표·스포트라이트 정합·툴팁 위치는 **실기기 튜닝 전제**. (c) 새 네이티브 없음 — D 는 재빌드 불필요.
+  - **실기기 검증(사람 체크리스트 — "검증 완료" 단정 아님)**: 아래 "Batch D — 실기기 검증(체크리스트)" 참조.
+
+### Batch D — 실기기 검증(체크리스트, 사람)
+- [ ] 새 설치(또는 설정 > "온보딩 다시 보기" 후 재시작)에서 온보딩 카드가 1회 노출되고, 이후 실행에선 안 뜬다.
+- [ ] 카드 좌우 스와이프·도트 전환·"다음"/"시작하기" 버튼이 정상 동작한다.
+- [ ] "시작하기" 후 코치마크 스포트라이트 구멍이 홈 "카테고리 추가" 알약에 맞고, 탭/"시작하기"로 닫힌다(좌표 미세조정 필요 시 기록).
+- [ ] **공유 시트로 앱을 열면 온보딩이 인텐트 처리를 막지 않는다**(온보딩 미노출, 공유 흐름 우선). 그 다음 일반 실행에서 온보딩이 노출된다.
+- [ ] 대상 측정 실패(예: 대상 미마운트) 시 크래시 없이 온보딩이 조용히 완료된다.
+- [ ] 손쉬운 사용 > 동작 줄이기(reduce-motion) ON 이면 전환/도트 애니메이션 없이 정적으로 표시된다.

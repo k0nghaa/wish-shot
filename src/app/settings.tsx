@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { resetOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
 import { signInAnonymouslyIfNeeded, signOut } from '@/lib/queries';
@@ -20,6 +21,13 @@ export default function SettingsScreen() {
     } catch (e) {
       Alert.alert('오류', e instanceof Error ? e.message : '세션 초기화에 실패했습니다.');
     }
+  }
+
+  // 온보딩 재검증용: 플래그를 지워 다음 앱 실행 시 온보딩이 다시 뜨게 한다(__DEV__ 전용).
+  // 온보딩 게이트는 앱 최초 마운트 시 1회만 판단하므로 즉시 노출이 아니라 재시작 후 노출된다.
+  async function handleResetOnboarding() {
+    await resetOnboarding();
+    Alert.alert('온보딩 초기화', '앱을 다시 시작하면 온보딩이 표시됩니다.');
   }
 
   // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
@@ -58,6 +66,14 @@ export default function SettingsScreen() {
               accessibilityLabel="이메일 로그인(개발용)"
             >
               <Text style={styles.devButtonText}>이메일 로그인(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleResetOnboarding}
+              accessibilityRole="button"
+              accessibilityLabel="온보딩 다시 보기(개발용)"
+            >
+              <Text style={styles.devButtonText}>온보딩 다시 보기(개발용)</Text>
             </TouchableOpacity>
           </View>
         ) : null}

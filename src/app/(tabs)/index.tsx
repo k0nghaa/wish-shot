@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CategoryCard } from '@/components/CategoryCard';
 import { EmptyState } from '@/components/EmptyState';
+import { useOnboardingTarget } from '@/components/Onboarding/onboardingTarget';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { logImageDiag, toFileUri } from '@/lib/imageBytes';
@@ -49,6 +50,9 @@ export default function HomeScreen() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const isFocused = useIsFocused();
   const shareHandled = useRef(false);
+  // 온보딩 코치마크 대상 등록: "카테고리 추가" 알약을 강조 대상으로 노출한다(미마운트면 스킵됨).
+  const { register } = useOnboardingTarget();
+  const setPillRef = useCallback((n: View | null) => register('home.addCategory', n), [register]);
   const [rows, setRows] = useState<Row[] | null>(null); // null = 로딩 중
   const [deleteMode, setDeleteMode] = useState(false); // iOS 앨범 톤 폴더 삭제 모드
 
@@ -254,7 +258,7 @@ export default function HomeScreen() {
             <Text style={styles.doneText}>완료</Text>
           </TouchableOpacity>
         ) : (
-          <View style={styles.pill}>
+          <View ref={setPillRef} style={styles.pill}>
             <TouchableOpacity
               onPress={handleCreateCategory}
               style={styles.pillBtn}
