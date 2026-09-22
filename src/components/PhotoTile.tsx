@@ -13,6 +13,7 @@ import { Thumbnail } from './Thumbnail';
  */
 export function PhotoTile({
   url,
+  fallbackUrl,
   size,
   onPress,
   onLongPress,
@@ -21,6 +22,7 @@ export function PhotoTile({
   selected,
 }: {
   url: string | null;
+  fallbackUrl?: string | null;
   size: number;
   onPress?: () => void;
   onLongPress?: () => void;
@@ -39,7 +41,7 @@ export function PhotoTile({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={selectionMode ? { selected: !!selected } : undefined}
     >
-      <Thumbnail url={url} style={{ width: size, height: size }} />
+      <Thumbnail url={url} fallbackUrl={fallbackUrl} style={{ width: size, height: size }} />
       {selected ? <View style={styles.dim} pointerEvents="none" /> : null}
       {selectionMode ? (
         <View style={styles.badge} pointerEvents="none">

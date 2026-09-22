@@ -8,7 +8,14 @@ import { ItemSelectionControls } from '@/components/ItemSelectionControls';
 import { PhotoTile } from '@/components/PhotoTile';
 import { colors, spacing } from '@/constants/theme';
 import { useItemSelection } from '@/hooks/useItemSelection';
-import { getItemImageSignedUrls, listCategories, listItemsByCategory, type Category, type Item } from '@/lib/queries';
+import {
+  getItemImageSignedUrls,
+  getItemThumbSignedUrls,
+  listCategories,
+  listItemsByCategory,
+  type Category,
+  type Item,
+} from '@/lib/queries';
 
 const COLUMNS = 3;
 
@@ -22,7 +29,8 @@ export default function CategoryItemsScreen() {
   const title = params.name ?? (isUncat ? '미분류' : '카테고리');
 
   const [items, setItems] = useState<Item[] | null>(null); // null = 로딩 중
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [urls, setUrls] = useState<Record<string, string>>({}); // 썸네일(우선)
+  const [fallbackUrls, setFallbackUrls] = useState<Record<string, string>>({}); // 원본(폴백)
   const [categories, setCategories] = useState<Category[]>([]);
 
   const load = useCallback(async () => {
@@ -34,9 +42,11 @@ export default function CategoryItemsScreen() {
         return;
       }
       const list = await listItemsByCategory(isUncat ? null : id);
-      const urlMap = await getItemImageSignedUrls(list.map((it) => it.image_key));
+      const keys = list.map((it) => it.image_key);
+      const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
       setItems(list);
-      setUrls(urlMap);
+      setUrls(thumbMap);
+      setFallbackUrls(origMap);
       setCategories(cats);
     } catch (e) {
       setItems([]);
@@ -96,6 +106,7 @@ export default function CategoryItemsScreen() {
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
+              fallbackUrl={fallbackUrls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
               selectionMode={selection.selectMode}
