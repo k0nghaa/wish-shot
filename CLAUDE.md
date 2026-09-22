@@ -89,7 +89,8 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 - `npx expo lint` — ESLint.
 - `npx expo-doctor` — 프로젝트 설정·의존성 정합성 점검.
 - `npx eas-cli build --platform ios --profile development` — 개발 빌드 (Apple 인증 프롬프트가 있어 사람이 실행).
-- `npx eas-cli build --platform ios --profile production` → `npx eas-cli submit --platform ios --profile production --latest` — TestFlight 배포 (사람이 실행, Apple 인증). production 프로필은 channel 없음 = **OTA 미사용**(수정본은 새 빌드로만).
+- `npx eas-cli build --platform ios --profile production` → `npx eas-cli submit --platform ios --profile production --latest` — TestFlight 배포 (사람이 실행, Apple 인증). production 프로필은 `channel: "production"` = **OTA 사용**(Phase 9 F, `expo-updates`). 네이티브 변경이 없는 **JS-only 수정은 새 빌드·재심사 없이** `eas update`로 배포한다. 네이티브를 바꾸면 `runtimeVersion(fingerprint)`이 자동으로 달라져 새 빌드가 필요하다(불일치 크래시 방지).
+- `npx eas-cli update --branch production --message "..."` — JS-only OTA 배포(Phase 9 F). production 채널이 이 branch를 구독한다. **먼저 preview/internal 채널로 확인 후** production에 올린다(깨진 번들은 마지막 정상/내장 번들로 폴백, 고친 업데이트를 다시 publish해 롤백).
 - `npx eas-cli env:create` / `env:push` / `env:list production` — EAS 환경 변수 관리(클라우드 빌드용 `EXPO_PUBLIC_*` 등록).
 - `npx supabase login` → `npx supabase gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts` — DB 스키마에서 타입 재생성 (마이그레이션 변경 시마다). 로그인은 최초 1회.
 - `npx supabase secrets set ANTHROPIC_API_KEY=...` — Edge Function 시크릿 등록(Claude 키). **앱·커밋·채팅엔 절대 넣지 않는다.**

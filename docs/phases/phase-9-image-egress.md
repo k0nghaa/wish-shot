@@ -12,6 +12,8 @@
 >
 > **재빌드 없음(중요)**: 이 Phase는 **새 네이티브 모듈을 추가하지 않는다**. `expo-image-manipulator`(리사이즈)·`@react-native-async-storage/async-storage`(영속 캐시)는 **이미 설치·빌드돼 있다**(`package.json:7,17`). 따라서 **전 작업이 순수 JS/설정 → EAS 재빌드 불필요**, 현재 dev client(또는 TestFlight 다음 빌드)로 검증한다. 만약 새 네이티브가 필요하다고 판단되면 **즉시 멈추고 사람에게 보고**한다.
 >
+> **단, 선택 항목 F(OTA 설정)를 채택하면 `expo-updates`(네이티브 1개)가 추가된다 — 유일한 예외다.** 하지만 이 Phase는 어차피 Phase 8+9를 담은 release production 빌드를 한 번 돈다(출시 계획). F는 **그 빌드에 올라타므로 추가 빌드가 발생하지 않는다.** F를 채택하지 않으면 이 Phase는 100% 순수 JS/설정이다. F 채택 시, 출시 후의 JS-only 수정은 재빌드 없이 `eas update`로 나간다.
+>
 > **근거 원칙**: iOS/Expo/Supabase 판단은 공식 문서로 검증한 사실에 기반한다(맨 아래 "근거·출처"). 불확실하면 추측하지 말고 문서를 확인하거나 사람에게 묻는다(CLAUDE.md 규칙 6).
 >
 > 관련 문서: `CLAUDE.md`(현행 구조·규칙), `docs/phases/phase-7-*.md`(직전 기능 상태), `docs/design/phase-5-visual-spec.md`(원본 방침 문구 — 이 Phase에서 개정).
@@ -51,6 +53,7 @@ Storage 25MB·DB 25MB로 저장량은 작은데 9월 청구주기 Egress가 6.49
 | **C** | 업로드 `cacheControl` | `604800`(7일) |
 | **D** | 그리드 썸네일 분리 | **긴 변 ≤400 · JPEG q0.6** 별도 객체 `{uid}/{id}_thumb.jpg`. 그리드=썸네일 / 상세 뷰어=원본. 삭제·덮어쓰기 시 썸네일 동반. thumb 부재 시 원본 폴백 |
 | E(선택) | 그리드 초기 로드 상한 | 성장 대비 권장(아래). 미적용해도 A+D로 목표 달성 |
+| F(선택) | OTA 설정(`expo-updates`) | 출시 후 JS-only 수정을 재빌드 없이 배포. 네이티브 1개 추가지만 **이번 release 빌드에 포함**(추가 빌드 없음). 채택 여부는 사람 결정 |
 
 > **TTL 1일 근거**: 영속 캐시로 일 단위 재방문 egress는 거의 0으로 유지하면서, 정식 사용자에게 signed URL 수명(유출 시 노출 창)을 짧게 둔다. `SIGNED_URL_TTL_SEC=7일`(개발 편의값)에서 **1일로 낮춘다**.
 
@@ -256,6 +259,29 @@ A+D만으로 목표는 달성된다. 사용자당 아이템이 수백 개로 커
 
 ---
 
+## F — (선택) OTA 설정: 출시 후 JS 수정은 재빌드 없이
+
+**결정 필요(사람)**: 채택하면 이번 release 빌드에 `expo-updates`를 포함한다. 출시 후 A~E 같은 **JS-only 수정·버그픽스**를 App Store 재빌드·재심사 없이 `eas update`로 배포할 수 있다. 빌드 분(minutes)을 소모하지 않는다.
+
+**전제(중요)**: OTA를 켜는 `expo-updates`는 네이티브 모듈이라 **한 번은 빌드에 구워져야** 한다(그 빌드 자체는 OTA로 못 넣음). 이 Phase는 어차피 release production 빌드를 1회 돌므로, **F를 그 빌드에 함께 넣으면 추가 빌드가 없다.** F 이후의 JS 변경부터 OTA가 적용된다. **채널·runtimeVersion은 꼬리표·게이트일 뿐 `expo-updates`가 없으면 무효**임에 유의(설치가 먼저).
+
+**대상**: `package.json`(expo install), `app.json`(runtimeVersion), `eas.json`(production channel). CLAUDE.md 명령어 섹션의 "production 프로필은 channel 없음 = OTA 미사용" 서술도 F 채택 시 개정한다.
+
+**작업**:
+1. `npx expo install expo-updates` — SDK 호환 버전만(버전 임의 인상 금지, CLAUDE.md 규칙 10).
+2. `eas.json`의 `build.production`에 `"channel": "production"` 추가.
+3. `app.json`에 `runtimeVersion` 설정 — 호환 빌드에만 업데이트가 가도록(예: `{ "policy": "fingerprint" }`). Expo 문서로 현재 권장 정책 확인 후 적용(추측 금지).
+4. 검증: `npx expo config --type introspect`·`npx expo-doctor` 통과. **실제 OTA 동작은 release 빌드에서만 검증 가능**(사람).
+
+**주의**:
+- **runtimeVersion 호환**: 이후 네이티브를 바꾸면 runtimeVersion을 올리고 다시 빌드해야 하며, 옛 빌드엔 그 OTA가 안 간다(불일치 크래시 방지 안전장치).
+- **깨진 OTA 롤백 대비**: 잘못된 번들을 올리면 사용자 앱이 깨질 수 있다. `expo-updates`는 마지막 정상/내장(embedded) 번들로 폴백하고, 고친 업데이트를 다시 publish해 롤백한다. **먼저 preview/internal 채널로 확인 후 production에 올린다.**
+- **Apple 정책(심사 안전)**: OTA(원격 JS 실행)는 Apple이 공식 허용하는 방식이라 **`expo-updates` 설치만으로 심사에서 떨어지지 않는다**. 단 심사에서 본 앱의 성격·기능을 통째로 바꾸는 용도로 남용하지 않는다(버그 수정·소소한 개선 = 문제없음).
+
+**DoD**: `expo config introspect`에 updates 설정 반영, `expo-doctor` 통과, `tsc`·`lint` 통과. release 빌드 후 사람이 `eas update`로 JS 수정이 재빌드 없이 반영되는지 1회 확인.
+
+---
+
 ## 검증 (Verification)
 
 에이전트:
@@ -288,13 +314,14 @@ A+D만으로 목표는 달성된다. 사용자당 아이템이 수백 개로 커
 - [x] C — cacheControl: `uploadItemImage`·`uploadItemImageThumb` upload에 `cacheControl: '604800'`.
 - [x] D — 썸네일 분리(키/업로드/서명URL/삭제 동반/폴백/백필) + 그리드 4곳: `storage.ts`에 `thumbKeyFromImageKey`·`uploadItemImageThumb`·`getItemThumbSignedUrls` 추가, `deleteItemImage`/`deleteItemImages`가 원본+썸네일 함께 remove·무효화. 그리드 4곳(`all`·`index` 모자이크·`category/[id]`·`tag/[name]`)이 썸네일(우선)+원본(폴백)을 함께 발급. `Thumbnail`에 `fallbackUrl`+`onError` 스왑, `PhotoTile`·`CategoryCard`로 관통. `settings.tsx` `__DEV__` "썸네일 백필" 버튼. 상세 뷰어·편집 미리보기·중복 다이얼로그는 원본 유지(변경 없음). 삭제 호출부(`useItemSelection`·상세)는 무변경(storage 내부에서 썸네일 동반).
 - [ ] E — (선택) 초기 로드 상한: **미적용 — 성장 대비 후속으로 남김**(A+D로 목표 달성, 현재 데이터 규모에서 불필요·리스크만 증가).
+- [x] F — (선택) OTA 설정(`expo-updates`): **채택·적용 완료.** `npx expo install expo-updates`(`~57.0.23`, SDK 57 호환). `app.json`에 `runtimeVersion: { policy: "fingerprint" }`(가장 안전 — 네이티브 변경 시 자동 불일치 방지) + `updates.url: https://u.expo.dev/13c8e5d2-653f-4e14-975b-f006e0a13471`. `eas.json` production에 `channel: "production"`. `CLAUDE.md` 명령어 섹션 "OTA 미사용" 서술을 "OTA 사용 + `eas update`" 로 개정. 이번 release production 빌드에 포함(추가 빌드 없음), 출시 후 JS-only 수정은 `eas update`로. **실제 OTA 반영은 release 빌드 후 사람이 검증.**
 - [x] 문서 동기화: `CLAUDE.md`(Storage·Egress 규칙 신설 + 데이터 흐름 문구 개정), `README.md`(이미지 저장·전송 섹션 + Edge Function 문구), `docs/design/phase-5-visual-spec.md`(M6 "원본 온전"→1600px 최적화).
 - [x] 검증(tsc/lint + 사람 실기기): `npx tsc --noEmit` exit 0 · `npx expo lint` exit 0. 실기기 검증은 아래 "검증(사람)" 체크리스트로 위임(에이전트 불가).
 - 특이사항·결정:
   - register `contentType` 상태 제거: 업로드가 항상 JPEG(`compressForUpload`)라 원본 mime 추적이 무의미 → unused 방지 겸 제거. `params.imageMime` 타입은 보존(무해).
   - `getItemThumbSignedUrls`/`getItemImageSignedUrls`를 그리드에서 **둘 다** 발급: signed URL 발급은 바이트 전송이 아니라 egress가 아니므로 무해하고, 원본 바이트는 썸네일 로드 실패(레거시) 시 `onError` 폴백에서만 내려온다.
   - 백필은 RLS로 본인 아이템만(전역 백필 불가·불필요). 실사용자 레거시는 그리드 원본 폴백으로 커버.
-  - 새 네이티브 모듈 없음 → EAS 재빌드 불필요(현재 dev client/다음 빌드로 검증).
+  - A~E는 새 네이티브 모듈 없음 → 그 자체론 EAS 재빌드 불필요(현재 dev client/다음 빌드로 검증). **F는 유일한 예외로 `expo-updates`(네이티브 1개)를 추가** — 다만 이번 release production 빌드에 올라타므로 추가 빌드는 없다. F의 OTA 설정(runtimeVersion·updates·channel)은 `expo config introspect`에 반영·`expo-doctor` 통과(실패 1건은 기존 패치 미스매치 뿐, expo-updates 무관 — 규칙 10).
 
 ---
 
