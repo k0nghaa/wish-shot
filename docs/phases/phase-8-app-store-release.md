@@ -20,7 +20,7 @@ Phase 7까지 기능이 완성되고 TestFlight로 검증 가능한 상태다. P
 ## 하지 않는 것 / 주의
 
 - 에이전트가 대신 못 하는 것: EAS 빌드(Apple 로그인), eas submit, App Store Connect 웹 조작, 심사 제출/취소, 출시 클릭 — 전부 사람.
-- OTA 미사용(production 프로필 channel 없음) → 수정본은 새 빌드로만.
+- OTA 사용(Phase 9 F, `expo-updates`). production 프로필 `channel: "production"` + `app.json`의 `runtimeVersion(fingerprint)`·`updates.url` → **이번 production 빌드부터** JS-only 수정은 `eas update`로 재빌드 없이 배포된다. **네이티브 변경(모듈·권한·plugins·에셋)만 새 빌드**가 필요(fingerprint가 달라짐).
 
 ## 핵심 사실 · 함정 (반드시 이해)
 
@@ -94,7 +94,7 @@ TestFlight가 **프로덕션 Supabase를 그대로** 썼기 때문에, 테스트
 
 - ASC → TestFlight → 내부 테스터(팀원 최대 100)로 배포. 베타 심사 없음·즉시.
 - Phase 7 기능 실기기 검증: URL 공유→링크 붙이기, 앨범 삭제(전체접근·OS 확인창), 온보딩 1회, 다중선택, 사진 권한창 개선, 기존 회귀.
-- DoD: 내부 테스터가 최신 빌드로 핵심 시나리오 정상 확인. 문제 발견 시 수정 → 새 빌드(Step 1)로 반복.
+- DoD: 내부 테스터가 최신 빌드로 핵심 시나리오 정상 확인. 문제 발견 시 — JS-only는 `eas update`(OTA), 네이티브 변경은 새 빌드(Step 1) — 로 반복.
 
 ## Step 3 — (선택) 외부 베타 (Beta App Review, 사람)
 
