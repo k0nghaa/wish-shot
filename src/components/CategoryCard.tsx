@@ -16,6 +16,7 @@ export function CategoryCard({
   name,
   count,
   thumbnailUrls,
+  fallbackUrls,
   onPress,
   onLongPress,
   deleteMode,
@@ -24,6 +25,7 @@ export function CategoryCard({
   name: string;
   count: number;
   thumbnailUrls: (string | null)[];
+  fallbackUrls?: (string | null)[];
   onPress?: () => void;
   onLongPress?: () => void;
   deleteMode?: boolean;
@@ -45,7 +47,11 @@ export function CategoryCard({
         <View style={styles.mosaic}>
           {tiles.map((url, i) => (
             <View key={i} style={styles.tileWrap}>
-              {url ? <Thumbnail url={url} style={styles.tile} /> : <View style={styles.tileEmpty} />}
+              {url ? (
+                <Thumbnail url={url} fallbackUrl={fallbackUrls?.[i] ?? null} style={styles.tile} />
+              ) : (
+                <View style={styles.tileEmpty} />
+              )}
             </View>
           ))}
         </View>

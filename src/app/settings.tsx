@@ -5,7 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { resetOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
-import { signInAnonymouslyIfNeeded, signOut } from '@/lib/queries';
+import { readImageBytes } from '@/lib/imageBytes';
+import { makeThumbnail } from '@/lib/imageResize';
+import {
+  getCurrentUserId,
+  getItemImageSignedUrl,
+  listItems,
+  signInAnonymouslyIfNeeded,
+  signOut,
+  uploadItemImageThumb,
+} from '@/lib/queries';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -28,6 +37,31 @@ export default function SettingsScreen() {
   async function handleResetOnboarding() {
     await resetOnboarding();
     Alert.alert('온보딩 초기화', '앱을 다시 시작하면 온보딩이 표시됩니다.');
+  }
+
+  // 썸네일 백필(Phase 9 D, __DEV__ 전용): 기존 아이템의 원본에서 400px 썸네일을 만들어 올린다.
+  // RLS 로 본인 아이템만 대상(전역 백필 불가·불필요 — 실사용자 레거시는 그리드 원본 폴백으로 커버).
+  async function handleBackfillThumbs() {
+    try {
+      const userId = await getCurrentUserId();
+      const items = await listItems();
+      let done = 0;
+      let failed = 0;
+      for (const it of items) {
+        try {
+          const url = await getItemImageSignedUrl(it.image_key); // 원본 signed URL
+          const thumbUri = await makeThumbnail(url); // manipulateAsync 가 원격 URL 을 받아 400px 생성
+          const bytes = await readImageBytes(thumbUri);
+          await uploadItemImageThumb(userId, it.id, bytes);
+          done++;
+        } catch {
+          failed++;
+        }
+      }
+      Alert.alert('썸네일 백필', `완료 ${done} · 실패 ${failed}`);
+    } catch (e) {
+      Alert.alert('오류', e instanceof Error ? e.message : '백필에 실패했습니다.');
+    }
   }
 
   // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
@@ -74,6 +108,14 @@ export default function SettingsScreen() {
               accessibilityLabel="온보딩 다시 보기(개발용)"
             >
               <Text style={styles.devButtonText}>온보딩 다시 보기(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleBackfillThumbs}
+              accessibilityRole="button"
+              accessibilityLabel="썸네일 백필(개발용)"
+            >
+              <Text style={styles.devButtonText}>썸네일 백필(개발용)</Text>
             </TouchableOpacity>
           </View>
         ) : null}

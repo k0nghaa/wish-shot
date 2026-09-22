@@ -15,6 +15,7 @@ import {
   createCategory,
   deleteCategory,
   getItemImageSignedUrls,
+  getItemThumbSignedUrls,
   listCategories,
   listItems,
   renameCategory,
@@ -32,7 +33,8 @@ type Row = {
   id: string; // 카테고리 id, 또는 미분류는 'uncategorized'
   name: string;
   count: number;
-  thumbUrls: (string | null)[];
+  thumbUrls: (string | null)[]; // 썸네일(우선)
+  fallbackUrls: (string | null)[]; // 원본(폴백 — 썸네일 없는 레거시)
   isUncat: boolean;
 };
 
@@ -114,20 +116,32 @@ export default function HomeScreen() {
           name: c.name,
           count: countByCat.get(c.id) ?? 0,
           thumbUrls: [],
+          fallbackUrls: [],
           isUncat: false,
         });
       }
       const uncatCount = countByCat.get(null) ?? 0;
       if (uncatCount > 0) {
-        built.push({ id: 'uncategorized', name: '미분류', count: uncatCount, thumbUrls: [], isUncat: true });
+        built.push({
+          id: 'uncategorized',
+          name: '미분류',
+          count: uncatCount,
+          thumbUrls: [],
+          fallbackUrls: [],
+          isUncat: true,
+        });
       }
 
-      // 대표 썸네일 signed URL 배치 발급(전 카테고리 키를 한 번에).
+      // 대표 이미지 signed URL 배치 발급(전 카테고리 키를 한 번에). 썸네일(우선)+원본(폴백) 함께.
       const allKeys = built.flatMap((r) => keysByCat.get(r.isUncat ? null : r.id) ?? []);
-      const urlMap = await getItemImageSignedUrls(allKeys);
+      const [thumbMap, origMap] = await Promise.all([
+        getItemThumbSignedUrls(allKeys),
+        getItemImageSignedUrls(allKeys),
+      ]);
       for (const r of built) {
         const keys = keysByCat.get(r.isUncat ? null : r.id) ?? [];
-        r.thumbUrls = keys.map((k) => urlMap[k] ?? null);
+        r.thumbUrls = keys.map((k) => thumbMap[k] ?? null);
+        r.fallbackUrls = keys.map((k) => origMap[k] ?? null);
       }
 
       setRows(built);
@@ -306,6 +320,7 @@ export default function HomeScreen() {
                 name={item.name}
                 count={item.count}
                 thumbnailUrls={item.thumbUrls}
+                fallbackUrls={item.fallbackUrls}
                 onPress={deleteMode ? undefined : () => openCategory(item)}
                 onLongPress={item.isUncat || deleteMode ? undefined : () => handleCardManage(item)}
                 deleteMode={deleteMode}

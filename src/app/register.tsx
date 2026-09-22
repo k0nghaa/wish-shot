@@ -28,7 +28,8 @@ import { TagInput } from '@/components/TagInput';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
-import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
+import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
+import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
@@ -42,6 +43,7 @@ import {
   listCategories,
   updateItem,
   uploadItemImage,
+  uploadItemImageThumb,
   type AnalysisStatus,
   type Category,
   type Item,
@@ -58,11 +60,6 @@ const REGION_NOTICE_KEY = 'wishshot.regionNoticeShown';
 function parsePrice(text: string): number | null {
   const digits = text.replace(/[^\d]/g, '');
   return digits ? Number(digits) : null;
-}
-
-// 최근 사진 uri 확장자로 콘텐츠 타입을 추정한다(iOS 스크린샷은 png). picker 결과와 달리 mimeType 이 없다.
-function guessContentType(uri: string): string {
-  return /\.png(\?|$)/i.test(uri) ? 'image/png' : 'image/jpeg';
 }
 
 /** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
@@ -122,7 +119,6 @@ export default function RegisterScreen() {
   }, [router]);
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
-  const [contentType, setContentType] = useState<string>(params.imageMime ?? 'image/jpeg');
   // 앨범 원본 삭제(기능 2): 앱 내에서 고른 사진의 자산 id(picker·"방금 캡처한 사진"). 전체 접근이 아니면
   // picker 결과가 null 일 수 있어 그 경우 삭제 옵션 비노출. 공유 시트(params.imageUri)는 원본 참조가
   // 없어 이 값을 세우지 않아 자연히 제외된다.
@@ -293,7 +289,6 @@ export default function RegisterScreen() {
     const asset = result.assets[0];
     logImageDiag('pickImage', asset.uri, { fileSize: asset.fileSize, mimeType: asset.mimeType });
     setImageUri(asset.uri);
-    if (asset.mimeType) setContentType(asset.mimeType);
     // assetId 는 전체 접근이 아니면 null 일 수 있다(문서: limited 권한 시 null). null 이면 삭제 옵션을 감춘다.
     setPickedAssetId(asset.assetId ?? null);
   }
@@ -311,7 +306,6 @@ export default function RegisterScreen() {
         return;
       }
       logImageDiag('recentPhoto', recent.uri);
-      setContentType(guessContentType(recent.uri));
       // "방금 캡처한 사진"도 원본 assetId 가 있으므로 저장 후 앨범 삭제 대상에 포함한다(기능 2 취지에 부합).
       setPickedAssetId(recent.assetId);
       setImageUri(recent.uri); // 설정되면 기존 OCR/AI 파이프라인이 자동으로 돈다.
@@ -383,9 +377,14 @@ export default function RegisterScreen() {
   async function performNewSave() {
     const userId = await getCurrentUserId();
     const id = uuid.v4();
-    const bytes = await readImageBytes(imageUri!);
+    // 원본 uri(사용자가 고른 사진, OCR 은 이미 이걸로 돌았음)에서 저장 시점에만 축소·압축한다.
+    await ensureFileReady(imageUri!); // iCloud 미다운로드 흡수(불변식 3) — 새 에러 경로 없이 기존 안내로 폴백
+    const compressed = await compressForUpload(imageUri!); // ≤1600 jpeg
+    const thumbUri = await makeThumbnail(compressed.uri); // 축소본에서 400px(디코드 절약)
+    const [bytes, thumbBytes] = await Promise.all([readImageBytes(compressed.uri), readImageBytes(thumbUri)]);
     // Storage 업로드 실패 시 여기서 throw → 아이템 행을 만들지 않는다(E-5: 이미지 없는 아이템 금지).
-    const imageKey = await uploadItemImage(userId, id, bytes, contentType);
+    const imageKey = await uploadItemImage(userId, id, bytes, compressed.contentType);
+    await uploadItemImageThumb(userId, id, thumbBytes); // 원본+썸네일 함께(불변식 1)
     try {
       await createItem({
         id,
@@ -428,9 +427,14 @@ export default function RegisterScreen() {
     setOverwriteBusy(true);
     try {
       const userId = await getCurrentUserId();
-      const bytes = await readImageBytes(imageUri!);
-      // 같은 Storage 키에 새 스크린샷 덮어쓰기(upsert) + 필드 갱신. 새 행 추가 아님.
-      await uploadItemImage(userId, existing.id, bytes, contentType);
+      await ensureFileReady(imageUri!); // iCloud 처리 유지(불변식 3)
+      const compressed = await compressForUpload(imageUri!);
+      const thumbUri = await makeThumbnail(compressed.uri);
+      const [bytes, thumbBytes] = await Promise.all([readImageBytes(compressed.uri), readImageBytes(thumbUri)]);
+      // 같은 Storage 키에 새 스크린샷 덮어쓰기(upsert) + 필드 갱신. 원본과 썸네일을 모두 재업로드해
+      // 옛 사진이 캐시로 남지 않게 한다(불변식 1 — 업로드 함수가 각 키를 invalidate).
+      await uploadItemImage(userId, existing.id, bytes, compressed.contentType);
+      await uploadItemImageThumb(userId, existing.id, thumbBytes);
       await updateItem(existing.id, {
         categoryId,
         productName: productName.trim(),

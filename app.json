@@ -7,6 +7,12 @@
     "icon": "./assets/images/icon.png",
     "scheme": "wishshot",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/13c8e5d2-653f-4e14-975b-f006e0a13471"
+    },
     "ios": {
       "bundleIdentifier": "com.k0nghaa.wishshot",
       "supportsTablet": false,
