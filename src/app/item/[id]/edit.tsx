@@ -21,7 +21,8 @@ import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/compon
 import { TagInput } from '@/components/TagInput';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
-import { ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
+import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
+import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import {
   createCategory,
   DuplicateItemError,
@@ -32,6 +33,7 @@ import {
   listCategories,
   updateItem,
   uploadItemImage,
+  uploadItemImageThumb,
   type Category,
 } from '@/lib/queries';
 
@@ -154,10 +156,15 @@ export default function ItemEditScreen() {
         tags: tags.length ? tags : null,
       });
       // 필드 저장이 통과한 뒤에만 이미지를 같은 Storage 키에 덮어쓴다(image_key 불변).
+      // 원본은 저장 시점에만 축소·압축하고, 썸네일도 함께 재업로드한다(불변식 1·2·3).
       if (newImage) {
         const userId = await getCurrentUserId();
-        const bytes = await readImageBytes(newImage.uri);
-        await uploadItemImage(userId, id, bytes, newImage.contentType);
+        await ensureFileReady(newImage.uri); // iCloud 처리 유지(불변식 3)
+        const compressed = await compressForUpload(newImage.uri);
+        const thumbUri = await makeThumbnail(compressed.uri);
+        const [bytes, thumbBytes] = await Promise.all([readImageBytes(compressed.uri), readImageBytes(thumbUri)]);
+        await uploadItemImage(userId, id, bytes, compressed.contentType);
+        await uploadItemImageThumb(userId, id, thumbBytes);
       }
       // 편집으로 카테고리를 옮겨 원래 카테고리가 비었으면 삭제 안내. 비었으면 목록(홈)으로, 아니면 상세로.
       if (categoryId !== initialCategoryId) {
