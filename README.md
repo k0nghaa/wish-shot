@@ -72,10 +72,20 @@ npx tsc --noEmit
 - RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다.
 - `src/types/database.ts` 는 자동 생성 파일이라 직접 수정하지 않습니다.
 
+## 이미지 저장·전송 (egress 최적화, Phase 9)
+
+Free 플랜(월 Egress 5GB)을 출시·성장까지 유지하기 위해 이미지 전송량을 코드로 줄입니다.
+
+- **업로드 전 리사이즈·압축**: 저장 시점에만 원본을 **긴 변 1600px · JPEG q0.8**로 최적화합니다(`src/lib/imageResize.ts`). OCR·AI·원본 확대 보기는 사용자가 고른 **원본 uri** 그대로 씁니다.
+- **그리드는 썸네일 객체만**: 아이템 1개당 원본(`{uid}/{id}.jpg`)과 별도 **400px 썸네일**(`{uid}/{id}_thumb.jpg`, q0.6, DB에 저장하지 않는 파생 키)을 함께 올립니다. 목록/홈 그리드는 썸네일, **상세 뷰어만 원본**을 봅니다. 썸네일이 없는 레거시 아이템은 그리드에서 원본으로 폴백합니다(화면 비지 않음).
+- **signed URL 영속 캐시**: 발급한 signed URL을 AsyncStorage에 저장(TTL 1일)해 앱 콜드스타트·리로드 후에도 같은 URL을 재사용합니다 → `expo-image` 디스크 캐시가 살아남아 **재방문 다운로드 ≈ 0**. 업로드 시 `cacheControl: 604800`.
+- 삭제·덮어쓰기·이미지 교체는 **원본과 썸네일을 항상 함께** 처리합니다(고아 객체 없음, 양쪽 캐시 무효화). 전 구간 `src/lib/queries` 경유(화면에서 Storage 직접 호출 금지).
+- Supabase **Image Transformation은 Pro 전용**이라 Free에선 못 쓰므로 썸네일을 **별도 객체**로 만듭니다.
+
 ## OCR 정제 Edge Function (`parse-screenshot-text`)
 
 온디바이스 OCR(Apple Vision)로 뽑은 **텍스트만** Edge Function으로 보내 Claude Haiku가
-제품명·가격·브랜드를 정제합니다. 원본 이미지는 비공개 저장소까지만 가고, AI 정제엔 텍스트만 전송합니다.
+제품명·가격·브랜드를 정제합니다. 이미지는 비공개 저장소까지만 가고(업로드 시 긴 변 1600px JPEG로 최적화 저장), AI 정제엔 텍스트만 전송합니다.
 단, 텍스트를 찾지 못한 경우에 한해 사용자가 직접 선택한 **제품 영역 크롭만** 확인 후 전송하며 저장하지 않습니다(NFR-3, Phase 6 개정).
 
 **시크릿 등록 & 배포** (Claude 키는 함수 시크릿에만 — 앱·커밋 금지):

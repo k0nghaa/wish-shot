@@ -127,7 +127,13 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 - **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`(hooks)로만 다룬다. `analysis_logs`는 Phase 2에서 만든 테이블을 **쓰기만** 한다(스키마 변경 없음). `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문).
 - **RLS가 최종 방어선.** 세 테이블 모두 `user_id = (select auth.uid())`로 SELECT/INSERT/UPDATE/DELETE 강제. `anon`은 권한 없음. 검증 쿼리는 `supabase/tests/rls.sql`.
 - **`normalized_name`은 서버 전용 중복 판정 컬럼.** 값 = `normalizeName(brand, product_name)`(NFC·소문자·문자/숫자만). `UNIQUE(user_id, normalized_name)`로 재저장을 하드 차단. 저장·사전조회·수정이 **모두 `src/lib/normalize.ts` 한 곳**을 써야 판정이 일치한다. 화면엔 `product_name`·`brand`만 노출.
-- **Storage 규칙.** private 버킷 `item-images`, 키 `{user_id}/{item_id}.jpg`. 렌더는 signed URL(기본 TTL 1시간, `SIGNED_URL_TTL_SEC`)로만. DB엔 객체 키만 저장. 중복 덮어쓰기는 같은 키에 `upsert`.
+- **Storage 규칙.** private 버킷 `item-images`, 키 `{user_id}/{item_id}.jpg`. 렌더는 signed URL로만. DB엔 객체 키만 저장. 중복 덮어쓰기는 같은 키에 `upsert`.
+- **Storage · Egress 규칙(Phase 9 — Free 5GB 유지).** 이미지 전송량을 코드로 줄여 정식 출시·성장까지 Free 플랜을 유지한다(플랜 업그레이드로 해결하지 않는다). 데이터는 **모두 `src/lib/queries/storage.ts` 경유**(화면에서 `supabase.storage` 직접 호출 금지).
+  - **업로드 전 리사이즈 필수.** 저장 시점에만 원본을 **긴 변 1600px · JPEG q0.8**로 최적화한다(`src/lib/imageResize.ts` — `compressForUpload`). **OCR·AI 분석·원본 확대 보기는 사용자가 고른 원본 uri 그대로** 쓴다(압축은 저장 시점에만, 품질 저하 금지). 압축 전 `ensureFileReady`로 iCloud 미다운로드를 흡수한다.
+  - **목록은 썸네일 객체만.** 아이템 1개 = 원본 `{uid}/{id}.jpg` + **파생 썸네일** `{uid}/{id}_thumb.jpg`(긴 변 400px q0.6, DB에 저장하지 않는 파생 키 — `thumbKeyFromImageKey`). 그리드(전체·폴더·태그·홈 모자이크)는 `getItemThumbSignedUrls`로 썸네일을, **상세 뷰어만 원본**(`getItemImageSignedUrl(s)`)을 쓴다. Supabase **Image Transformation은 Pro 전용**이라 Free에선 못 써 별도 썸네일 객체로 대체한다.
+  - **thumb 부재 시 원본 폴백.** 썸네일이 없는 레거시 아이템은 그리드에서 원본으로 폴백해 화면이 비지 않게 한다(`Thumbnail`의 `fallbackUrl` + `onError` 스왑 — 대규모 백필 없이 안전). 신규·재저장은 자동으로 썸네일이 생기고, `settings.tsx`의 `__DEV__` "썸네일 백필"로 자기 데이터를 채울 수 있다.
+  - **signed URL 영속 캐시 재사용.** `SIGNED_URL_TTL_SEC = 1일`. 발급한 signed URL을 AsyncStorage에 영속(`wishshot.signedurl.` 접두사)해 앱 콜드스타트·리로드 후에도 같은 URL을 재사용한다 → `expo-image` 디스크 캐시가 살아남아 **재방문 다운로드 ≈ 0**. 앱 시작 시 `hydrateSignedUrlCache()` 1회(`_layout.tsx`). 업로드는 `cacheControl: 604800`(7일).
+  - **삭제·덮어쓰기·교체는 원본+썸네일을 항상 함께.** `deleteItemImage(s)`가 원본과 썸네일 키를 함께 remove하고 **둘 다 캐시 무효화**(고아 객체 없음). 담기·덮어쓰기·이미지 교체는 원본과 썸네일을 **모두 재업로드**한다.
 - **마이그레이션.** 계약은 `supabase/migrations/0001_init.sql`. 적용은 대시보드 SQL Editor에 붙여넣기(또는 `supabase link` 후 `supabase db push`). **스키마를 바꾸면 새 `000N_*.sql`을 추가**하고(기존 파일 재실행 아님), 타입을 재생성한다.
 - **타입은 자동 생성.** `src/types/database.ts`는 `supabase gen types`로 만든다. 손으로 고치지 않는다.
 
@@ -151,7 +157,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
   → Expo 앱 → OcrEngine(Apple Vision, 온디바이스)
        ├ (텍스트 충분) 텍스트만 → Edge Function(Claude Haiku 정제)
        └ (텍스트 부족) 제품 영역 지정 시트 → 선택 영역 크롭만(동의 후) → Edge Function
-  → 폼 자동채움("AI가 채움") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL, 원본 저장)
+  → 폼 자동채움("AI가 채움") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL 1일 영속캐시, 원본 1600px 최적화 저장 + 400px 썸네일)
 
 [iOS 공유 시트 (URL/웹페이지) — Phase 7]  ※ 스크린샷 원본 URL 자동추출은 불가, 페이지 직접 공유만
   → 홈이 인텐트 분기 → '전체' 탭 링크붙이기 모드
