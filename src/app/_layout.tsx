@@ -8,7 +8,7 @@ import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
 import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
 import { colors } from '@/constants/theme';
-import { signInAnonymouslyIfNeeded } from '@/lib/queries';
+import { hydrateSignedUrlCache, signInAnonymouslyIfNeeded } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
 
 // Phase 1: 루트 레이아웃.
@@ -46,6 +46,9 @@ function AuthGate() {
       setSession(next);
       if (next) setEverHadSession(true); // 첫 세션 확보 표시(이후 null 이어도 네비게이터 유지)
     };
+    // 영속 signed URL 캐시 복원(Phase 9 A): 앱 시작 1회. 콜드스타트 후에도 그리드/상세가
+    // 재다운로드 없이 뜨도록 인메모리 Map 을 미리 채운다(실패는 무시 — 미스 시 재발급).
+    void hydrateSignedUrlCache();
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!cancelled) apply(data.session);

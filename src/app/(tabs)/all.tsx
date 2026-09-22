@@ -11,7 +11,14 @@ import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { useTabBarVisibility } from '@/components/tabBarVisibility';
 import { colors, radius, shadow, spacing, type } from '@/constants/theme';
 import { useItemSelection } from '@/hooks/useItemSelection';
-import { getItemImageSignedUrls, listCategories, listItems, type Category, type Item } from '@/lib/queries';
+import {
+  getItemImageSignedUrls,
+  getItemThumbSignedUrls,
+  listCategories,
+  listItems,
+  type Category,
+  type Item,
+} from '@/lib/queries';
 
 // 하단 플로팅 탭바에 가리지 않도록 목록 하단 여백 확보.
 const TABBAR_SPACE = 96;
@@ -29,7 +36,8 @@ export default function AllScreen() {
   const { setHidden } = useTabBarVisibility();
   const tileSize = width / COLUMNS; // 여백 없이 화면 폭을 3등분
   const [items, setItems] = useState<Item[] | null>(null); // null = 로딩 중
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [urls, setUrls] = useState<Record<string, string>>({}); // 썸네일(우선)
+  const [fallbackUrls, setFallbackUrls] = useState<Record<string, string>>({}); // 원본(폴백 — 썸네일 없는 레거시)
   const [categories, setCategories] = useState<Category[]>([]);
 
   // 링크붙이기 모드(기능 1): 공유 URL 을 기존 위시에 달거나 "새로 담기". 선택 모드와 상호 배타.
@@ -45,9 +53,13 @@ export default function AllScreen() {
   const load = useCallback(async () => {
     try {
       const [list, cats] = await Promise.all([listItems(), listCategories().catch(() => [] as Category[])]);
-      const urlMap = await getItemImageSignedUrls(list.map((it) => it.image_key));
+      const keys = list.map((it) => it.image_key);
+      // 썸네일(우선)과 원본(폴백)을 함께 발급한다 — 발급은 egress 가 아니라 무해하고,
+      // 원본 바이트는 썸네일이 실제로 없을 때(레거시)만 내려온다(불변식 4).
+      const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
       setItems(list);
-      setUrls(urlMap);
+      setUrls(thumbMap);
+      setFallbackUrls(origMap);
       setCategories(cats);
     } catch (e) {
       setItems([]);
@@ -166,6 +178,7 @@ export default function AllScreen() {
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
+              fallbackUrl={fallbackUrls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
               selectionMode={!attachMode && selection.selectMode}
