@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { resetOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
+import { isAnalyticsAvailable, isCaptureEnabled, setCaptureEnabled } from '@/lib/analytics';
 import { readImageBytes } from '@/lib/imageBytes';
 import { makeThumbnail } from '@/lib/imageResize';
 import {
@@ -64,6 +65,18 @@ export default function SettingsScreen() {
     }
   }
 
+  // 계측 토글(Phase 10, __DEV__ 전용): 개발 기기는 기본 옵트아웃이라 실발화 검증 때만 수동으로 켠다.
+  // 상태는 PostHog 가 영속하므로(optIn/optOut) 재시작 후에도 유지된다.
+  async function handleDevToggleAnalytics() {
+    if (!isAnalyticsAvailable()) {
+      Alert.alert('계측 비활성', 'PostHog 키가 설정되지 않았습니다(.env 확인).');
+      return;
+    }
+    const next = !isCaptureEnabled();
+    await setCaptureEnabled(next);
+    Alert.alert('계측(개발용)', next ? '이벤트 수집 켜짐' : '이벤트 수집 꺼짐');
+  }
+
   // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
   // 이메일 가입/계정 승격·로그아웃은 Phase 6.
   return (
@@ -116,6 +129,14 @@ export default function SettingsScreen() {
               accessibilityLabel="썸네일 백필(개발용)"
             >
               <Text style={styles.devButtonText}>썸네일 백필(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevToggleAnalytics}
+              accessibilityRole="button"
+              accessibilityLabel="계측 토글(개발용)"
+            >
+              <Text style={styles.devButtonText}>계측 토글(개발용)</Text>
             </TouchableOpacity>
           </View>
         ) : null}

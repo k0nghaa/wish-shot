@@ -8,6 +8,7 @@ import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
 import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
 import { colors } from '@/constants/theme';
+import { identifyUser, initAnalytics } from '@/lib/analytics';
 import { hydrateSignedUrlCache, signInAnonymouslyIfNeeded } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
 
@@ -44,8 +45,14 @@ function AuthGate() {
     // 세션 리셋 후의 재익명 로그인은 설정 화면 핸들러가 소유한다(중복 생성 방지).
     const apply = (next: Session | null) => {
       setSession(next);
-      if (next) setEverHadSession(true); // 첫 세션 확보 표시(이후 null 이어도 네비게이터 유지)
+      if (next) {
+        setEverHadSession(true); // 첫 세션 확보 표시(이후 null 이어도 네비게이터 유지)
+        // 익명 uid 로 identify(Phase 10) — PostHog 와 DB 지표를 같은 식별자로 조인. 실패·중복은 모듈이 흡수.
+        identifyUser(next.user.id);
+      }
     };
+    // 계측 초기화(Phase 10): 키 미설정이면 no-op. 비차단 — 실패해도 부트스트랩을 막지 않는다.
+    initAnalytics();
     // 영속 signed URL 캐시 복원(Phase 9 A): 앱 시작 1회. 콜드스타트 후에도 그리드/상세가
     // 재다운로드 없이 뜨도록 인메모리 Map 을 미리 채운다(실패는 무시 — 미스 시 재발급).
     void hydrateSignedUrlCache();
