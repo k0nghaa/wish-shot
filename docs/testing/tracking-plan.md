@@ -98,7 +98,7 @@
 - [ ] `item_saved` — `source`·`duration_ms`·`had_analysis` 속성 확인
 - [ ] `onboarding_step_viewed` `card_1~3`·`category_coachmark` (설정 → 온보딩 다시 보기 → 앱 재시작)
 - [ ] `onboarding_finished` `result=completed` / `result=skipped`(건너뛰기)
-- [ ] `app_error` — 의도적 throw로 redbox가 **정상 표시**되면서(핸들러 체이닝) 이벤트도 수신
+- [ ] `app_error` — 설정 → **테스트 에러 발생(개발용)** 으로 의도적 throw. redbox가 **정상 표시**되면서(핸들러 체이닝 확인) 이벤트도 수신
 
 ## 7. 측정 한계
 

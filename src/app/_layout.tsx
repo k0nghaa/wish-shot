@@ -8,7 +8,7 @@ import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
 import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
 import { colors } from '@/constants/theme';
-import { identifyUser, initAnalytics } from '@/lib/analytics';
+import { identifyUser, initAnalytics, installJsErrorCapture } from '@/lib/analytics';
 import { hydrateSignedUrlCache, signInAnonymouslyIfNeeded } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
 
@@ -53,6 +53,7 @@ function AuthGate() {
     };
     // 계측 초기화(Phase 10): 키 미설정이면 no-op. 비차단 — 실패해도 부트스트랩을 막지 않는다.
     initAnalytics();
+    installJsErrorCapture(); // 전역 JS 에러 → app_error(기존 핸들러 체이닝, 키 미설정 시 미설치)
     // 영속 signed URL 캐시 복원(Phase 9 A): 앱 시작 1회. 콜드스타트 후에도 그리드/상세가
     // 재다운로드 없이 뜨도록 인메모리 Map 을 미리 채운다(실패는 무시 — 미스 시 재발급).
     void hydrateSignedUrlCache();

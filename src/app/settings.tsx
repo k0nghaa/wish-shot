@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DisclosureRow, FormCard } from '@/components/FormField';
 import { resetOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
@@ -17,8 +18,19 @@ import {
   uploadItemImageThumb,
 } from '@/lib/queries';
 
+// 지원 이메일 — docs/legal/support.html·개인정보 방침과 통일된 주소(새 주소 금지).
+const SUPPORT_EMAIL = 'wishshot2026@gmail.com';
+
 export default function SettingsScreen() {
   const router = useRouter();
+
+  // 의견 보내기(Phase 10 F-1): 실제 앱(App Store) 배포에선 TestFlight 스크린샷 피드백이 없어
+  // 메일이 피드백 채널이다. 모든 사용자 노출.
+  function handleSendFeedback() {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('WishShot 의견')}`).catch(() => {
+      Alert.alert('메일 열기 실패', `${SUPPORT_EMAIL} 으로 보내주세요.`);
+    });
+  }
 
   // 개발용 세션 리셋: 현재 세션을 버리고 새 익명 세션으로 시작한다. 익명 경로를 재설치 없이
   // 즉시 테스트하기 위한 것 — __DEV__ 에서만 노출된다.
@@ -77,6 +89,14 @@ export default function SettingsScreen() {
     Alert.alert('계측(개발용)', next ? '이벤트 수집 켜짐' : '이벤트 수집 꺼짐');
   }
 
+  // app_error 검증용(Phase 10 F-2, __DEV__ 전용): 의도적 미처리 throw —
+  // redbox 가 정상 표시되고(핸들러 체이닝 확인) PostHog 에 app_error 가 수신돼야 한다.
+  function handleDevTestError() {
+    setTimeout(() => {
+      throw new Error('계측 검증용 테스트 에러');
+    }, 0);
+  }
+
   // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
   // 이메일 가입/계정 승격·로그아웃은 Phase 6.
   return (
@@ -95,6 +115,11 @@ export default function SettingsScreen() {
           <Text style={styles.noticeTitle}>{PRIVACY_NOTICE.title}</Text>
           <Text style={styles.noticeBody}>{PRIVACY_NOTICE.body}</Text>
         </View>
+
+        <Text style={styles.sectionLabel}>지원</Text>
+        <FormCard>
+          <DisclosureRow label="의견 보내기" value={SUPPORT_EMAIL} onPress={handleSendFeedback} />
+        </FormCard>
 
         {__DEV__ ? (
           <View style={styles.devSection}>
@@ -137,6 +162,14 @@ export default function SettingsScreen() {
               accessibilityLabel="계측 토글(개발용)"
             >
               <Text style={styles.devButtonText}>계측 토글(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevTestError}
+              accessibilityRole="button"
+              accessibilityLabel="테스트 에러 발생(개발용)"
+            >
+              <Text style={styles.devButtonText}>테스트 에러 발생(개발용)</Text>
             </TouchableOpacity>
           </View>
         ) : null}

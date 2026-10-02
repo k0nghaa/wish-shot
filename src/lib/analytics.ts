@@ -34,6 +34,8 @@ export type AnalyticsEventMap = {
   onboarding_step_viewed: { step: OnboardingStep };
   /** 온보딩 완주/스킵 시. */
   onboarding_finished: { result: 'completed' | 'skipped'; last_step: OnboardingStep };
+  /** 전역 JS 에러(갈래 F-2). name=에러 클래스명뿐 — 메시지·스택은 콘텐츠 유입 가능성 때문에 미수집. */
+  app_error: { name: string; is_fatal: boolean };
 };
 
 export type AnalyticsEvent = keyof AnalyticsEventMap;
@@ -88,6 +90,31 @@ export function identifyUser(uid: string): void {
   } catch (e) {
     if (__DEV__) console.warn('[WishShot/analytics] identify 실패', e);
   }
+}
+
+let errorHandlerInstalled = false;
+
+/**
+ * 전역 JS 에러 수집(갈래 F-2) — app_error{name, is_fatal}만. TestFlight 베타 크래시 리포트가 없는
+ * 실제 앱(App Store) 배포 테스트의 임시 가시성이며 크래시 모니터링의 대체가 아니다 —
+ * 네이티브 크래시는 못 잡는다(Sentry 는 v1.1 네이티브 배치, tracking-plan 보류 목록).
+ * 기존 핸들러를 반드시 체이닝해 개발 redbox·기본 크래시 동작을 보존한다.
+ */
+export function installJsErrorCapture(): void {
+  if (errorHandlerInstalled || !client) return;
+  errorHandlerInstalled = true;
+  const prev = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error, isFatal) => {
+    try {
+      capture('app_error', {
+        name: error instanceof Error ? error.name : typeof error,
+        is_fatal: isFatal === true,
+      });
+    } catch {
+      /* 수집 실패가 에러 처리를 막지 않는다 */
+    }
+    prev?.(error, isFatal);
+  });
 }
 
 /** 클라이언트 생성 여부(키 설정 여부). 설정 화면의 개발용 토글 노출 판단용. */
