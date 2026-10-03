@@ -96,7 +96,7 @@
 - [x] `share_intent_received` `type=image`(공유 시트로 스크린샷) / `type=url`(사파리 페이지 공유)
 - [x] `register_opened` `entry=share`(공유 경유) / `entry=manual`(온보딩 경유 폼 열림으로 확인 — §2 구현 노트의 알려진 케이스)
 - [x] `analysis_completed` — `parsed`·`low_confidence`(텍스트 적은 사진)·`ocr_empty`(영역 시트 취소 = 별도 분석 실행 1회) 모두 확인
-- [x] `autofill_edited` — AI가 채운 가격 수정으로 확인(`field=price`; 필드 무관 동일 경로)
+- [x] `autofill_edited` — AI가 채운 가격 수정(`field=price`)과 추천 폴더 변경(`field=category`)으로 확인
 - [x] `item_saved` — `source`·`duration_ms`·`had_analysis` 속성 확인(저장 성공 시에만 발화)
 - [x] `onboarding_step_viewed` `card_1~3`·`category_coachmark` (※ SDK 비동기 초기화로 `Application Opened`가 card_1 뒤에 찍힐 수 있음 — 정상)
 - [x] `onboarding_finished` `result=completed`(last_step=category_coachmark) / `result=skipped`
