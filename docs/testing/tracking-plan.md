@@ -78,27 +78,29 @@
 
 ## 5. 프라이버시 체크리스트 (사람 확인란 — 전부 체크 전에는 production 채널 배포 금지)
 
-- [ ] App Store Connect **App Privacy 라벨**에 "사용 데이터(제품 상호작용)" 수집 반영
-- [ ] `docs/legal/privacy.html` 개정 초안 검토·확정(§4 국외 이전 — **PostHog 리전(미국/EU) 표기 확정** 포함) 후 공개 반영
-- [ ] 노션 개인정보 방침 동기화
-- [ ] 인앱 고지(`src/constants/privacy.ts`)와 방침 내용 일치 재확인
-- [ ] PostHog 대시보드 **과금 한도(billing limit)** 설정(무료 월 100만 이벤트 초과 자동 과금 차단)
-- [ ] `.env` + EAS 환경에 `EXPO_PUBLIC_POSTHOG_KEY`/`EXPO_PUBLIC_POSTHOG_HOST` 등록
+- [x] App Store Connect **App Privacy 라벨**에 수집 반영 — 사용 데이터(제품 상호 작용)·식별자(사용자 ID, 목적에 분석 추가)·진단(충돌 데이터), 전부 연결됨=예·추적=아니오 (2026-10-03)
+- [x] `docs/legal/privacy.html` 개정 초안 검토·확정(§4 국외 이전 — 리전 **미국(US)** 확정, 개정일 기입) 후 공개 반영
+- [x] 노션 개인정보 방침 동기화 (현행 privacy.html 전체 미러링 — Phase 6 크롭 예외·지원 이메일 통일 포함)
+- [x] 인앱 고지(`src/constants/privacy.ts`)와 방침 내용 일치 재확인
+- [x] 과금 차단 확인 — **카드 미등록(Free 플랜)** 유지로 한도 초과 시 수집만 중단되고 과금 자체 불가(향후 카드 등록 시 billing limit 설정 필요). 부가로 "Discard client IP data" 켜서 GeoIP 비활성
+- [x] `.env` + EAS production 환경에 `EXPO_PUBLIC_POSTHOG_KEY`/`EXPO_PUBLIC_POSTHOG_HOST` 등록
 
 ## 6. 실발화 확인 체크리스트 (dev client — 사람 확인)
 
 준비: ① `.env`에 PostHog 키·호스트 기입 후 `npx expo start --dev-client --tunnel --clear` ② 설정 → **계측 토글(개발용)** 켬(`__DEV__`는 기본 옵트아웃) ③ PostHog → Activity 열기. `__DEV__`에선 이벤트가 즉시 전송된다(flushAt 1).
 
-- [ ] (자동) `Application Opened` / `Application Became Active` 수신
-- [ ] identify — Person의 distinct ID가 Supabase 익명 uid와 일치
-- [ ] `share_intent_received` `type=image`(공유 시트로 스크린샷) / `type=url`(사파리 페이지 공유)
-- [ ] `register_opened` `entry=share`(공유 경유) / `entry=manual`(전체 탭 FAB)
-- [ ] `analysis_completed` `status=parsed`(글자 많은 스크린샷) — 가능하면 `ocr_empty`(텍스트 없는 사진 → 영역 시트 취소)도
-- [ ] `autofill_edited` — AI가 채운 제품명을 수정(`field=name`), 추천 폴더 변경(`field=category`)
-- [ ] `item_saved` — `source`·`duration_ms`·`had_analysis` 속성 확인
-- [ ] `onboarding_step_viewed` `card_1~3`·`category_coachmark` (설정 → 온보딩 다시 보기 → 앱 재시작)
-- [ ] `onboarding_finished` `result=completed` / `result=skipped`(건너뛰기)
-- [ ] `app_error` — 설정 → **테스트 에러 발생(개발용)** 으로 의도적 throw. redbox가 **정상 표시**되면서(핸들러 체이닝 확인) 이벤트도 수신
+※ 2026-10-03 dev client(빌드 6 + Metro)에서 전 항목 확인 완료.
+
+- [x] (자동) `Application Opened` / `Application Became Active` 수신
+- [x] identify — Person의 distinct ID가 Supabase 익명 uid와 일치
+- [x] `share_intent_received` `type=image`(공유 시트로 스크린샷) / `type=url`(사파리 페이지 공유)
+- [x] `register_opened` `entry=share`(공유 경유) / `entry=manual`(온보딩 경유 폼 열림으로 확인 — §2 구현 노트의 알려진 케이스)
+- [x] `analysis_completed` — `parsed`·`low_confidence`(텍스트 적은 사진)·`ocr_empty`(영역 시트 취소 = 별도 분석 실행 1회) 모두 확인
+- [x] `autofill_edited` — AI가 채운 가격 수정으로 확인(`field=price`; 필드 무관 동일 경로)
+- [x] `item_saved` — `source`·`duration_ms`·`had_analysis` 속성 확인(저장 성공 시에만 발화)
+- [x] `onboarding_step_viewed` `card_1~3`·`category_coachmark` (※ SDK 비동기 초기화로 `Application Opened`가 card_1 뒤에 찍힐 수 있음 — 정상)
+- [x] `onboarding_finished` `result=completed`(last_step=category_coachmark) / `result=skipped`
+- [x] `app_error` — 설정 → **테스트 에러 발생(개발용)**: redbox **정상 표시**(핸들러 체이닝 확인) + 이벤트 수신
 
 ## 7. 측정 한계
 
