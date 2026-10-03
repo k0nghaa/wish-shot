@@ -12,6 +12,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { capture, type OnboardingStep } from '@/lib/analytics';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { AutoFillMock, CaptureFlowMock, OrganizeMock } from './CardMock';
 import { CoachmarkSpotlight } from './CoachmarkSpotlight';
@@ -45,6 +46,9 @@ const CARDS: Card[] = [
   },
 ];
 
+// 계측(Phase 10) 스텝 식별자 — 캐러셀 장 번호와 1:1.
+const CARD_STEPS: OnboardingStep[] = ['card_1', 'card_2', 'card_3'];
+
 type Phase = { kind: 'cards' } | { kind: 'transition' } | { kind: 'category'; target: TargetRect };
 
 type Props = { onDone: () => void };
@@ -66,6 +70,30 @@ export function OnboardingOverlay({ onDone }: Props) {
   const [index, setIndex] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: 'cards' });
+
+  // 계측(Phase 10): 스텝 노출은 스텝당 1회(뒤로 스와이프 재노출은 last_step 만 갱신), 종료는 완주/스킵 1회.
+  const viewedStepsRef = useRef(new Set<OnboardingStep>());
+  const lastStepRef = useRef<OnboardingStep>('card_1');
+  const finishedRef = useRef(false);
+
+  const captureStepViewed = useCallback((step: OnboardingStep) => {
+    lastStepRef.current = step; // 이탈 지점 추적은 재노출도 반영
+    if (viewedStepsRef.current.has(step)) return;
+    viewedStepsRef.current.add(step);
+    capture('onboarding_step_viewed', { step });
+  }, []);
+
+  const captureFinished = useCallback((result: 'completed' | 'skipped') => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    capture('onboarding_finished', { result, last_step: lastStepRef.current });
+  }, []);
+
+  // 현재 카드 스텝 노출(마운트 시 card_1 포함).
+  useEffect(() => {
+    const step = CARD_STEPS[index];
+    if (step) captureStepViewed(step);
+  }, [index, captureStepViewed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,17 +124,28 @@ export function OnboardingOverlay({ onDone }: Props) {
 
   // 등록 폼을 열어(onboarding 파라미터) 등록 화면이 자체 코치마크 투어를 띄우게 하고, 이 오버레이는 종료한다.
   const openRegisterTour = useCallback(() => {
+    captureFinished('completed'); // 등록 폼 투어 진입 = 오버레이 완주
     router.push({ pathname: '/register', params: { onboarding: '1' } });
     onDone();
-  }, [router, onDone]);
+  }, [captureFinished, router, onDone]);
+
+  // 건너뛰기(스킵 버튼·뒤로가기·코치마크 스킵) → 이탈 스텝과 함께 종료 기록.
+  const handleSkip = useCallback(() => {
+    captureFinished('skipped');
+    onDone();
+  }, [captureFinished, onDone]);
 
   // 카드 끝 → 카테고리 코치마크(측정 성공 시) → 없으면 바로 등록 투어로.
   const finishCards = useCallback(async () => {
     setPhase({ kind: 'transition' });
     const target = await measure(CATEGORY_KEY);
-    if (target) setPhase({ kind: 'category', target });
-    else openRegisterTour();
-  }, [measure, openRegisterTour]);
+    if (target) {
+      setPhase({ kind: 'category', target });
+      captureStepViewed('category_coachmark');
+    } else {
+      openRegisterTour();
+    }
+  }, [measure, openRegisterTour, captureStepViewed]);
 
   function handlePrimary() {
     if (isLast) void finishCards();
@@ -114,18 +153,18 @@ export function OnboardingOverlay({ onDone }: Props) {
   }
 
   return (
-    <Modal visible transparent animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={onDone}>
+    <Modal visible transparent animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={handleSkip}>
       {phase.kind === 'transition' ? (
         <View style={styles.transition}>
           <ActivityIndicator color={colors.bg} />
         </View>
       ) : phase.kind === 'category' ? (
-        <CoachmarkSpotlight target={phase.target} text={CATEGORY_TEXT} primaryLabel="다음" onPrimary={openRegisterTour} onSkip={onDone} />
+        <CoachmarkSpotlight target={phase.target} text={CATEGORY_TEXT} primaryLabel="다음" onPrimary={openRegisterTour} onSkip={handleSkip} />
       ) : (
         <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           {/* Modal 안에서는 SafeAreaView top edge 가 0 으로 잡힐 수 있어 인셋을 명시 적용(헤더/노치 가림 방지). */}
           <View style={styles.skipRow}>
-            <TouchableOpacity onPress={onDone} hitSlop={8} accessibilityRole="button" accessibilityLabel="건너뛰기">
+            <TouchableOpacity onPress={handleSkip} hitSlop={8} accessibilityRole="button" accessibilityLabel="건너뛰기">
               <Text style={styles.skip}>건너뛰기</Text>
             </TouchableOpacity>
           </View>

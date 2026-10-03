@@ -27,6 +27,7 @@ import { RegionSelectSheet } from '@/components/RegionSelectSheet';
 import { TagInput } from '@/components/TagInput';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
+import { capture } from '@/lib/analytics';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
@@ -117,6 +118,19 @@ export default function RegisterScreen() {
     if (router.canGoBack()) router.back();
     else router.replace('/');
   }, [router]);
+
+  // 계측(Phase 10): entry 는 마운트 시점 인텐트 여부(이미지 imageUri·URL sourceLink 프리필 = share).
+  // 사진 출처(source)는 저장 시점에 확정 — 공유로 받았다가 picker/최근사진으로 바꾸면 갱신된다.
+  const entryRef = useRef<'share' | 'manual'>(params.imageUri || params.sourceLink ? 'share' : 'manual');
+  const imageSourceRef = useRef<'share' | 'picker' | 'recent_photo' | null>(params.imageUri ? 'share' : null);
+  const mountedAtRef = useRef(Date.now());
+  // autofill_edited 는 필드당 1회만(택소노미 구현 노트) — 발화한 필드를 기록해 중복을 막는다.
+  const autofillEditedRef = useRef(new Set<'name' | 'price' | 'brand' | 'category'>());
+
+  // register_opened(질문 2ⓐ·3): 퍼널 시작, 마운트 1회.
+  useEffect(() => {
+    capture('register_opened', { entry: entryRef.current });
+  }, []);
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
   // 앨범 원본 삭제(기능 2): 앱 내에서 고른 사진의 자산 id(picker·"방금 캡처한 사진"). 전체 접근이 아니면
@@ -267,6 +281,23 @@ export default function RegisterScreen() {
     });
   }
 
+  // autofill_edited(질문 4): AI가 채운 값과 다르게 바꾼 첫 변경에만 1회(필드별 Set 중복 방지).
+  function captureAutofillEdited(field: 'name' | 'price' | 'brand' | 'category') {
+    if (autofillEditedRef.current.has(field)) return;
+    autofillEditedRef.current.add(field);
+    capture('autofill_edited', { field });
+  }
+
+  // item_saved(질문 2ⓐ): 저장 성공 응답 시(새 저장·덮어쓰기 공통). had_analysis = AI 자동채움 존재.
+  function captureItemSaved() {
+    if (!imageSourceRef.current) return; // 이미지 없이는 저장 불가 — 방어용
+    capture('item_saved', {
+      source: imageSourceRef.current,
+      duration_ms: Date.now() - mountedAtRef.current,
+      had_analysis: analysisState.result != null,
+    });
+  }
+
   // 재시도: 이미지 분석 실패면 시트 재열기, 정제 실패(E-2, OCR 원문 있음)면 정제만 다시, 그 외(E-1)엔 처음부터.
   function retryAnalysis() {
     if (analysisState.errorKind === 'image_parse_failed') {
@@ -289,6 +320,7 @@ export default function RegisterScreen() {
     const asset = result.assets[0];
     logImageDiag('pickImage', asset.uri, { fileSize: asset.fileSize, mimeType: asset.mimeType });
     setImageUri(asset.uri);
+    imageSourceRef.current = 'picker';
     // assetId 는 전체 접근이 아니면 null 일 수 있다(문서: limited 권한 시 null). null 이면 삭제 옵션을 감춘다.
     setPickedAssetId(asset.assetId ?? null);
   }
@@ -309,6 +341,7 @@ export default function RegisterScreen() {
       // "방금 캡처한 사진"도 원본 assetId 가 있으므로 저장 후 앨범 삭제 대상에 포함한다(기능 2 취지에 부합).
       setPickedAssetId(recent.assetId);
       setImageUri(recent.uri); // 설정되면 기존 OCR/AI 파이프라인이 자동으로 돈다.
+      imageSourceRef.current = 'recent_photo';
     } finally {
       setRecentLoading(false);
     }
@@ -409,6 +442,7 @@ export default function RegisterScreen() {
     }
     recordAnalysisLog(id);
     markSubmitted();
+    captureItemSaved();
     setSaving(false);
     await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
     goToSavedCategory();
@@ -446,6 +480,7 @@ export default function RegisterScreen() {
       });
       recordAnalysisLog(existing.id);
       markSubmitted();
+      captureItemSaved();
       setDupVisible(false);
       setOverwriteBusy(false);
       await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
@@ -597,7 +632,10 @@ export default function RegisterScreen() {
                 placeholder="예: 무선 이어폰"
                 placeholderTextColor={colors.textDisabled}
                 value={productName}
-                onChangeText={setProductNameEdit}
+                onChangeText={(t) => {
+                  if (aiFilled.productName && t !== aiResult?.productName) captureAutofillEdited('name');
+                  setProductNameEdit(t);
+                }}
               />
             </FormRow>
             <FormRow label="브랜드" ai={aiFilled.brand}>
@@ -606,7 +644,10 @@ export default function RegisterScreen() {
                 placeholder="예: 소니"
                 placeholderTextColor={colors.textDisabled}
                 value={brand}
-                onChangeText={setBrandEdit}
+                onChangeText={(t) => {
+                  if (aiFilled.brand && t !== aiResult?.brand) captureAutofillEdited('brand');
+                  setBrandEdit(t);
+                }}
               />
             </FormRow>
             <FormRow label="가격" ai={aiFilled.price}>
@@ -616,7 +657,10 @@ export default function RegisterScreen() {
                 placeholderTextColor={colors.textDisabled}
                 keyboardType="number-pad"
                 value={price}
-                onChangeText={setPriceEdit}
+                onChangeText={(t) => {
+                  if (aiFilled.price && t !== String(aiResult?.price)) captureAutofillEdited('price');
+                  setPriceEdit(t);
+                }}
               />
             </FormRow>
             <FormRow label="링크">
@@ -671,7 +715,11 @@ export default function RegisterScreen() {
         onClose={() => setFolderSheet(false)}
         categories={categories}
         selectedId={categoryId}
-        onSelect={setCategoryIdEdit}
+        onSelect={(id) => {
+          // FR-8 추천이 미리선택된 상태에서 다른 폴더를 고르면 = AI 추천 수정(카테고리 필드).
+          if (categoryIsSuggested && id !== suggestedCategoryId) captureAutofillEdited('category');
+          setCategoryIdEdit(id);
+        }}
         onCreateCategory={createCategoryInline}
       />
 

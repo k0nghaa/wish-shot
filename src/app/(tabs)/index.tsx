@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { useOnboardingTarget } from '@/components/Onboarding/onboardingTarget';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { colors, radius, spacing, type } from '@/constants/theme';
+import { capture } from '@/lib/analytics';
 import { logImageDiag, toFileUri } from '@/lib/imageBytes';
 import {
   createCategory,
@@ -74,6 +75,7 @@ export default function HomeScreen() {
     const url = shareIntent?.webUrl ?? firstUrl(shareIntent?.text);
     if ((shareIntent?.type === 'weburl' || shareIntent?.type === 'text') && url) {
       shareHandled.current = true;
+      capture('share_intent_received', { type: 'url' }); // 공유 진입 전체량(질문 3)
       resetShareIntent();
       router.push({ pathname: '/all', params: { attachLink: url } });
       return;
@@ -83,6 +85,7 @@ export default function HomeScreen() {
     const file = shareIntent?.files?.[0];
     if (file?.path) {
       shareHandled.current = true;
+      capture('share_intent_received', { type: 'image' }); // 공유 진입 전체량(질문 3)
       const imageUri = toFileUri(file.path);
       const imageMime = file.mimeType ?? 'image/jpeg';
       logImageDiag('shareIntent', file.path, { mimeType: file.mimeType });
