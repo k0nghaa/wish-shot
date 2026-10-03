@@ -265,10 +265,10 @@ Deno.serve(async (req) => {
 
 ## 결과 기록 (구현 세션이 채움)
 
-- **완료일**:
-- **Step 1(빈 계정 삭제)**: 마이그레이션 파일명 / dry-run 카운트 / 확정한 조건(빈 정의·일수·주기) / 삭제 방식(raw vs admin) / GoTrue cascade 확인 결과 /
-- **Step 2(고아 파일 스윕)**: DB 함수·Edge Function 파일명 / 첫 dry-run 고아 건수·샘플 검증(썸네일 오탐 없음) / 스케줄링 방식 / 실삭제 결과(removed·멱등) /
-- **Step 3(문서)**: CLAUDE.md·README·privacy 반영 범위 /
+- **완료일**: 2026-10-04 (코드·문서 작성 완료 — 실제 Supabase 적용·활성화는 사람 대기)
+- **Step 1(빈 계정 삭제)**: `supabase/migrations/0002_cleanup_anon_users.sql` / dry-run 카운트: **사람 확인 대기**(dry-run·맥락 비교 쿼리를 파일 주석에 동봉) / 조건: 빈 = **아이템 0건**(기본 정의 채택)·30일·주 1회(일요일 03:00 UTC) / 삭제 방식: **raw `DELETE FROM auth.users`**(기본안 — GoTrue 내부 cascade는 1건 타깃 삭제로 사람이 실측, 불완전하면 admin API 전환 보고) / GoTrue cascade 확인 결과: **사람 확인 대기**
+- **Step 2(고아 파일 스윕)**: `supabase/migrations/0003_orphan_images_fn.sql`(`list_orphan_item_images`, security definer, service_role 전용) + `supabase/functions/cleanup-orphan-images/index.ts`(x-cron-secret 보호·dryRun·배치 100 remove) / 첫 dry-run 건수·샘플 검증: **사람 확인 대기** / 스케줄링 방식: **대시보드 Cron 권장안 채택**(헤더 `x-cron-secret` 포함해 주 1회 호출 — 등록은 사람) / 실삭제·멱등 확인: **사람 확인 대기**
+- **Step 3(문서)**: CLAUDE.md(문서 목록·디렉터리 구조·명령어·데이터 레이어에 "익명 계정 수명주기" 단락)·README("익명 계정·고아 파일 정리" 섹션 + DB 섹션·문서 링크) 반영 / `privacy.html` §6은 **미수정** — 법무 문구 사람 검토 + 노션 방침 페이지 동시 갱신이 필요해 사람에게 넘김(선택 항목)
 - **검증(사람)**: 활성화 시점 / 1~2주 후 auth.users·Storage·Egress 추이 /
-- **특이사항·결정**:
+- **특이사항·결정**: ① JWT 검증 해제는 `supabase/config.toml`의 `[functions.cleanup-orphan-images] verify_jwt = false`로 선언(공식 문서 확인 — deploy 시 적용, 플래그 기억 불필요). ② pg_cron은 동일 이름 `cron.schedule` upsert를 문서상 보장하지 않아, 등록 전 `cron.job` 존재 확인 후 조건부 `unschedule`로 멱등 처리. ③ pg_cron 잡은 "등록한 롤의 권한"으로 실행됨(공식 README 확인) → SQL Editor(postgres)에서 등록해야 auth.users 삭제 권한 확보. ④ rpc 열거는 Data API max rows(기본 1000행)에 잘릴 수 있음 — 고아가 그보다 많아도 주간 재실행이 멱등이라 수렴(코드 주석에 명시).
 - **다음으로 넘길 것**: 계정 연결(Apple/이메일 linkIdentity)·넛지·"미연결 전환유도 후 삭제" 정책(별도 네이티브 Phase).
