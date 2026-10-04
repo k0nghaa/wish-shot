@@ -629,7 +629,7 @@ export default function RegisterScreen() {
               <TextInput
                 ref={productNameRef}
                 style={formInput.rowInput}
-                placeholder="예: 무선 이어폰"
+                placeholder="제품명"
                 placeholderTextColor={colors.textDisabled}
                 value={productName}
                 onChangeText={(t) => {
@@ -641,7 +641,7 @@ export default function RegisterScreen() {
             <FormRow label="브랜드" ai={aiFilled.brand}>
               <TextInput
                 style={formInput.rowInput}
-                placeholder="예: 소니"
+                placeholder="브랜드명"
                 placeholderTextColor={colors.textDisabled}
                 value={brand}
                 onChangeText={(t) => {

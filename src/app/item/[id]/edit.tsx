@@ -244,7 +244,7 @@ export default function ItemEditScreen() {
               <FormRow label="제품명" required>
                 <TextInput
                   style={formInput.rowInput}
-                  placeholder="예: 무선 이어폰"
+                  placeholder="제품명"
                   placeholderTextColor={colors.textDisabled}
                   value={productName}
                   onChangeText={setProductName}
@@ -253,7 +253,7 @@ export default function ItemEditScreen() {
               <FormRow label="브랜드">
                 <TextInput
                   style={formInput.rowInput}
-                  placeholder="예: 소니"
+                  placeholder="브랜드명"
                   placeholderTextColor={colors.textDisabled}
                   value={brand}
                   onChangeText={setBrand}
