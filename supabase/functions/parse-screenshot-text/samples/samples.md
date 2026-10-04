@@ -22,10 +22,15 @@ curl -s -X POST "$SUPABASE_URL/functions/v1/parse-screenshot-text" \
 
 > Phase 4부터 출력에 `suggestedCategory: string | null` 이 추가됐다. `categories` 를 안 보내거나
 > 빈 배열이면 **항상 null**(하위호환). 보낸 목록 밖의 값은 서버가 null 로 무시한다(할루시네이션 차단).
+>
+> **2026-10 정제 규칙 변경** (스키마 불변, 프롬프트만):
+> ① price 는 **정가(할인 전) 우선** — 하나만 보이면 그 가격. ② brand 는 **통용 한국어 공식 표기
+> 우선**(나이키), 없으면 영문 공식 표기(Aesop). ③ productName 에 **브랜드명을 반복하지 않는다**
+> (브랜드는 brand 필드로만).
 
 ---
 
-## 1) 8fter 브라탑 (할인가 있음 — 파는 가격을 골라야 함)
+## 1) 8fter 브라탑 (정가·할인가 병기 — 정가를 골라야 함)
 
 입력:
 ```
@@ -35,9 +40,9 @@ curl -s -X POST "$SUPABASE_URL/functions/v1/parse-screenshot-text" \
 ```
 기대(형태):
 ```json
-{ "productName": "홀터 이지 브라탑", "brand": "8fter.", "price": 32900, "confidence": 0.8 }
+{ "productName": "홀터 이지 브라탑", "brand": "8fter", "price": 42700, "confidence": 0.8 }
 ```
-핵심: price 는 원가(42,700)가 아니라 **할인가 32,900**.
+핵심: price 는 할인가(32,900)가 아니라 **정가 42,700**(2026-10 규칙).
 
 ## 2) Aesop 향수 (영어 제품명 + 한국어 캡션)
 
@@ -48,9 +53,10 @@ working.hoho / 잔향은 또 파우더리한게 미친 향수예요. / Follow / 
 ```
 기대(형태):
 ```json
-{ "productName": "Rōzu Eau de Parfum", "brand": "Aesop", "price": null, "confidence": 0.6 }
+{ "productName": "Rōzu Eau de Parfum", "brand": "이솝", "price": null, "confidence": 0.6 }
 ```
 핵심: 가격이 화면에 없으므로 **price=null**. 좋아요/댓글 수(296/25/30/203)는 가격이 아님.
+brand 는 통용 한국어 표기 우선이라 **"이솝"**(영문 "Aesop" 도 형태상 허용 — 모델 판단).
 
 ## 3) DEAR.CUS 피니셔 스퀴지 (할인가 + 쿠폰 금액 노이즈)
 
@@ -63,15 +69,15 @@ working.hoho / 잔향은 또 파우더리한게 미친 향수예요. / Follow / 
 ```
 기대(형태):
 ```json
-{ "productName": "피니셔 스퀴지", "brand": "DEAR.CUS", "price": 18900, "confidence": 0.7 }
+{ "productName": "피니셔 스퀴지", "brand": "DEAR.CUS", "price": 26900, "confidence": 0.7 }
 ```
-핵심: price 는 **18,900**(할인가). 쿠폰 금액(2,000/5,000)이나 원가(26,900)가 아님.
+핵심: price 는 **26,900**(정가, 2026-10 규칙). 할인가(18,900)·쿠폰 금액(2,000/5,000)이 아님.
 
 ## 4) FR-8 카테고리 추천 (categories 함께 전송)
 
 케이스 2의 Aesop 향수 원문에 `"categories":["운동","향수","주방"]` 를 함께 보냈을 때:
 ```json
-{ "productName": "Rōzu Eau de Parfum", "brand": "Aesop", "price": null, "confidence": 0.6, "suggestedCategory": "향수" }
+{ "productName": "Rōzu Eau de Parfum", "brand": "이솝", "price": null, "confidence": 0.6, "suggestedCategory": "향수" }
 ```
 핵심: 향수 제품이므로 목록 중 **"향수"** 를 고른다. 만약 목록이 `["운동","주방"]` 처럼 맞는 게
 없으면 **suggestedCategory=null**. 목록에 없는 새 이름은 서버가 null 로 무시한다.

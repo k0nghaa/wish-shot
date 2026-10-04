@@ -9,9 +9,9 @@
 //     - image:      사용자가 명시적으로 선택한 "제품 영역 크롭"만(Phase 6). 텍스트를 못 찾았을 때만 온다.
 //                   통이미지·자동 전송 아님. 로그·저장하지 않고 Anthropic 요청에만 쓴다.
 //   출력:  { productName, price, brand, confidence, suggestedCategory }  (스키마 불변)
-//     - productName: string | null       못 뽑으면 null (앱에서 E-3 수동 입력)
-//     - price:       number | null       원 단위 정수(KRW). 없으면 null
-//     - brand:       string | null       없으면 null
+//     - productName: string | null       못 뽑으면 null (앱에서 E-3 수동 입력). 브랜드명 미포함(brand 필드로 분리)
+//     - price:       number | null       원 단위 정수(KRW). 정가 우선(할인 전 가격, 2026-10 변경) — 하나만 보이면 그 가격, 없으면 null
+//     - brand:       string | null       없으면 null. 통용되는 한국어 공식 표기 우선(나이키), 없으면 영문 공식 표기(Aesop)
 //     - confidence:  number              0~1. 낮으면 앱에서 "확인이 필요해요"
 //     - suggestedCategory: string | null 입력 categories 중 하나거나 null(FR-8 경량 추천)
 //                                        categories 가 비면 항상 null(하위호환)
@@ -60,10 +60,15 @@ const SYSTEM_PROMPT = [
   'Return only these fields via the structured format:',
   '- productName: the product name. If the name appears in both Korean and English, PREFER the Korean name.',
   '  Give the core product name only — strip quantity/bundle/option/size noise (e.g. "1EA", "+클린솝", "세트", "2개", "470g", "UP TO 33%").',
+  '  Do NOT repeat the brand inside productName — the brand belongs in the brand field only',
+  '  (e.g. brand "나이키" + productName "에어맥스 97", NOT productName "나이키 에어맥스 97").',
   '  If you cannot identify one, use null.',
   '- brand: the brand or store name if identifiable, else null.',
-  '- price: the actual selling price as an integer in Korean won (KRW), digits only (no "원", no commas, no symbols).',
-  '  If both an original and a discounted price are shown, choose the price the customer actually pays (the discounted/current price).',
+  '  Prefer the brand\'s official Korean spelling when one is in common use (e.g. "나이키", "이솝");',
+  '  otherwise use the official English spelling with its official casing (e.g. "Aesop", not "AESOP"/"aesop").',
+  '- price: the ORIGINAL (pre-discount) list price as an integer in Korean won (KRW), digits only (no "원", no commas, no symbols).',
+  '  If both an original and a discounted price are shown, choose the ORIGINAL one (usually the higher or struck-through price),',
+  '  NOT the discounted price. If only one price is shown, use it. Coupon amounts and shipping fees are never the price.',
   '  If no price is present, use null.',
   '- confidence: 0..1, your overall confidence in productName+price. Lower it when the text is ambiguous or noisy.',
   'Ignore UI noise: clock/time, carrier/battery, buttons (구매하기, 후기, 팔로우, Follow, Add comment), banners, view/like counts, URLs.',
