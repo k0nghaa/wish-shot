@@ -49,7 +49,8 @@ create extension if not exists pg_cron;
 --   where u.is_anonymous = true;
 --
 
--- 3) 주 1회 삭제 잡 (일요일 03:00 UTC — 트래픽 적은 시간대)
+-- 3) 주 1회 삭제 잡 (토요일 18:00 UTC = 한국 일요일 03:00 — 심야 저트래픽.
+--    지시서 예시였던 '일 03:00 UTC'는 한국 기준 정오(활동 시간대)라 조정, 2026-10-04)
 --    같은 이름의 잡이 있으면 먼저 내리고 다시 등록한다(재실행 멱등 —
 --    pg_cron 은 동일 이름 upsert 를 보장하지 않으므로 조건부 unschedule).
 select cron.unschedule('delete-empty-anon-users')
@@ -57,7 +58,7 @@ where exists (select 1 from cron.job where jobname = 'delete-empty-anon-users');
 
 select cron.schedule(
   'delete-empty-anon-users',
-  '0 3 * * 0',
+  '0 18 * * 6',
   $$
     delete from auth.users u
     where u.is_anonymous = true
