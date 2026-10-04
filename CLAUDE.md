@@ -15,6 +15,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - Phase 4 작업 지시·결과: `docs/phases/phase-4-edit-and-manage.md`
 - Phase 5 작업 지시·결과: `docs/phases/phase-5-redesign-and-deploy.md` (리스킨·탭바·상세 뷰어·익명 로그인·TestFlight)
 - Phase 10 작업 지시: `docs/phases/phase-10-testflight-analytics.md` (테스트 계측 — PostHog)
+- Phase 11 작업 지시: `docs/phases/phase-11-anon-account-lifecycle.md` (익명 계정 수명주기 — 빈 계정·고아 파일 정리, 전부 서버 측)
 - 트래킹 플랜(이벤트 택소노미 **정본**): `docs/testing/tracking-plan.md`
 - 디자인 정본: `docs/design/phase-5-visual-spec.md`, `docs/design/color_tokens.md`
 - 개인정보처리방침 원문: `docs/legal/privacy.html` (TestFlight 외부 공개용)
@@ -71,10 +72,14 @@ src/
 modules/
   expo-vision-ocr/      # 자작 로컬 Expo 네이티브 모듈(iOS/Apple Vision). ko-KR+en-US 인식. 네이티브라 변경 시 EAS 재빌드
 supabase/
-  config.toml           # supabase init
-  migrations/0001_init.sql  # 스키마 + GRANT + RLS + Storage 버킷/정책 (계약 기준선)
+  config.toml           # supabase init + [functions.cleanup-orphan-images] verify_jwt=false(스케줄러 전용)
+  migrations/
+    0001_init.sql       # 스키마 + GRANT + RLS + Storage 버킷/정책 (계약 기준선)
+    0002_cleanup_anon_users.sql  # 빈 익명 계정(아이템 0·30일+) 주 1회 삭제 pg_cron 잡 (Phase 11)
+    0003_orphan_images_fn.sql    # 고아 이미지 키 열거 함수 list_orphan_item_images (원본∪썸네일 union, service_role 전용)
   functions/
     parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. samples/ 회귀 케이스
+    cleanup-orphan-images/  # Edge Function(Deno, service_role): 고아 이미지 주 1회 스윕 — x-cron-secret 보호·dryRun 지원·Storage API로만 삭제 (Phase 11)
   tests/                # rls.sql(RLS/권한 검증) + metrics.sql(테스트 지표 4종, Phase 10) — 대시보드 SQL Editor 에서 사람이 실행
 assets/                 # 아이콘·스플래시, logo-v1(참고용)
 app.json                # Expo 설정 (플러그인: share-intent/image-picker, iOS 공유확장, EAS projectId)
@@ -99,6 +104,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 - `npx supabase login` → `npx supabase gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts` — DB 스키마에서 타입 재생성 (마이그레이션 변경 시마다). 로그인은 최초 1회.
 - `npx supabase secrets set ANTHROPIC_API_KEY=...` — Edge Function 시크릿 등록(Claude 키). **앱·커밋·채팅엔 절대 넣지 않는다.**
 - `npx supabase functions deploy parse-screenshot-text` — Edge Function 배포(정제 프롬프트/로직 변경 시). **앱 재빌드와 무관**(서버 측). Docker 없이도 클라우드 번들로 배포됨(경고는 무시).
+- `npx supabase functions deploy cleanup-orphan-images` — 고아 이미지 스윕 함수 배포(`config.toml`의 `verify_jwt = false`가 함께 적용됨). 시크릿: `npx supabase secrets set CRON_SECRET=<임의 난수>`. dry-run 확인·주간 스케줄 등록은 사람이 대시보드에서(Phase 11 지시서 참고).
 
 ## 환경 변수
 
@@ -140,6 +146,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
   - **thumb 부재 시 원본 폴백.** 썸네일이 없는 레거시 아이템은 그리드에서 원본으로 폴백해 화면이 비지 않게 한다(`Thumbnail`의 `fallbackUrl` + `onError` 스왑 — 대규모 백필 없이 안전). 신규·재저장은 자동으로 썸네일이 생기고, `settings.tsx`의 `__DEV__` "썸네일 백필"로 자기 데이터를 채울 수 있다.
   - **signed URL 영속 캐시 재사용.** `SIGNED_URL_TTL_SEC = 1일`. 발급한 signed URL을 AsyncStorage에 영속(`wishshot.signedurl.` 접두사)해 앱 콜드스타트·리로드 후에도 같은 URL을 재사용한다 → `expo-image` 디스크 캐시가 살아남아 **재방문 다운로드 ≈ 0**. 앱 시작 시 `hydrateSignedUrlCache()` 1회(`_layout.tsx`). 업로드는 `cacheControl: 604800`(7일).
   - **삭제·덮어쓰기·교체는 원본+썸네일을 항상 함께.** `deleteItemImage(s)`가 원본과 썸네일 키를 함께 remove하고 **둘 다 캐시 무효화**(고아 객체 없음). 담기·덮어쓰기·이미지 교체는 원본과 썸네일을 **모두 재업로드**한다.
+- **익명 계정 수명주기(Phase 11 — 전부 서버 측, 앱 코드 무관).** 익명 로그인 특성상 앱 재설치마다 접근 불가능한 옛 계정·파일이 서버에 쌓이므로 "잃을 게 없는 것만" 자동 정리한다. (1) **빈 익명 계정**(아이템 0건·생성 30일+)은 pg_cron 주 1회 잡 `delete-empty-anon-users`(`0002`)가 삭제 → FK cascade로 `categories/items/analysis_logs` 정리. **데이터(아이템) 있는 계정은 절대 삭제하지 않는다**(`not exists items` 조건 필수). (2) **고아 Storage 객체**(살아있는 키 = `items.image_key` ∪ 파생 썸네일 키 — 이 union 밖)는 DB 함수 `list_orphan_item_images`(`0003`)가 열거하고 Edge Function `cleanup-orphan-images`가 주 1회 **Storage API(`.remove()`)로만** 삭제한다(`storage.objects` 직접 DELETE 금지). 썸네일 키는 DB 미저장 파생이라 union을 빼면 전 썸네일이 오삭제된다. (3) **"재설치 시 데이터 미보존"은 의도된 동작** — 복원은 미래 계정 연결(Apple/이메일 linkIdentity) Phase 소관. 마이그레이션 적용·dry-run·cron 등록·functions deploy는 사람이 수행.
 - **마이그레이션.** 계약은 `supabase/migrations/0001_init.sql`. 적용은 대시보드 SQL Editor에 붙여넣기(또는 `supabase link` 후 `supabase db push`). **스키마를 바꾸면 새 `000N_*.sql`을 추가**하고(기존 파일 재실행 아님), 타입을 재생성한다.
 - **타입은 자동 생성.** `src/types/database.ts`는 `supabase gen types`로 만든다. 손으로 고치지 않는다.
 

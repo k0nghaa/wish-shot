@@ -384,6 +384,12 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# 고아 이미지 스윕(스케줄러 전용) — 사용자 JWT 가 아니라 x-cron-secret 비밀 헤더로
+# 보호하므로 JWT 검증을 끈다. 끄지 않으면 스케줄러 호출이 401 로 막힌다.
+# (functions deploy 가 이 설정을 읽어 적용한다.)
+[functions.cleanup-orphan-images]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
