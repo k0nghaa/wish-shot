@@ -19,11 +19,25 @@
 --   2) dry-run 으로 건수·샘플을 확인한다(불변식 5). 샘플에 "살아있는 아이템"의
 --      원본/썸네일 키가 섞여 있지 않은지 반드시 눈으로 본다:
 --
---      select
---        (select count(*) from public.list_orphan_item_images()) as orphan_count,
---        (select array_agg(k) from (
---           select k from public.list_orphan_item_images() k limit 20
---        ) s) as sample;
+--      -- 건수 (Edge Function ?dryRun=true 응답의 orphanCount 와 대조할 기준값)
+--      select count(*) as orphan_count from public.list_orphan_item_images();
+--
+--      -- 샘플 20개
+--      select k as orphan_key from public.list_orphan_item_images() k limit 20;
+--
+--      -- 소유자(uid)별 분포 + 그 소유자가 현재 아이템 보유 중인지(운영 추이 확인에도 사용).
+--      -- owner_has_items = false(옛 계정·INSERT 실패 잔재)는 정상적인 고아.
+--      -- ※ exists 서브쿼리가 바깥의 k 를 직접 참조하면 42803(ungrouped column) 에러라
+--      --    uid 를 파생 테이블로 먼저 만든다.
+--      select uid,
+--             count(*) as orphan_objects,
+--             exists (select 1 from public.items i where i.user_id::text = uid) as owner_has_items
+--      from (
+--        select split_part(k, '/', 1) as uid
+--        from public.list_orphan_item_images() k
+--      ) t
+--      group by uid
+--      order by owner_has_items desc, orphan_objects desc;
 --
 --   3) 실제 삭제는 Edge Function cleanup-orphan-images 가 수행한다(스케줄 등록도
 --      사람 — supabase/functions/cleanup-orphan-images/index.ts 참고).
