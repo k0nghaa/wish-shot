@@ -10,11 +10,13 @@ import { EmptyState } from '@/components/EmptyState';
 import { useOnboardingTarget } from '@/components/Onboarding/onboardingTarget';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { colors, radius, spacing, type } from '@/constants/theme';
+import { capture } from '@/lib/analytics';
 import { logImageDiag, toFileUri } from '@/lib/imageBytes';
 import {
   createCategory,
   deleteCategory,
   getItemImageSignedUrls,
+  getItemThumbSignedUrls,
   listCategories,
   listItems,
   renameCategory,
@@ -32,7 +34,8 @@ type Row = {
   id: string; // 카테고리 id, 또는 미분류는 'uncategorized'
   name: string;
   count: number;
-  thumbUrls: (string | null)[];
+  thumbUrls: (string | null)[]; // 썸네일(우선)
+  fallbackUrls: (string | null)[]; // 원본(폴백 — 썸네일 없는 레거시)
   isUncat: boolean;
 };
 
@@ -72,6 +75,7 @@ export default function HomeScreen() {
     const url = shareIntent?.webUrl ?? firstUrl(shareIntent?.text);
     if ((shareIntent?.type === 'weburl' || shareIntent?.type === 'text') && url) {
       shareHandled.current = true;
+      capture('share_intent_received', { type: 'url' }); // 공유 진입 전체량(질문 3)
       resetShareIntent();
       router.push({ pathname: '/all', params: { attachLink: url } });
       return;
@@ -81,6 +85,7 @@ export default function HomeScreen() {
     const file = shareIntent?.files?.[0];
     if (file?.path) {
       shareHandled.current = true;
+      capture('share_intent_received', { type: 'image' }); // 공유 진입 전체량(질문 3)
       const imageUri = toFileUri(file.path);
       const imageMime = file.mimeType ?? 'image/jpeg';
       logImageDiag('shareIntent', file.path, { mimeType: file.mimeType });
@@ -114,20 +119,32 @@ export default function HomeScreen() {
           name: c.name,
           count: countByCat.get(c.id) ?? 0,
           thumbUrls: [],
+          fallbackUrls: [],
           isUncat: false,
         });
       }
       const uncatCount = countByCat.get(null) ?? 0;
       if (uncatCount > 0) {
-        built.push({ id: 'uncategorized', name: '미분류', count: uncatCount, thumbUrls: [], isUncat: true });
+        built.push({
+          id: 'uncategorized',
+          name: '미분류',
+          count: uncatCount,
+          thumbUrls: [],
+          fallbackUrls: [],
+          isUncat: true,
+        });
       }
 
-      // 대표 썸네일 signed URL 배치 발급(전 카테고리 키를 한 번에).
+      // 대표 이미지 signed URL 배치 발급(전 카테고리 키를 한 번에). 썸네일(우선)+원본(폴백) 함께.
       const allKeys = built.flatMap((r) => keysByCat.get(r.isUncat ? null : r.id) ?? []);
-      const urlMap = await getItemImageSignedUrls(allKeys);
+      const [thumbMap, origMap] = await Promise.all([
+        getItemThumbSignedUrls(allKeys),
+        getItemImageSignedUrls(allKeys),
+      ]);
       for (const r of built) {
         const keys = keysByCat.get(r.isUncat ? null : r.id) ?? [];
-        r.thumbUrls = keys.map((k) => urlMap[k] ?? null);
+        r.thumbUrls = keys.map((k) => thumbMap[k] ?? null);
+        r.fallbackUrls = keys.map((k) => origMap[k] ?? null);
       }
 
       setRows(built);
@@ -306,6 +323,7 @@ export default function HomeScreen() {
                 name={item.name}
                 count={item.count}
                 thumbnailUrls={item.thumbUrls}
+                fallbackUrls={item.fallbackUrls}
                 onPress={deleteMode ? undefined : () => openCategory(item)}
                 onLongPress={item.isUncat || deleteMode ? undefined : () => handleCardManage(item)}
                 deleteMode={deleteMode}

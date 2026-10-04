@@ -1,14 +1,36 @@
 import { useRouter } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DisclosureRow, FormCard } from '@/components/FormField';
 import { resetOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
-import { signInAnonymouslyIfNeeded, signOut } from '@/lib/queries';
+import { isAnalyticsAvailable, isCaptureEnabled, setCaptureEnabled } from '@/lib/analytics';
+import { readImageBytes } from '@/lib/imageBytes';
+import { makeThumbnail } from '@/lib/imageResize';
+import {
+  getCurrentUserId,
+  getItemImageSignedUrl,
+  listItems,
+  signInAnonymouslyIfNeeded,
+  signOut,
+  uploadItemImageThumb,
+} from '@/lib/queries';
+
+// 지원 이메일 — docs/legal/support.html·개인정보 방침과 통일된 주소(새 주소 금지).
+const SUPPORT_EMAIL = 'wishshot2026@gmail.com';
 
 export default function SettingsScreen() {
   const router = useRouter();
+
+  // 의견 보내기(Phase 10 F-1): 실제 앱(App Store) 배포에선 TestFlight 스크린샷 피드백이 없어
+  // 메일이 피드백 채널이다. 모든 사용자 노출.
+  function handleSendFeedback() {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('WishShot 의견')}`).catch(() => {
+      Alert.alert('메일 열기 실패', `${SUPPORT_EMAIL} 으로 보내주세요.`);
+    });
+  }
 
   // 개발용 세션 리셋: 현재 세션을 버리고 새 익명 세션으로 시작한다. 익명 경로를 재설치 없이
   // 즉시 테스트하기 위한 것 — __DEV__ 에서만 노출된다.
@@ -30,6 +52,51 @@ export default function SettingsScreen() {
     Alert.alert('온보딩 초기화', '앱을 다시 시작하면 온보딩이 표시됩니다.');
   }
 
+  // 썸네일 백필(Phase 9 D, __DEV__ 전용): 기존 아이템의 원본에서 400px 썸네일을 만들어 올린다.
+  // RLS 로 본인 아이템만 대상(전역 백필 불가·불필요 — 실사용자 레거시는 그리드 원본 폴백으로 커버).
+  async function handleBackfillThumbs() {
+    try {
+      const userId = await getCurrentUserId();
+      const items = await listItems();
+      let done = 0;
+      let failed = 0;
+      for (const it of items) {
+        try {
+          const url = await getItemImageSignedUrl(it.image_key); // 원본 signed URL
+          const thumbUri = await makeThumbnail(url); // manipulateAsync 가 원격 URL 을 받아 400px 생성
+          const bytes = await readImageBytes(thumbUri);
+          await uploadItemImageThumb(userId, it.id, bytes);
+          done++;
+        } catch {
+          failed++;
+        }
+      }
+      Alert.alert('썸네일 백필', `완료 ${done} · 실패 ${failed}`);
+    } catch (e) {
+      Alert.alert('오류', e instanceof Error ? e.message : '백필에 실패했습니다.');
+    }
+  }
+
+  // 계측 토글(Phase 10, __DEV__ 전용): 개발 기기는 기본 옵트아웃이라 실발화 검증 때만 수동으로 켠다.
+  // 상태는 PostHog 가 영속하므로(optIn/optOut) 재시작 후에도 유지된다.
+  async function handleDevToggleAnalytics() {
+    if (!isAnalyticsAvailable()) {
+      Alert.alert('계측 비활성', 'PostHog 키가 설정되지 않았습니다(.env 확인).');
+      return;
+    }
+    const next = !isCaptureEnabled();
+    await setCaptureEnabled(next);
+    Alert.alert('계측(개발용)', next ? '이벤트 수집 켜짐' : '이벤트 수집 꺼짐');
+  }
+
+  // app_error 검증용(Phase 10 F-2, __DEV__ 전용): 의도적 미처리 throw —
+  // redbox 가 정상 표시되고(핸들러 체이닝 확인) PostHog 에 app_error 가 수신돼야 한다.
+  function handleDevTestError() {
+    setTimeout(() => {
+      throw new Error('계측 검증용 테스트 에러');
+    }, 0);
+  }
+
   // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
   // 이메일 가입/계정 승격·로그아웃은 Phase 6.
   return (
@@ -48,6 +115,11 @@ export default function SettingsScreen() {
           <Text style={styles.noticeTitle}>{PRIVACY_NOTICE.title}</Text>
           <Text style={styles.noticeBody}>{PRIVACY_NOTICE.body}</Text>
         </View>
+
+        <Text style={styles.sectionLabel}>지원</Text>
+        <FormCard>
+          <DisclosureRow label="의견 보내기" value={SUPPORT_EMAIL} onPress={handleSendFeedback} />
+        </FormCard>
 
         {__DEV__ ? (
           <View style={styles.devSection}>
@@ -74,6 +146,30 @@ export default function SettingsScreen() {
               accessibilityLabel="온보딩 다시 보기(개발용)"
             >
               <Text style={styles.devButtonText}>온보딩 다시 보기(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleBackfillThumbs}
+              accessibilityRole="button"
+              accessibilityLabel="썸네일 백필(개발용)"
+            >
+              <Text style={styles.devButtonText}>썸네일 백필(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevToggleAnalytics}
+              accessibilityRole="button"
+              accessibilityLabel="계측 토글(개발용)"
+            >
+              <Text style={styles.devButtonText}>계측 토글(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevTestError}
+              accessibilityRole="button"
+              accessibilityLabel="테스트 에러 발생(개발용)"
+            >
+              <Text style={styles.devButtonText}>테스트 에러 발생(개발용)</Text>
             </TouchableOpacity>
           </View>
         ) : null}

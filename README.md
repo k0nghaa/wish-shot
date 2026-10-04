@@ -13,6 +13,7 @@
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
 - **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하면 사용자가 선택한 제품 영역 크롭만 예외 전송해 분석(Phase 6, 하위호환·미저장)**
 - **빌드**: EAS 클라우드 빌드 → TestFlight (Windows PC + Mac 없이 iOS 개발·배포)
+- **계측(Phase 10)**: PostHog (`posthog-react-native`, 순수 JS — 재빌드 없음). 커스텀 이벤트 + 자동 라이프사이클 수집, 전부 `src/lib/analytics.ts` 경유. **키 미설정 시 no-op**, `__DEV__` 기본 옵트아웃. 속성은 enum·수치만 — 사진·텍스트 등 콘텐츠 미수집. 정본: [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - **디자인**: 흰 배경 + iOS 시스템 그레이 모노톤 리스킨(색 토큰 = `src/constants/theme.ts`)
 
 주요 화면: **하단 알약 탭바(전체·폴더·검색)** · 폴더 홈(2×2 모자이크 카드·설정 진입) · 전체(전체 아이템 3열 그리드) · 등록(OCR 자동채움·카테고리 추천·메모/태그) · **상세 풀스크린 뷰어 + 정보(i) 하프시트**(편집·카테고리 이동·삭제) · 편집 · 설정(개인정보 안내). **로그인 화면 없이 익명 로그인으로 바로 사용.**
@@ -28,6 +29,7 @@ npm install
 # 2) 환경 변수 설정
 cp .env.example .env
 #   .env 에 EXPO_PUBLIC_SUPABASE_URL 과 EXPO_PUBLIC_SUPABASE_ANON_KEY 입력
+#   (선택) 계측: EXPO_PUBLIC_POSTHOG_KEY / EXPO_PUBLIC_POSTHOG_HOST — 미설정이면 계측만 꺼진 채 동작
 
 # 3) 개발 서버 (이 환경은 --tunnel 필수)
 npx expo start --tunnel            # Expo Go 로 접속 (네이티브 모듈 없는 화면 확인용)
@@ -50,6 +52,8 @@ npx expo start --dev-client --tunnel  # 개발 빌드가 설치된 아이폰으�
 
 스키마 계약은 `supabase/migrations/0001_init.sql` 한 파일에 모여 있습니다 — 테이블
 (`categories`/`items`/`analysis_logs`), GRANT, RLS 정책, Storage private 버킷(`item-images`)·정책.
+운영 정리 잡은 `0002_cleanup_anon_users.sql`(빈 익명 계정 주 1회 삭제 pg_cron)과
+`0003_orphan_images_fn.sql`(고아 이미지 키 열거 함수)에 있습니다(아래 "익명 계정·고아 파일 정리").
 
 **마이그레이션 적용** (둘 중 하나):
 
@@ -70,12 +74,40 @@ npx tsc --noEmit
 
 - 스키마 변경은 기존 파일을 고치지 말고 **새 `000N_*.sql`** 을 추가합니다.
 - RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다.
+- 테스트 지표(링크 보유율·AI 정제 상태 분포·필드 수정률·추천 채택률)는 `supabase/tests/metrics.sql` 을 같은 방식으로 실행합니다(블록 상단 코호트 값 기입 후 — Phase 10).
 - `src/types/database.ts` 는 자동 생성 파일이라 직접 수정하지 않습니다.
+
+## 이미지 저장·전송 (egress 최적화, Phase 9)
+
+Free 플랜(월 Egress 5GB)을 출시·성장까지 유지하기 위해 이미지 전송량을 코드로 줄입니다.
+
+- **업로드 전 리사이즈·압축**: 저장 시점에만 원본을 **긴 변 1600px · JPEG q0.8**로 최적화합니다(`src/lib/imageResize.ts`). OCR·AI·원본 확대 보기는 사용자가 고른 **원본 uri** 그대로 씁니다.
+- **그리드는 썸네일 객체만**: 아이템 1개당 원본(`{uid}/{id}.jpg`)과 별도 **400px 썸네일**(`{uid}/{id}_thumb.jpg`, q0.6, DB에 저장하지 않는 파생 키)을 함께 올립니다. 목록/홈 그리드는 썸네일, **상세 뷰어만 원본**을 봅니다. 썸네일이 없는 레거시 아이템은 그리드에서 원본으로 폴백합니다(화면 비지 않음).
+- **signed URL 영속 캐시**: 발급한 signed URL을 AsyncStorage에 저장(TTL 1일)해 앱 콜드스타트·리로드 후에도 같은 URL을 재사용합니다 → `expo-image` 디스크 캐시가 살아남아 **재방문 다운로드 ≈ 0**. 업로드 시 `cacheControl: 604800`.
+- 삭제·덮어쓰기·이미지 교체는 **원본과 썸네일을 항상 함께** 처리합니다(고아 객체 없음, 양쪽 캐시 무효화). 전 구간 `src/lib/queries` 경유(화면에서 Storage 직접 호출 금지).
+- Supabase **Image Transformation은 Pro 전용**이라 Free에선 못 쓰므로 썸네일을 **별도 객체**로 만듭니다.
+
+## 익명 계정·고아 파일 정리 (Phase 11)
+
+익명 로그인은 앱 재설치마다 새 계정을 만들므로(옛 세션은 앱 샌드박스와 함께 삭제), 접근
+불가능한 옛 계정·파일이 서버에 쌓입니다. **잃을 게 없는 것만** 주 1회 자동 정리합니다.
+
+- **빈 익명 계정 삭제**: `is_anonymous` AND 생성 30일+ AND **아이템 0건**인 계정만 pg_cron 잡
+  (`delete-empty-anon-users`)이 삭제합니다. 행(`categories`/`items`/`analysis_logs`)은 FK cascade로
+  함께 정리되고, **아이템이 있는 계정은 절대 삭제하지 않습니다.**
+- **고아 이미지 스윕**: 살아있는 키(= `items.image_key` ∪ 파생 썸네일 키 `_thumb.jpg`) 밖의
+  `item-images` 객체를 DB 함수 `list_orphan_item_images()`가 열거하고, Edge Function
+  `cleanup-orphan-images`(비밀 헤더 `x-cron-secret` 보호, `?dryRun=true` 지원)가 **Storage API로만**
+  삭제합니다. 썸네일 키는 DB에 저장되지 않는 파생 키라 union에서 빠지면 전부 오삭제됩니다.
+- **재설치 시 데이터 미보존은 의도된 동작**입니다 — 복원은 미래 계정 연결(Apple/이메일) Phase 소관.
+- 적용·활성화는 사람이 합니다: 마이그레이션 실행 → dry-run 카운트 확인 → cron 등록,
+  `npx supabase secrets set CRON_SECRET=<임의 난수>` → `npx supabase functions deploy cleanup-orphan-images`
+  (JWT 검증 해제는 `supabase/config.toml`의 `verify_jwt = false`가 배포 시 적용) → dryRun 확인 → 주간 스케줄 등록.
 
 ## OCR 정제 Edge Function (`parse-screenshot-text`)
 
 온디바이스 OCR(Apple Vision)로 뽑은 **텍스트만** Edge Function으로 보내 Claude Haiku가
-제품명·가격·브랜드를 정제합니다. 원본 이미지는 비공개 저장소까지만 가고, AI 정제엔 텍스트만 전송합니다.
+제품명·가격·브랜드를 정제합니다. 이미지는 비공개 저장소까지만 가고(업로드 시 긴 변 1600px JPEG로 최적화 저장), AI 정제엔 텍스트만 전송합니다.
 단, 텍스트를 찾지 못한 경우에 한해 사용자가 직접 선택한 **제품 영역 크롭만** 확인 후 전송하며 저장하지 않습니다(NFR-3, Phase 6 개정).
 
 **시크릿 등록 & 배포** (Claude 키는 함수 시크릿에만 — 앱·커밋 금지):
@@ -102,5 +134,8 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 - Phase 3 작업 지시·결과: [`docs/phases/phase-3-ocr-and-autofill.md`](docs/phases/phase-3-ocr-and-autofill.md)
 - Phase 4 작업 지시·결과: [`docs/phases/phase-4-edit-and-manage.md`](docs/phases/phase-4-edit-and-manage.md)
 - Phase 5 작업 지시·결과(리스킨·탭바·상세 뷰어·익명 로그인·TestFlight): [`docs/phases/phase-5-redesign-and-deploy.md`](docs/phases/phase-5-redesign-and-deploy.md)
+- Phase 10 작업 지시(테스트 계측 — PostHog): [`docs/phases/phase-10-testflight-analytics.md`](docs/phases/phase-10-testflight-analytics.md)
+- Phase 11 작업 지시(익명 계정 수명주기 — 빈 계정·고아 파일 정리): [`docs/phases/phase-11-anon-account-lifecycle.md`](docs/phases/phase-11-anon-account-lifecycle.md)
+- 트래킹 플랜(이벤트 택소노미 정본): [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - 개인정보처리방침 원문(TestFlight 외부 공개용): [`docs/legal/privacy.html`](docs/legal/privacy.html)
 - 저장소 작업 규칙: [`CLAUDE.md`](CLAUDE.md)

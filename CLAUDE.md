@@ -14,6 +14,9 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - Phase 3 작업 지시·결과: `docs/phases/phase-3-ocr-and-autofill.md`
 - Phase 4 작업 지시·결과: `docs/phases/phase-4-edit-and-manage.md`
 - Phase 5 작업 지시·결과: `docs/phases/phase-5-redesign-and-deploy.md` (리스킨·탭바·상세 뷰어·익명 로그인·TestFlight)
+- Phase 10 작업 지시: `docs/phases/phase-10-testflight-analytics.md` (테스트 계측 — PostHog)
+- Phase 11 작업 지시: `docs/phases/phase-11-anon-account-lifecycle.md` (익명 계정 수명주기 — 빈 계정·고아 파일 정리, 전부 서버 측)
+- 트래킹 플랜(이벤트 택소노미 **정본**): `docs/testing/tracking-plan.md`
 - 디자인 정본: `docs/design/phase-5-visual-spec.md`, `docs/design/color_tokens.md`
 - 개인정보처리방침 원문: `docs/legal/privacy.html` (TestFlight 외부 공개용)
 
@@ -26,6 +29,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - **이미지**: `expo-image-picker`(앱 내 사진 선택), `expo-file-system`(선택/공유 이미지 uri → 바이트 읽기, `File.arrayBuffer()`). 둘 다 네이티브.
 - **OCR**: 온디바이스 **Apple Vision**(iOS 내장). 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr/`가 `recognitionLanguages=["ko-KR","en-US"]`로 한국어+영어를 인식. `OcrEngine` 인터페이스(`src/lib/ocr/`) 뒤에 캡슐화해 교체 가능. **엔진 결정**: 지시서의 Google ML Kit 대신 Apple Vision 채택 — iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, 어떤 RN용 ML Kit 래퍼도 Expo SDK 57/New Architecture 호환을 확인하지 못했기 때문. OCR은 온디바이스라 이미지가 서버로 가지 않고, AI 정제엔 **텍스트만** 전송한다. **단, 텍스트를 찾지 못한 경우에 한해 사용자가 직접 선택한 제품 영역 크롭만 동의 후 전송한다**(NFR-3 개정, Phase 6 — 통이미지·자동 전송 없음, 크롭 미저장).
 - **LLM 정제 + 카테고리 추천(FR-8)**: Edge Function `parse-screenshot-text`(Deno)가 Claude Haiku(`claude-haiku-4-5`)로 OCR 원문을 정제해 `{productName, price, brand, confidence, suggestedCategory}` 반환. 입력에 `categories?: string[]`(사용자 기존 카테고리 이름)을 받으면 그중 하나를 추천(`suggestedCategory`), 없거나 빈 배열이면 `null`(하위호환). 목록 밖 값은 서버·앱 양쪽에서 무시. 구조화 출력(json_schema) 사용. Claude 키는 함수 시크릿에만. **Phase 6**: 입력에 `image?: {base64, mediaType}`(사용자가 선택한 제품 영역 크롭)을 추가로 받는다 — OCR 텍스트 부족 시에만, 명시 동의 후. 이미지가 있으면 이미지+텍스트로 정제하고 없으면 기존과 바이트 동일(하위호환). 출력 스키마 불변. 크롭 이미지는 서버에서 미저장·미로깅(길이만 기록).
+- **계측(Phase 10)**: `posthog-react-native`(코어 순수 JS — 재빌드 없음. 선택 peer 의존성 `expo-application`·`expo-device`·`expo-localization`은 네이티브라 **설치 금지**, 다음 네이티브 배치로). 모든 수집은 **`src/lib/analytics.ts` 경유**(이벤트명·속성을 타입 유니언으로 강제 — 화면·훅에서 PostHog 직접 호출 금지). 커스텀 이벤트 7종 + `app_error`(전역 JS 에러, 클래스명만) + SDK 라이프사이클 자동 수집, 익명 부트스트랩 후 Supabase uid로 `identify`. **키(`EXPO_PUBLIC_POSTHOG_KEY`) 미설정 시 전 호출 no-op**(키 없이 빌드해도 동작 불변), `__DEV__` 기본 옵트아웃(설정의 "계측 토글(개발용)"로만 켬). 속성은 enum·boolean·수치만 — **사용자 콘텐츠(사진·OCR 원문·상품명·URL 등) 절대 미수집**(NFR-3 정합). 택소노미 정본: `docs/testing/tracking-plan.md`, DB 지표 SQL: `supabase/tests/metrics.sql`.
 - **빌드**: 윈도우 PC에서 EAS 클라우드 빌드 → 아이폰 개발 빌드 → TestFlight. 로컬에 Xcode/Mac 없음.
 
 ## 디렉터리 구조
@@ -41,7 +45,7 @@ src/
       search.tsx        # 검색: "검색 기능 추가 예정" 플레이스홀더 (실제 검색은 Phase 6)
     login.tsx           # 이메일 로그인(익명 도입으로 정상 흐름 미도달; __DEV__ 왕복용). 성공 시 홈 복귀 + 취소 버튼
     register.tsx        # 등록(저장): 이미지 선택/미리보기 + OCR 자동채움("AI가 채움") + 수동 입력 + 폴더 선택·생성·**FR-8 추천 미리선택** + 메모/**태그** + 중복 덮어쓰기 + 개인정보 고지(NFR-3). Phase 7: sourceLink 프리필(링크붙이기 새로담기) + "방금 캡처한 사진 담기"(getRecentPhotoAsset, 탭 시점 권한 요청) + 저장 성공 후 "앨범에서 삭제" 옵션(Batch C, 앱 내 선택 사진(picker·최근사진)의 assetId만·전체 접근 필요·공유 시트 비노출·제한/거부 시 제안 자체 생략)
-    settings.tsx        # 설정: 개인정보 안내(NFR-3) 열람. (익명이라 로그아웃·계정 섹션 없음.) __DEV__ 전용: 세션 리셋 · 이메일 로그인 왕복
+    settings.tsx        # 설정: 개인정보 안내(NFR-3) 열람 + 지원(의견 보내기 — 지원 메일 mailto, Phase 10 F). (익명이라 로그아웃·계정 섹션 없음.) __DEV__ 전용: 세션 리셋 · 이메일 로그인 왕복 · 온보딩 다시 보기 · 썸네일 백필 · 계측 토글 · 테스트 에러 발생(Phase 10)
     category/[id].tsx   # 카테고리(폴더)별 아이템 목록(3열 그리드, 최신순). id='uncategorized'=미분류. 삭제된 카테고리 진입 시 홈으로 리다이렉트
     tag/[name].tsx      # 태그별 모아보기(FR-15a): 그 태그가 달린 아이템만(카테고리 무관, 3열 그리드, 최신순)
     item/[id]/index.tsx # 상세 뷰어(세로 풀스크린 모달): 큰 이미지 탭 → 풀스크린 뷰어(원본 비율·핀치 줌) + 하단 액션바(정보(i)·링크·편집·삭제) + 카테고리 이동
@@ -53,9 +57,10 @@ src/
     theme.ts            # 디자인 토큰 (Phase 5 목업 팔레트 — 흰 배경 모노톤, 이름 유지·값 교체) + colorsDark(준비만) + type/spacing/radius/shadow + overlay
     privacy.ts          # 개인정보 안내 문구 단일 소스(register 최초 고지 + 설정 열람 공유)
   hooks/
-    useAnalysis.ts      # 분석 상태머신(useReducer): idle→imageReceived→ocrRunning→parsing→filled→submitted, 실패 시 error. reparse(E-2 재시도)·needsConfirmation 제공
+    useAnalysis.ts      # 분석 상태머신(useReducer): idle→imageReceived→ocrRunning→parsing→filled→submitted, 실패 시 error. reparse(E-2 재시도)·needsConfirmation 제공. 종료 전이에서 analysis_completed 계측(Phase 10)
   lib/
     supabase.ts         # createClient<Database> (타입 클라이언트)
+    analytics.ts        # 계측 캡슐화(Phase 10): PostHog 초기화·capture(이벤트 타입 강제)·identifyUser·옵트인/아웃·app_error 전역 핸들러(체이닝). 키 미설정 시 전부 no-op
     normalize.ts        # normalizeName(brand,productName) — 중복 판정 정규화(단일 소스)
     imageBytes.ts       # uri → ArrayBuffer(File.arrayBuffer) + file:// 정규화
     photoLibrary.ts     # 앨범 접근(Phase 7, expo-media-library/legacy, 순수 JS). getRecentPhotoAsset: 최근 사진 1장의 읽을 수 있는 localUri(ph://→file://)+assetId, 적시 권한. deletePhotoAsset(Batch C): 전체 접근 요청→deleteAssetsAsync([assetId]) (OS 확인창 불가피), 반환 'deleted'|'denied'|'error'. canOfferAlbumDelete: 무프롬프트로 제안 여부 판별(미결정 or 전체 접근이면 true, 제한/거부면 false)
@@ -67,11 +72,15 @@ src/
 modules/
   expo-vision-ocr/      # 자작 로컬 Expo 네이티브 모듈(iOS/Apple Vision). ko-KR+en-US 인식. 네이티브라 변경 시 EAS 재빌드
 supabase/
-  config.toml           # supabase init
-  migrations/0001_init.sql  # 스키마 + GRANT + RLS + Storage 버킷/정책 (계약 기준선)
+  config.toml           # supabase init + [functions.cleanup-orphan-images] verify_jwt=false(스케줄러 전용)
+  migrations/
+    0001_init.sql       # 스키마 + GRANT + RLS + Storage 버킷/정책 (계약 기준선)
+    0002_cleanup_anon_users.sql  # 빈 익명 계정(아이템 0·30일+) 주 1회 삭제 pg_cron 잡 (Phase 11)
+    0003_orphan_images_fn.sql    # 고아 이미지 키 열거 함수 list_orphan_item_images (원본∪썸네일 union, service_role 전용)
   functions/
     parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. samples/ 회귀 케이스
-  tests/rls.sql         # RLS/권한 검증 쿼리(대시보드에서 실행)
+    cleanup-orphan-images/  # Edge Function(Deno, service_role): 고아 이미지 주 1회 스윕 — x-cron-secret 보호·dryRun 지원·Storage API로만 삭제 (Phase 11)
+  tests/                # rls.sql(RLS/권한 검증) + metrics.sql(테스트 지표 4종, Phase 10) — 대시보드 SQL Editor 에서 사람이 실행
 assets/                 # 아이콘·스플래시, logo-v1(참고용)
 app.json                # Expo 설정 (플러그인: share-intent/image-picker, iOS 공유확장, EAS projectId)
 eas.json                # EAS 빌드 프로파일 (development/preview/production)
@@ -89,15 +98,18 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 - `npx expo lint` — ESLint.
 - `npx expo-doctor` — 프로젝트 설정·의존성 정합성 점검.
 - `npx eas-cli build --platform ios --profile development` — 개발 빌드 (Apple 인증 프롬프트가 있어 사람이 실행).
-- `npx eas-cli build --platform ios --profile production` → `npx eas-cli submit --platform ios --profile production --latest` — TestFlight 배포 (사람이 실행, Apple 인증). production 프로필은 channel 없음 = **OTA 미사용**(수정본은 새 빌드로만).
+- `npx eas-cli build --platform ios --profile production` → `npx eas-cli submit --platform ios --profile production --latest` — TestFlight 배포 (사람이 실행, Apple 인증). production 프로필은 `channel: "production"` = **OTA 사용**(Phase 9 F, `expo-updates`). 네이티브 변경이 없는 **JS-only 수정은 새 빌드·재심사 없이** `eas update`로 배포한다. 네이티브를 바꾸면 `runtimeVersion(fingerprint)`이 자동으로 달라져 새 빌드가 필요하다(불일치 크래시 방지).
+- `npx eas-cli update --branch production --message "..."` — JS-only OTA 배포(Phase 9 F). production 채널이 이 branch를 구독한다. **먼저 preview/internal 채널로 확인 후** production에 올린다(깨진 번들은 마지막 정상/내장 번들로 폴백, 고친 업데이트를 다시 publish해 롤백).
 - `npx eas-cli env:create` / `env:push` / `env:list production` — EAS 환경 변수 관리(클라우드 빌드용 `EXPO_PUBLIC_*` 등록).
 - `npx supabase login` → `npx supabase gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts` — DB 스키마에서 타입 재생성 (마이그레이션 변경 시마다). 로그인은 최초 1회.
 - `npx supabase secrets set ANTHROPIC_API_KEY=...` — Edge Function 시크릿 등록(Claude 키). **앱·커밋·채팅엔 절대 넣지 않는다.**
 - `npx supabase functions deploy parse-screenshot-text` — Edge Function 배포(정제 프롬프트/로직 변경 시). **앱 재빌드와 무관**(서버 측). Docker 없이도 클라우드 번들로 배포됨(경고는 무시).
+- `npx supabase functions deploy cleanup-orphan-images` — 고아 이미지 스윕 함수 배포(`config.toml`의 `verify_jwt = false`가 함께 적용됨). 시크릿: `npx supabase secrets set CRON_SECRET=<임의 난수>`. dry-run 확인·주간 스케줄 등록은 사람이 대시보드에서(Phase 11 지시서 참고).
 
 ## 환경 변수
 
 - `.env`에 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`. `.env`는 gitignore, `.env.example`만 커밋.
+- 계측(Phase 10, 선택): `EXPO_PUBLIC_POSTHOG_KEY`, `EXPO_PUBLIC_POSTHOG_HOST`. **미설정이면 계측만 전부 no-op**(앱 동작 불변)이라 키 없이도 빌드·실행된다. write-only 공개 키라 `EXPO_PUBLIC_` 노출 안전 — Supabase anon 키와 같은 패턴으로 EAS 환경에도 등록한다.
 - `EXPO_PUBLIC_` 접두사가 붙은 값은 앱 번들에 포함된다. **anon(공개용) 키만** 넣는다. `.env` 변경 후에는 `npx expo start --clear`로 재시작해야 반영된다.
 - **EAS 클라우드 빌드는 로컬 `.env`를 읽지 않는다**(gitignore). `EXPO_PUBLIC_*`를 **EAS 환경(production 등)에 등록**해야 한다(`eas env:create`/`env:push` 또는 대시보드). 미등록이면 빌드는 되지만 앱이 켜지자마자 Supabase 환경 변수 없음으로 실패한다(공개 anon 값이라 EAS 등록은 안전).
 
@@ -127,7 +139,14 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 - **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`(hooks)로만 다룬다. `analysis_logs`는 Phase 2에서 만든 테이블을 **쓰기만** 한다(스키마 변경 없음). `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문).
 - **RLS가 최종 방어선.** 세 테이블 모두 `user_id = (select auth.uid())`로 SELECT/INSERT/UPDATE/DELETE 강제. `anon`은 권한 없음. 검증 쿼리는 `supabase/tests/rls.sql`.
 - **`normalized_name`은 서버 전용 중복 판정 컬럼.** 값 = `normalizeName(brand, product_name)`(NFC·소문자·문자/숫자만). `UNIQUE(user_id, normalized_name)`로 재저장을 하드 차단. 저장·사전조회·수정이 **모두 `src/lib/normalize.ts` 한 곳**을 써야 판정이 일치한다. 화면엔 `product_name`·`brand`만 노출.
-- **Storage 규칙.** private 버킷 `item-images`, 키 `{user_id}/{item_id}.jpg`. 렌더는 signed URL(기본 TTL 1시간, `SIGNED_URL_TTL_SEC`)로만. DB엔 객체 키만 저장. 중복 덮어쓰기는 같은 키에 `upsert`.
+- **Storage 규칙.** private 버킷 `item-images`, 키 `{user_id}/{item_id}.jpg`. 렌더는 signed URL로만. DB엔 객체 키만 저장. 중복 덮어쓰기는 같은 키에 `upsert`.
+- **Storage · Egress 규칙(Phase 9 — Free 5GB 유지).** 이미지 전송량을 코드로 줄여 정식 출시·성장까지 Free 플랜을 유지한다(플랜 업그레이드로 해결하지 않는다). 데이터는 **모두 `src/lib/queries/storage.ts` 경유**(화면에서 `supabase.storage` 직접 호출 금지).
+  - **업로드 전 리사이즈 필수.** 저장 시점에만 원본을 **긴 변 1600px · JPEG q0.8**로 최적화한다(`src/lib/imageResize.ts` — `compressForUpload`). **OCR·AI 분석·원본 확대 보기는 사용자가 고른 원본 uri 그대로** 쓴다(압축은 저장 시점에만, 품질 저하 금지). 압축 전 `ensureFileReady`로 iCloud 미다운로드를 흡수한다.
+  - **목록은 썸네일 객체만.** 아이템 1개 = 원본 `{uid}/{id}.jpg` + **파생 썸네일** `{uid}/{id}_thumb.jpg`(긴 변 400px q0.6, DB에 저장하지 않는 파생 키 — `thumbKeyFromImageKey`). 그리드(전체·폴더·태그·홈 모자이크)는 `getItemThumbSignedUrls`로 썸네일을, **상세 뷰어만 원본**(`getItemImageSignedUrl(s)`)을 쓴다. Supabase **Image Transformation은 Pro 전용**이라 Free에선 못 써 별도 썸네일 객체로 대체한다.
+  - **thumb 부재 시 원본 폴백.** 썸네일이 없는 레거시 아이템은 그리드에서 원본으로 폴백해 화면이 비지 않게 한다(`Thumbnail`의 `fallbackUrl` + `onError` 스왑 — 대규모 백필 없이 안전). 신규·재저장은 자동으로 썸네일이 생기고, `settings.tsx`의 `__DEV__` "썸네일 백필"로 자기 데이터를 채울 수 있다.
+  - **signed URL 영속 캐시 재사용.** `SIGNED_URL_TTL_SEC = 1일`. 발급한 signed URL을 AsyncStorage에 영속(`wishshot.signedurl.` 접두사)해 앱 콜드스타트·리로드 후에도 같은 URL을 재사용한다 → `expo-image` 디스크 캐시가 살아남아 **재방문 다운로드 ≈ 0**. 앱 시작 시 `hydrateSignedUrlCache()` 1회(`_layout.tsx`). 업로드는 `cacheControl: 604800`(7일).
+  - **삭제·덮어쓰기·교체는 원본+썸네일을 항상 함께.** `deleteItemImage(s)`가 원본과 썸네일 키를 함께 remove하고 **둘 다 캐시 무효화**(고아 객체 없음). 담기·덮어쓰기·이미지 교체는 원본과 썸네일을 **모두 재업로드**한다.
+- **익명 계정 수명주기(Phase 11 — 전부 서버 측, 앱 코드 무관).** 익명 로그인 특성상 앱 재설치마다 접근 불가능한 옛 계정·파일이 서버에 쌓이므로 "잃을 게 없는 것만" 자동 정리한다. (1) **빈 익명 계정**(아이템 0건·생성 30일+)은 pg_cron 주 1회 잡 `delete-empty-anon-users`(`0002`)가 삭제 → FK cascade로 `categories/items/analysis_logs` 정리. **데이터(아이템) 있는 계정은 절대 삭제하지 않는다**(`not exists items` 조건 필수). (2) **고아 Storage 객체**(살아있는 키 = `items.image_key` ∪ 파생 썸네일 키 — 이 union 밖)는 DB 함수 `list_orphan_item_images`(`0003`)가 열거하고 Edge Function `cleanup-orphan-images`가 주 1회 **Storage API(`.remove()`)로만** 삭제한다(`storage.objects` 직접 DELETE 금지). 썸네일 키는 DB 미저장 파생이라 union을 빼면 전 썸네일이 오삭제된다. (3) **"재설치 시 데이터 미보존"은 의도된 동작** — 복원은 미래 계정 연결(Apple/이메일 linkIdentity) Phase 소관. 마이그레이션 적용·dry-run·cron 등록·functions deploy는 사람이 수행.
 - **마이그레이션.** 계약은 `supabase/migrations/0001_init.sql`. 적용은 대시보드 SQL Editor에 붙여넣기(또는 `supabase link` 후 `supabase db push`). **스키마를 바꾸면 새 `000N_*.sql`을 추가**하고(기존 파일 재실행 아님), 타입을 재생성한다.
 - **타입은 자동 생성.** `src/types/database.ts`는 `supabase gen types`로 만든다. 손으로 고치지 않는다.
 
@@ -151,7 +170,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
   → Expo 앱 → OcrEngine(Apple Vision, 온디바이스)
        ├ (텍스트 충분) 텍스트만 → Edge Function(Claude Haiku 정제)
        └ (텍스트 부족) 제품 영역 지정 시트 → 선택 영역 크롭만(동의 후) → Edge Function
-  → 폼 자동채움("AI가 채움") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL, 원본 저장)
+  → 폼 자동채움("AI가 채움") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL 1일 영속캐시, 원본 1600px 최적화 저장 + 400px 썸네일)
 
 [iOS 공유 시트 (URL/웹페이지) — Phase 7]  ※ 스크린샷 원본 URL 자동추출은 불가, 페이지 직접 공유만
   → 홈이 인텐트 분기 → '전체' 탭 링크붙이기 모드

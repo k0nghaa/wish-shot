@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/EmptyState';
 import { PhotoTile } from '@/components/PhotoTile';
 import { colors, spacing } from '@/constants/theme';
-import { getItemImageSignedUrls, listItemsByTag, type Item } from '@/lib/queries';
+import { getItemImageSignedUrls, getItemThumbSignedUrls, listItemsByTag, type Item } from '@/lib/queries';
 
 const COLUMNS = 3;
 
@@ -18,14 +18,17 @@ export default function TagItemsScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
 
   const [items, setItems] = useState<Item[] | null>(null); // null = 로딩 중
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [urls, setUrls] = useState<Record<string, string>>({}); // 썸네일(우선)
+  const [fallbackUrls, setFallbackUrls] = useState<Record<string, string>>({}); // 원본(폴백)
 
   const load = useCallback(async () => {
     try {
       const list = await listItemsByTag(name);
-      const urlMap = await getItemImageSignedUrls(list.map((it) => it.image_key));
+      const keys = list.map((it) => it.image_key);
+      const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
       setItems(list);
-      setUrls(urlMap);
+      setUrls(thumbMap);
+      setFallbackUrls(origMap);
     } catch (e) {
       setItems([]);
       Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했습니다.');
@@ -65,6 +68,7 @@ export default function TagItemsScreen() {
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
+              fallbackUrl={fallbackUrls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
               onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id, ctx: 'tag', ctxKey: name } })}

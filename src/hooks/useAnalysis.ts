@@ -1,5 +1,6 @@
 import { useCallback, useReducer, useRef } from 'react';
 
+import { capture } from '@/lib/analytics';
 import { ensureFileReady, ImageNotReadyError } from '@/lib/imageBytes';
 import { ocrEngine } from '@/lib/ocr';
 import { parseScreenshotText, type ParseImage, type ParseResult } from '@/lib/queries';
@@ -63,6 +64,17 @@ const initialState: AnalysisState = {
   errorKind: null,
   via: null,
 };
+
+/**
+ * analysis_completed(Phase 10, 질문 4) — 상태머신 종료 전이에서만 부른다.
+ * status 는 analysis_logs 와 동일 enum. image_parse_failed 는 parse_failed 로 접고,
+ * image_not_ready(사진 미준비)는 분석이 시작되지 못한 회복형 상태라 발화하지 않는다.
+ */
+function captureAnalysisFilled(result: ParseResult) {
+  capture('analysis_completed', {
+    status: result.confidence < LOW_CONFIDENCE_THRESHOLD ? 'low_confidence' : 'parsed',
+  });
+}
 
 // 불가능한 상태 조합을 리듀서에서 차단한다. 유효하지 않은 전이는 상태를 그대로 둔다.
 function reducer(state: AnalysisState, action: Action): AnalysisState {
@@ -145,10 +157,11 @@ export function useAnalysis() {
       const result = await parseScreenshotText(rawText);
       if (!isCurrent()) return;
       dispatch({ type: 'filled', result, via: 'text' });
+      captureAnalysisFilled(result);
     } catch (e) {
       if (!isCurrent()) return;
       if (e instanceof ImageNotReadyError) {
-        // 사진이 아직 로컬에 없음(iCloud 최적화) → 재시도 안내. rawText 없음.
+        // 사진이 아직 로컬에 없음(iCloud 최적화) → 재시도 안내. rawText 없음. 분석 미시작이라 이벤트 없음.
         if (__DEV__) console.warn('[WishShot/analyze] 사진 미준비', e);
         dispatch({ type: 'error', kind: 'image_not_ready', rawText: '' });
         return;
@@ -156,6 +169,7 @@ export function useAnalysis() {
       // E-2: 정제 실패/타임아웃/네트워크, 또는 OCR 모듈 실패 → 원문 유지 + 수동 입력 폴백.
       if (__DEV__) console.warn('[WishShot/analyze] 실패', { hadRawText: !!rawText }, e);
       dispatch({ type: 'error', kind: 'parse_failed', rawText });
+      capture('analysis_completed', { status: 'parse_failed' });
     }
   }, []);
 
@@ -168,9 +182,11 @@ export function useAnalysis() {
       const result = await parseScreenshotText(rawText);
       if (!isCurrent()) return;
       dispatch({ type: 'filled', result, via: 'text' });
+      captureAnalysisFilled(result);
     } catch {
       if (!isCurrent()) return;
       dispatch({ type: 'error', kind: 'parse_failed', rawText });
+      capture('analysis_completed', { status: 'parse_failed' });
     }
   }, []);
 
@@ -183,15 +199,20 @@ export function useAnalysis() {
       const result = await parseScreenshotText(rawText, image);
       if (!isCurrent()) return;
       dispatch({ type: 'filled', result, via: 'image_region' });
+      captureAnalysisFilled(result);
     } catch {
       if (!isCurrent()) return;
       // 실패/타임아웃 → "다시 시도(시트 재열기)" 가능한 error. 수동 입력도 열려 있다.
       dispatch({ type: 'error', kind: 'image_parse_failed', rawText });
+      capture('analysis_completed', { status: 'parse_failed' });
     }
   }, []);
 
-  // 시트 취소 → 수동 입력 폴백(E-1 경로).
-  const cancelRegion = useCallback((rawText: string) => dispatch({ type: 'error', kind: 'ocr_empty', rawText }), []);
+  // 시트 취소 → 수동 입력 폴백(E-1 경로). 분석 종료(텍스트 없음·이미지 미시도) = ocr_empty.
+  const cancelRegion = useCallback((rawText: string) => {
+    dispatch({ type: 'error', kind: 'ocr_empty', rawText });
+    capture('analysis_completed', { status: 'ocr_empty' });
+  }, []);
 
   // "제품 영역으로 분석" 버튼(및 이미지 실패 후 재시도) → 시트 열기.
   // 진행 중이던 자동 분석(analyze/parse)이 뒤늦게 filled 를 던지지 않도록 run 토큰을 무효화한다.
