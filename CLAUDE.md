@@ -77,6 +77,7 @@ supabase/
     0001_init.sql       # 스키마 + GRANT + RLS + Storage 버킷/정책 (계약 기준선)
     0002_cleanup_anon_users.sql  # 빈 익명 계정(아이템 0·30일+) 주 1회 삭제 pg_cron 잡 (Phase 11)
     0003_orphan_images_fn.sql    # 고아 이미지 키 열거 함수 list_orphan_item_images (원본∪썸네일 union, service_role 전용)
+    0004_internal_users.sql      # 지표 제외용 개발자 uid 테이블 ops.internal_users (API 비노출·SQL Editor 전용, uid는 git 밖에서 insert)
   functions/
     parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. samples/ 회귀 케이스
     cleanup-orphan-images/  # Edge Function(Deno, service_role): 고아 이미지 주 1회 스윕 — x-cron-secret 보호·dryRun 지원·Storage API로만 삭제 (Phase 11)

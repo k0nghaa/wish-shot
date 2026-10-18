@@ -4,11 +4,11 @@
 -- 정본: docs/testing/tracking-plan.md §3. 스키마 기준: src/types/database.ts·supabase/migrations/.
 --
 -- 코호트 필터(전 쿼리 공통 내장): created_at >= 테스트 시작일 + 개발자 uid 제외.
--- 각 블록 맨 위 cohort CTE 의 두 값을 실행 전에 기입한다(블록마다 반복 — 독립 실행용).
---   test_start    : 테스트 시작일 (예: timestamptz '2026-10-15 00:00:00+09')
---   excluded_uids : 개발자 uid 배열 (예: array['<UID_1>','<UID_2>']::uuid[])
--- 드라이런: 현 개발 데이터로 쿼리 동작만 확인한다(수치는 버린다). 이때는
---   test_start 를 과거(예: '2026-01-01')로, excluded_uids 를 빈 배열로 두면 전 행이 잡힌다.
+-- 각 블록 맨 위 cohort CTE(블록마다 반복 — 독립 실행용):
+--   test_start    : 테스트 시작 시각(2026-10-04 19:55 KST = 외부 공지 시점)
+--   excluded_uids : 개발자 uid — 0004 의 ops.internal_users 에서 읽는다(uid 를 git 에 두지 않기 위해).
+--                   ops.internal_users 가 비어 있으면 아무도 제외되지 않으니 먼저 채운다.
+-- 드라이런: test_start 를 과거(예: '2026-01-01')로 바꾸면 전 기간 행이 잡힌다(수치는 버린다).
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -17,8 +17,9 @@
 -- -----------------------------------------------------------------------------
 with cohort as (
   select
-    timestamptz '2026-01-01 00:00:00+09' as test_start,   -- ← 테스트 시작일 기입
-    array[]::uuid[]                      as excluded_uids -- ← 개발자 uid 기입
+    timestamptz '2026-10-04 19:55:00+09' as test_start,   -- 테스트 시작(외부 공지 시점)
+    (select coalesce(array_agg(user_id), '{}') from ops.internal_users)
+                                         as excluded_uids -- 개발자 uid(0004 ops.internal_users)
 ),
 scope as (
   select i.*
@@ -45,8 +46,9 @@ from scope;
 -- -----------------------------------------------------------------------------
 with cohort as (
   select
-    timestamptz '2026-01-01 00:00:00+09' as test_start,   -- ← 테스트 시작일 기입
-    array[]::uuid[]                      as excluded_uids -- ← 개발자 uid 기입
+    timestamptz '2026-10-04 19:55:00+09' as test_start,   -- 테스트 시작(외부 공지 시점)
+    (select coalesce(array_agg(user_id), '{}') from ops.internal_users)
+                                         as excluded_uids -- 개발자 uid(0004 ops.internal_users)
 ),
 scope as (
   select l.*
@@ -77,8 +79,9 @@ order by cnt desc;
 -- -----------------------------------------------------------------------------
 with cohort as (
   select
-    timestamptz '2026-01-01 00:00:00+09' as test_start,   -- ← 테스트 시작일 기입
-    array[]::uuid[]                      as excluded_uids -- ← 개발자 uid 기입
+    timestamptz '2026-10-04 19:55:00+09' as test_start,   -- 테스트 시작(외부 공지 시점)
+    (select coalesce(array_agg(user_id), '{}') from ops.internal_users)
+                                         as excluded_uids -- 개발자 uid(0004 ops.internal_users)
 ),
 latest_log as (
   select distinct on (l.item_id) l.item_id, l.parsed
@@ -122,8 +125,9 @@ from pairs;
 -- -----------------------------------------------------------------------------
 with cohort as (
   select
-    timestamptz '2026-01-01 00:00:00+09' as test_start,   -- ← 테스트 시작일 기입
-    array[]::uuid[]                      as excluded_uids -- ← 개발자 uid 기입
+    timestamptz '2026-10-04 19:55:00+09' as test_start,   -- 테스트 시작(외부 공지 시점)
+    (select coalesce(array_agg(user_id), '{}') from ops.internal_users)
+                                         as excluded_uids -- 개발자 uid(0004 ops.internal_users)
 ),
 latest_log as (
   select distinct on (l.item_id) l.item_id, l.parsed

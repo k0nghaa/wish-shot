@@ -54,6 +54,8 @@ npx expo start --dev-client --tunnel  # 개발 빌드가 설치된 아이폰으�
 (`categories`/`items`/`analysis_logs`), GRANT, RLS 정책, Storage private 버킷(`item-images`)·정책.
 운영 정리 잡은 `0002_cleanup_anon_users.sql`(빈 익명 계정 주 1회 삭제 pg_cron)과
 `0003_orphan_images_fn.sql`(고아 이미지 키 열거 함수)에 있습니다(아래 "익명 계정·고아 파일 정리").
+`0004_internal_users.sql`은 지표 집계에서 뺄 개발자 uid 목록 테이블(`ops.internal_users`, API 비노출)입니다 —
+uid는 git에 두지 않고 SQL Editor에서 직접 insert하며, `supabase/tests/metrics.sql`이 이를 참조합니다.
 
 **마이그레이션 적용** (둘 중 하나):
 
