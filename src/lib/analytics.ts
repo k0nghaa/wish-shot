@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PostHog } from 'posthog-react-native';
+import { AppState } from 'react-native';
 
 /**
  * 테스트 계측(Phase 10) — PostHog 캡슐화 모듈. 화면·훅은 이 모듈만 import 한다
@@ -62,6 +63,17 @@ export function initAnalytics(): void {
       defaultOptIn: !__DEV__,
       // 개발 검증 시 이벤트를 즉시 전송해 PostHog Activity 에서 바로 확인.
       flushAt: __DEV__ ? 1 : 20,
+    });
+    // 백그라운드 진입 시 큐를 즉시 전송 — iOS 는 백그라운드 직후 앱을 일시정지해 SDK 의 주기 전송
+    // (기본 10초)이 돌지 못할 수 있다. "한 번 쓰고 닫는" 사용자의 마지막 이벤트 유실을 줄인다.
+    // setTimeout 0: SDK 가 같은 change 이벤트에 붙인 'Application Backgrounded' 캡처 뒤에 실행되게.
+    AppState.addEventListener('change', (state) => {
+      if (state !== 'background') return;
+      setTimeout(() => {
+        client?.flush().catch(() => {
+          /* 전송 실패는 삼킨다 — 큐는 영속돼 다음 실행 때 재전송 */
+        });
+      }, 0);
     });
   } catch (e) {
     client = null;
