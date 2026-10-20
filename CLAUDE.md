@@ -105,7 +105,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 - `npx supabase login` → `npx supabase gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts` — DB 스키마에서 타입 재생성 (마이그레이션 변경 시마다). 로그인은 최초 1회.
 - `npx supabase secrets set ANTHROPIC_API_KEY=...` — Edge Function 시크릿 등록(Claude 키). **앱·커밋·채팅엔 절대 넣지 않는다.**
 - `npx supabase functions deploy parse-screenshot-text` — Edge Function 배포(정제 프롬프트/로직 변경 시). **앱 재빌드와 무관**(서버 측). Docker 없이도 클라우드 번들로 배포됨(경고는 무시).
-- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3` — 정제 프롬프트 **배포 전 회귀 검증**(`prompt.ts`를 그대로 써서 API 직접 호출, 케이스당 3회). 키는 사람이 셸 환경 변수로만 설정 — 에이전트는 키를 다루지 않는다. 가격 원칙: 원화 금액만, 애매하면 null(틀린 값보다 빈칸).
+- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3` — 정제 프롬프트 **배포 전 회귀 검증**(`prompt.ts`를 그대로 써서 API 직접 호출, 케이스당 3회). 키는 사람이 셸 환경 변수로만 설정 — 에이전트는 키를 다루지 않는다. 가격 원칙: 원화 금액만, 애매하면 null(틀린 값보다 빈칸). 샘플링은 `temperature 0`(추출 일관성 — 함수·eval 공통, `prompt.ts`).
 - `npx supabase functions deploy cleanup-orphan-images` — 고아 이미지 스윕 함수 배포(`config.toml`의 `verify_jwt = false`가 함께 적용됨). 시크릿: `npx supabase secrets set CRON_SECRET=<임의 난수>`. dry-run 확인·주간 스케줄 등록은 사람이 대시보드에서(Phase 11 지시서 참고).
 
 ## 환경 변수

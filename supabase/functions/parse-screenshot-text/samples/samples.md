@@ -139,7 +139,7 @@ $s = Read-Host -AsSecureString "Anthropic API key"
 $env:ANTHROPIC_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
 deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3
 ```
-마지막 인자는 케이스당 반복 횟수(기본 1). LLM 출력은 호출마다 조금씩 달라 3회 권장. 하나라도 FAIL 이면 종료 코드 1.
+마지막 인자는 케이스당 반복 횟수(기본 1). 배포 함수와 같은 `temperature`(prompt.ts, 현재 0)로 호출한다 — 0 이어도 미세한 비결정성이 남아 3회 권장. 하나라도 FAIL 이면 종료 코드 1.
 
 ---
 

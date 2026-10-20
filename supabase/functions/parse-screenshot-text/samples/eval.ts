@@ -4,9 +4,9 @@
 // 실행(Deno, 키는 셸 환경 변수로만 — 커밋·채팅 금지):
 //   deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
 //     supabase/functions/parse-screenshot-text/samples/eval.ts [반복횟수=1]
-// 하나라도 FAIL 이면 종료 코드 1. LLM 출력은 호출마다 조금씩 달라 반복 3회 권장.
+// 하나라도 FAIL 이면 종료 코드 1. temperature 0 이어도 서버 측 미세 비결정성이 있어 반복 3회 권장.
 
-import { MODEL, OUTPUT_SCHEMA, buildSystemPrompt } from '../prompt.ts';
+import { MODEL, OUTPUT_SCHEMA, TEMPERATURE, buildSystemPrompt } from '../prompt.ts';
 
 type Expect = {
   price: number | null;
@@ -88,6 +88,7 @@ async function callModel(apiKey: string, c: Case): Promise<Parsed> {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 400,
+      temperature: TEMPERATURE,
       system: buildSystemPrompt(c.categories ?? [], false),
       output_config: { format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
       messages: [{ role: 'user', content: c.text }],

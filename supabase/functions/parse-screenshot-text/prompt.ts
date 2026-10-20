@@ -4,6 +4,11 @@
 // 정제 모델: 텍스트만 보내는 저비용 정제(지시서 §Edge Function 계약).
 export const MODEL = 'claude-haiku-4-5';
 
+// 샘플링 온도 0: 추출은 "같은 입력 → 같은 출력"이어야 한다. 기본값(1.0)에선 같은 스크린샷이어도
+// confidence 가 0.4~0.6 으로 흔들려 "확인이 필요해요"(<0.5) 안내가 떴다 안 떴다 했다(2026-10-20 eval).
+// 정확도가 아니라 일관성을 위한 값 — 틀린 추출은 프롬프트 규칙으로 막는다.
+export const TEMPERATURE = 0;
+
 // 구조화 출력 스키마. structured outputs 제약(additionalProperties:false + required, 숫자/문자 제약 미지원)에 맞춤.
 export const OUTPUT_SCHEMA = {
   type: 'object',

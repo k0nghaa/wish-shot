@@ -27,7 +27,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 // 모델·출력 스키마·시스템 프롬프트(samples/eval.ts 와 공유)
-import { MODEL, OUTPUT_SCHEMA, buildSystemPrompt } from './prompt.ts';
+import { MODEL, OUTPUT_SCHEMA, TEMPERATURE, buildSystemPrompt } from './prompt.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -146,6 +146,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 400,
+        temperature: TEMPERATURE,
         system: buildSystemPrompt(categories, !!image),
         output_config: { format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
         messages: [{ role: 'user', content: userContent }],
