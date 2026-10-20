@@ -10,7 +10,8 @@
 //                   통이미지·자동 전송 아님. 로그·저장하지 않고 Anthropic 요청에만 쓴다.
 //   출력:  { productName, price, brand, confidence, suggestedCategory }  (스키마 불변)
 //     - productName: string | null       못 뽑으면 null (앱에서 E-3 수동 입력). 브랜드명 미포함(brand 필드로 분리)
-//     - price:       number | null       원 단위 정수(KRW). 정가 우선(할인 전 가격, 2026-10 변경) — 하나만 보이면 그 가격, 없으면 null
+//     - price:       number | null       원 단위 정수(KRW). 정가 우선(할인 전 가격, 2026-10 변경) — 하나만 보이면 그 가격, 없으면 null.
+//                                        원화 금액만 인정(리뷰·관심 수 등 숫자·외화 배제), 애매하면 null(2026-10-19)
 //     - brand:       string | null       없으면 null. 통용되는 한국어 공식 표기 우선(나이키), 없으면 영문 공식 표기(Aesop)
 //     - confidence:  number              0~1. 낮으면 앱에서 "확인이 필요해요"
 //     - suggestedCategory: string | null 입력 categories 중 하나거나 null(FR-8 경량 추천)
@@ -25,13 +26,13 @@
 //   - LLM 오류/타임아웃은 명확한 실패 응답으로 → 앱이 E-2(원문+재시도+수동 폴백) 처리.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+// 모델·출력 스키마·시스템 프롬프트(samples/eval.ts 와 공유)
+import { MODEL, OUTPUT_SCHEMA, TEMPERATURE, buildSystemPrompt } from './prompt.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 
-// 정제 모델: 텍스트만 보내는 저비용 정제(지시서 §Edge Function 계약).
-const MODEL = 'claude-haiku-4-5';
 // LLM 호출 타임아웃(ms). 초과 시 앱이 E-2로 폴백할 수 있게 실패 응답을 준다.
 const LLM_TIMEOUT_MS = 20_000;
 // 이미지 분기(Phase 6): 이미지 입력은 처리 지연이 커 타임아웃을 상향한다.
@@ -40,66 +41,6 @@ const IMAGE_LLM_TIMEOUT_MS = 25_000;
 const ALLOWED_MEDIA_TYPES = ['image/jpeg', 'image/png'] as const;
 // base64 문자열 길이 상한(≈1.5MB 이미지). 크롭·리사이즈된 영역만 오므로 넉넉. 초과 시 400.
 const MAX_IMAGE_BASE64_LEN = 2_000_000;
-
-// 구조화 출력 스키마. structured outputs 제약(additionalProperties:false + required, 숫자/문자 제약 미지원)에 맞춤.
-const OUTPUT_SCHEMA = {
-  type: 'object',
-  properties: {
-    productName: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    price: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
-    brand: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    confidence: { type: 'number' },
-    suggestedCategory: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-  },
-  required: ['productName', 'price', 'brand', 'confidence', 'suggestedCategory'],
-  additionalProperties: false,
-} as const;
-
-const SYSTEM_PROMPT = [
-  'You extract product info from the raw OCR text of a shopping screenshot (Korean or English).',
-  'Return only these fields via the structured format:',
-  '- productName: the product name. If the name appears in both Korean and English, PREFER the Korean name.',
-  '  Give the core product name only — strip quantity/bundle/option/size noise (e.g. "1EA", "+클린솝", "세트", "2개", "470g", "UP TO 33%").',
-  '  Do NOT repeat the brand inside productName — the brand belongs in the brand field only',
-  '  (e.g. brand "나이키" + productName "에어맥스 97", NOT productName "나이키 에어맥스 97").',
-  '  If you cannot identify one, use null.',
-  '- brand: the brand or store name if identifiable, else null.',
-  '  Prefer the brand\'s official Korean spelling when one is in common use (e.g. "나이키", "이솝");',
-  '  otherwise use the official English spelling with its official casing (e.g. "Aesop", not "AESOP"/"aesop").',
-  '- price: the ORIGINAL (pre-discount) list price as an integer in Korean won (KRW), digits only (no "원", no commas, no symbols).',
-  '  If both an original and a discounted price are shown, choose the ORIGINAL one (usually the higher or struck-through price),',
-  '  NOT the discounted price. If only one price is shown, use it. Coupon amounts and shipping fees are never the price.',
-  '  If no price is present, use null.',
-  '- confidence: 0..1, your overall confidence in productName+price. Lower it when the text is ambiguous or noisy.',
-  'Ignore UI noise: clock/time, carrier/battery, buttons (구매하기, 후기, 팔로우, Follow, Add comment), banners, view/like counts, URLs.',
-].join('\n');
-
-// 이미지 분기(Phase 6): 사용자가 잘라낸 제품 영역이 함께 온다. 피사체·패키지·로고로 추정하되 가격은 추측 금지.
-const IMAGE_PROMPT = [
-  'An image is ALSO provided: a rectangular product region the user cropped (the OCR text may be empty or sparse — rely on the image).',
-  'Identify productName and brand from the image itself — the subject, packaging, label, or logo.',
-  'price: ONLY if a price is clearly legible in the image; otherwise null. Do NOT guess or infer a price.',
-  'Lower confidence when the product is ambiguous or you are unsure.',
-].join('\n');
-
-/**
- * 이미지 유무·categories 유무에 따라 시스템 프롬프트를 조립한다.
- * hasImage=false·categories=[] 이면 Phase 5 와 동일한 프롬프트(바이트 동일). FR-8: 목록 밖 값·새 이름 금지.
- */
-function buildSystemPrompt(categories: string[], hasImage: boolean): string {
-  const parts = [SYSTEM_PROMPT];
-  if (hasImage) parts.push(IMAGE_PROMPT);
-  if (categories.length === 0) {
-    parts.push('- suggestedCategory: always null (no categories were provided).');
-  } else {
-    parts.push(
-      '- suggestedCategory: pick the ONE category from the user\'s existing list below that best fits this product.',
-      '  You MUST copy one of these strings VERBATIM, or use null if none clearly fits. Never invent a new category name.',
-      `  Existing categories: ${JSON.stringify(categories)}`,
-    );
-  }
-  return parts.join('\n');
-}
 
 type ParsedResult = {
   productName: string | null;
@@ -205,6 +146,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 400,
+        temperature: TEMPERATURE,
         system: buildSystemPrompt(categories, !!image),
         output_config: { format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
         messages: [{ role: 'user', content: userContent }],
