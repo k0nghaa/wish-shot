@@ -84,6 +84,65 @@ brand 는 통용 한국어 표기 우선이라 **"이솝"**(영문 "Aesop" 도 �
 
 ---
 
+## 가격 오추출 방지 케이스 (2026-10-19 추가 — 가상 원문)
+
+실데이터 점검(`metrics.sql` §3)에서 가격 수정 3건 중 2건이 **가격이 아닌 숫자를 가격으로 집은 오추출**이었다.
+아래는 그 유형을 재현한 **가상 원문**이다(실제 사용자 OCR 원문은 쓰지 않는다). 원칙: 원화 금액만 가격, 애매하면 null.
+
+## 5) 상세 + 추천 상품 목록 (다른 상품 가격이 섞임 — 주 상품 가격만)
+
+입력:
+```
+10:12 / LTE 64 / 상품 상세 / 무드 린넨 셔츠 / 59,000원 / 리뷰 1,204 / 4.8 / 구매하기 /
+함께 보면 좋은 상품 / 코튼 와이드 팬츠 / 45,000원 / 데님 버킷햇 / 29,000원
+```
+기대(형태):
+```json
+{ "productName": "무드 린넨 셔츠", "price": 59000 }
+```
+핵심: 추천 상품 가격(45,000·29,000)이나 리뷰 수(1,204)가 아니라 **주 상품 59,000**.
+
+## 6) 숫자 노이즈만 있고 가격 없음 (SNS 게시물)
+
+입력:
+```
+8:03 / 5G / dailyfit.official / 이번 시즌 최애 러닝화 / 구매 12,000+ / 리뷰 3,512 /
+좋아요 2,348 / 245mm / 2024.09.12 / Follow
+```
+기대(형태):
+```json
+{ "price": null }
+```
+핵심: 구매·리뷰·좋아요 수, 사이즈, 날짜는 **가격이 아님** → price=null.
+
+## 7) 외화 가격만 표시 (해외 쇼핑몰)
+
+입력:
+```
+11:30 / 5G / store.example.com / Ceramic Pour-Over Dripper / $17.51 /
+Free shipping over $50 / Add to cart
+```
+기대(형태):
+```json
+{ "price": null }
+```
+핵심: 원화 금액이 없으므로 null. **환산하거나 소수점을 지워 1751로 만들지 않는다.**
+
+## 자동 검증 (`eval.ts`)
+
+케이스 1~7을 배포 없이 Anthropic API로 직접 호출해 가격(·제품명·추천)을 확인한다.
+프롬프트는 배포 함수와 같은 `prompt.ts`를 쓴다. API 키는 **각자 셸 환경 변수로만** 넣는다(커밋·채팅 금지).
+
+```powershell
+# PowerShell — 키를 가려서 입력받아 이 셸 세션에만 설정(명령 히스토리에 남지 않음, 5.1 호환)
+$s = Read-Host -AsSecureString "Anthropic API key"
+$env:ANTHROPIC_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
+deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3
+```
+마지막 인자는 케이스당 반복 횟수(기본 1). LLM 출력은 호출마다 조금씩 달라 3회 권장. 하나라도 FAIL 이면 종료 코드 1.
+
+---
+
 ## 예외 확인(앱의 E-1/E-3 유도)
 
 - 제품명 미인식: 제품 텍스트가 없는 원문 → `productName: null` (앱에서 "제품명을 입력해주세요").

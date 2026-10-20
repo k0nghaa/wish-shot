@@ -124,6 +124,11 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 - Docker가 없어도 클라우드 번들로 배포됩니다 (`WARNING: Docker is not running`은 무시).
 - 정제 프롬프트/로직·**입출력 계약**만 바꿀 땐 **재배포만** 하면 됩니다(앱 재빌드 불필요). 예: Phase 4에서 입력 `categories?`·출력 `suggestedCategory`를 하위호환으로 추가.
 - 로그인 사용자만 호출 가능(익명 거부). 회귀 케이스: `supabase/functions/parse-screenshot-text/samples/`.
+- 프롬프트·출력 스키마는 `prompt.ts` 한 곳에 있습니다. **배포 전 회귀 검증**은 `samples/eval.ts`(Deno)로 — 같은 프롬프트로 Anthropic API를 직접 호출해 케이스별 PASS/FAIL을 냅니다. 키는 셸 환경 변수로만(실행법은 `samples/samples.md` "자동 검증").
+
+```bash
+deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3
+```
 
 **OCR 엔진 참고**: 지시서의 Google ML Kit 대신 **Apple Vision**(로컬 모듈 `modules/expo-vision-ocr`)을
 씁니다 — iOS 전용이라 ML Kit iOS 이슈를 피하고 Expo SDK 57/New Architecture 호환 문제도 없습니다.

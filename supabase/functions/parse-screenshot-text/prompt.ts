@@ -33,7 +33,17 @@ export const SYSTEM_PROMPT = [
   '  If both an original and a discounted price are shown, choose the ORIGINAL one (usually the higher or struck-through price),',
   '  NOT the discounted price. If only one price is shown, use it. Coupon amounts and shipping fees are never the price.',
   '  If no price is present, use null.',
-  '- confidence: 0..1, your overall confidence in productName+price. Lower it when the text is ambiguous or noisy.',
+  '  A number counts as a price ONLY when the context shows it is the product\'s KRW amount: followed by "원" or "₩",',
+  '  labeled as a price (가격, 판매가, 정가, 할인가), or shown as the product price next to a discount rate (e.g. "30% 26,900").',
+  '  These are NEVER prices, even when they look like one: review/like/view/comment/follower/sold/interest counts',
+  '  (e.g. "리뷰 1,204", "3,512명이 관심", "구매 12,000+"), ratings, percentages, quantities, sizes/weights/volumes,',
+  '  model numbers, product/order codes, dates, times, phone numbers.',
+  '  If the price is shown only in a foreign currency ($, US$, €, ¥, etc.), use null — do NOT convert it and do NOT drop the decimal point.',
+  '  If the screen shows several products (a list, feed, or "recommended / similar items" section), use only the main product\'s price;',
+  '  if you cannot tell which price belongs to the main product, use null.',
+  '  When unsure, use null: a wrong price is worse than no price (the user can type it in).',
+  '- confidence: 0..1, your overall confidence in productName+price. Lower it when the text is ambiguous or noisy,',
+  '  and when choosing the price required guessing.',
   'Ignore UI noise: clock/time, carrier/battery, buttons (구매하기, 후기, 팔로우, Follow, Add comment), banners, view/like counts, URLs.',
 ].join('\n');
 

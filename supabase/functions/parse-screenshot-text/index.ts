@@ -10,7 +10,8 @@
 //                   통이미지·자동 전송 아님. 로그·저장하지 않고 Anthropic 요청에만 쓴다.
 //   출력:  { productName, price, brand, confidence, suggestedCategory }  (스키마 불변)
 //     - productName: string | null       못 뽑으면 null (앱에서 E-3 수동 입력). 브랜드명 미포함(brand 필드로 분리)
-//     - price:       number | null       원 단위 정수(KRW). 정가 우선(할인 전 가격, 2026-10 변경) — 하나만 보이면 그 가격, 없으면 null
+//     - price:       number | null       원 단위 정수(KRW). 정가 우선(할인 전 가격, 2026-10 변경) — 하나만 보이면 그 가격, 없으면 null.
+//                                        원화 금액만 인정(리뷰·관심 수 등 숫자·외화 배제), 애매하면 null(2026-10-19)
 //     - brand:       string | null       없으면 null. 통용되는 한국어 공식 표기 우선(나이키), 없으면 영문 공식 표기(Aesop)
 //     - confidence:  number              0~1. 낮으면 앱에서 "확인이 필요해요"
 //     - suggestedCategory: string | null 입력 categories 중 하나거나 null(FR-8 경량 추천)
