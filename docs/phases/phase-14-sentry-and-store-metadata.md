@@ -44,7 +44,7 @@
 1. **콘텐츠 미수집**: Sentry 이벤트에 사진·OCR 원문·상품명·브랜드·가격·URL·메모를 싣지 않는다.
    - 세션 리플레이 끔, 스크린샷 첨부 끔, 뷰 계층 첨부 끔(화면에 사용자 사진·텍스트가 있다).
    - `sendDefaultPii: false`. `setUser`로 uid를 붙이지 않는다. IP는 저장하지 않는다(SDK에서 `ip_address`를 비우는 방법 + Sentry 프로젝트 설정 둘 다 — 정확한 방법은 설치 버전 문서로 확인).
-   - 네트워크 브레드크럼의 URL에서 쿼리 문자열을 지운다(Storage signed URL 토큰). 그 밖의 브레드크럼·이벤트에도 사용자 콘텐츠가 들어가지 않게 `beforeBreadcrumb`/`beforeSend`에서 거른다.
+   - **Sentry로 보내는 기록(브레드크럼·이벤트)에서만** URL의 쿼리 문자열을 지운다. Storage signed URL의 `token`은 하루 동안 사진을 여는 열쇠라서 Sentry에 남기지 않는다. 앱이 실제로 쓰는 URL·signed URL 영속 캐시(`wishshot.signedurl.*`)·`expo-image` 디스크 캐시는 바꾸지 않는다(CLAUDE.md의 Storage·Egress 규칙 그대로). 그 밖의 브레드크럼·이벤트에도 사용자 콘텐츠가 들어가지 않게 `beforeBreadcrumb`/`beforeSend`에서 거른다.
    - `captureException`에 사용자 콘텐츠가 든 extra/context를 붙이지 않는다.
 2. **DSN이 없으면 no-op**: `EXPO_PUBLIC_SENTRY_DSN`이 비어 있으면 초기화하지 않는다. 키 없이 빌드해도 동작이 같아야 한다(PostHog와 같은 패턴).
 3. **`__DEV__`에서는 기본 비활성**: 개발 중 이벤트로 프로젝트를 오염시키지 않는다. 검증용으로만 켜는 수단 1개를 둔다(예: `EXPO_PUBLIC_SENTRY_DEV=1`).
