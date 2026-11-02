@@ -2,7 +2,7 @@
 
 > **이 문서 사용법**: Claude Code에 이 파일 전체를 컨텍스트로 넘기고 "**Step N을 진행해달라**"고 한 Step씩 요청한다. **사람** Step(가입·키 등록·빌드·실기기 확인·App Store Connect 입력·제출)은 에이전트가 대신하지 않는다. 에이전트는 Step마다 변경 요약을 보고하고 **승인을 받은 뒤 커밋**한다. PR은 모든 에이전트 Step이 끝난 뒤 승인받고 올린다. 커밋 메시지에 Phase·Step 번호를 넣지 않는다(`feat:`/`docs:`/`chore:` + 한국어 작업 내용).
 >
-> **브랜치**: 최신 `dev`에서 분기한 `feat/phase-14-sentry-aso`. 세션 시작 시 `git status --short --branch`로 확인한다. 빌드·제출은 PR 머지 뒤 `release/v<버전>`(미결 1)에서 한다(Phase 8 릴리스 플로우).
+> **브랜치**: 최신 `dev`에서 분기한 `feat/phase-14-sentry-aso`. 세션 시작 시 `git status --short --branch`로 확인한다. 빌드·제출은 PR 머지 뒤 `release/v1.0.2`에서 한다(Phase 8 릴리스 플로우).
 >
 > **재빌드 있음(중요)**: 네이티브 모듈 `@sentry/react-native`·`expo-application`·`expo-localization`을 추가하므로 EAS 재빌드와 App Store 심사가 필요하다. `runtimeVersion(fingerprint)`이 바뀌어 이 빌드 이후의 OTA는 1.0.1 사용자에게 가지 않는다(1.0.1 사용자에게 보낼 JS 수정이 생기면 1.0.1 코드 기준으로 따로 publish해야 한다 — 이후 Phase에서 판단).
 >
@@ -29,6 +29,7 @@
 - **Sentry 범위**: 오류·크래시만 수집한다. 성능 추적(tracing)·세션 리플레이·스크린샷은 쓰지 않는다(아래 불변식 1).
 - **Sentry 데이터 저장 위치**: US. 방침의 이전 국가는 미국이다(PostHog와 같다).
 - **PostHog 기기 정보 보강을 이 빌드에 넣는다**: 선택 peer 의존성 `expo-application`·`expo-localization`을 추가한다. `expo-device`는 이미 설치돼 있다(Step 4).
+- **마케팅 버전 1.0.2**: 사용자에게 보이는 새 기능이 없어 패치로 올린다. 다음 로그인 빌드는 1.1.0이다.
 
 ## 하지 않는 것
 
@@ -167,7 +168,7 @@
 - `CLAUDE.md`: 기술 스택에 Sentry(수집 범위·불변식 요약), 계측 항목의 "선택 peer 의존성 설치 금지" 서술을 "이 빌드부터 설치"로 바꾼다(`expo-device`는 처음부터 설치돼 있었음도 바로잡는다), 디렉터리에 `app.config.js`·`metro.config.js`·`src/lib/monitoring.ts`, 명령어에 개발용 변형 실행 명령, OTA 뒤 소스맵 업로드 명령(아래), 환경 변수에 `EXPO_PUBLIC_SENTRY_DSN`·`SENTRY_AUTH_TOKEN`(EAS secret). 영역 전송 서술도 확정된 결정에 맞춘다.
 - OTA 소스맵 업로드(7.11 기준 — 설치 버전 문서로 확인): `npx expo export --platform ios --dump-sourcemap` → `npx eas-cli update ...` → `npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist`(`SENTRY_AUTH_TOKEN`은 셸 환경 변수로 사람이 설정). 스코프 패키지 `@sentry/expo-upload-sourcemaps`는 8.9.0 이상 전용이라 쓰지 않는다.
 - `README.md`: 기술 스택 줄.
-- `docs/testing/tracking-plan.md`: 보류 목록의 Sentry 행과 `app_error` 한계 설명을 "Sentry 도입(이 빌드의 버전)"으로 갱신한다.
+- `docs/testing/tracking-plan.md`: 보류 목록의 Sentry 행과 `app_error` 한계 설명을 "Sentry 도입(1.0.2)"으로 갱신한다.
 
 **DoD**: 보고 → 승인 → `docs:` 커밋. 이어서 PR(템플릿 구조) 승인 요청.
 
@@ -187,7 +188,7 @@
 
 ## Step 8 — 릴리스·제출 (사람, 에이전트 보조)
 
-1. PR 머지 → `dev`에서 `release/v<버전>` 분기 → `app.json` `version`을 올린다(미결 1). 빌드 번호는 `autoIncrement`.
+1. PR 머지 → `dev`에서 `release/v1.0.2` 분기 → `app.json` `version`을 `1.0.2`로 올린다. 빌드 번호는 `autoIncrement`.
 2. `npx eas-cli build --platform ios --profile production` → 빌드 로그에서 소스맵 업로드 성공 확인 → `npx eas-cli submit --platform ios --profile production --latest`.
 3. TestFlight 내부 테스터로 회귀 확인(담기·공유 시트·OCR·편집·링크·온보딩). 스토어 앱 자리에 설치되므로 기존 데이터가 그대로인지 함께 본다.
 4. App Store Connect
@@ -200,15 +201,14 @@
 
 1. ASC 앱 개인정보 반영(언제든 가능·재심사 없음)
 2. 심사 제출(수동 출시)
-3. 승인 뒤 **출시 버튼을 누르기 전에** `release/v<버전>` → `main` 머지로 GitHub Pages 방침을 갱신하고 노션 방침 페이지를 동기화한다(사람). 방침 URL에서 개정 내용이 보이는지 확인한다.
-4. 출시 → `main`에 태그 `v<버전>` → `dev` 역머지(Phase 8 Step 0-3).
+3. 승인 뒤 **출시 버튼을 누르기 전에** `release/v1.0.2` → `main` 머지로 GitHub Pages 방침을 갱신하고 노션 방침 페이지를 동기화한다(사람). 방침 URL에서 개정 내용이 보이는지 확인한다.
+4. 출시 → `main`에 태그 `v1.0.2` → `dev` 역머지(Phase 8 Step 0-3).
 
 ---
 
 ## 미결 사항 (사람 결정)
 
-1. **마케팅 버전**: 이 빌드는 사용자에게 보이는 새 기능이 없다(오류 수집·스토어 언어·기기 정보). 후보는 `1.0.2`(패치)와 `1.1.0`(마이너)이다. 사람이 정하면 Step 8과 브랜치 이름(`release/v<버전>`)에 반영한다.
-2. **Sentry 이벤트 목적 분류**(ASC 앱 개인정보): 앱 기능 / 분석.
+1. **Sentry 이벤트 목적 분류**(ASC 앱 개인정보): 앱 기능 / 분석.
 
 ## 완료 기준 (Phase DoD)
 
