@@ -170,7 +170,7 @@
 4. 방침 시행일(개정일)을 갱신한다.
 5. 카피는 CLAUDE.md 규칙 4(간결한 단답, "~습니다")를 따른다.
 
-**DoD**: 인앱 고지와 `privacy.html`이 같은 내용을 말한다. PR 설명에 "방침 문구 사람 검토 필요"를 적는다. `tsc`·`lint` 통과.
+**DoD**: 인앱 고지와 `privacy.html`이 같은 내용을 말한다. 사람이 방침 문구를 검토한다. PR 설명에 검토 여부(검토 전이면 "사람 검토 필요", 검토했으면 "사람 검토 완료"와 날짜)를 적는다. `tsc`·`lint` 통과.
 
 ## Step 6 — 문서 정합 (에이전트)
 
@@ -297,6 +297,10 @@
   - iOS 언어: `expo-localization` 플러그인 `supportedLocales: { ios: ['ko'] }` → Info.plist에 `CFBundleLocalizations: ["ko"]`만 추가된다(플러그인 코드·introspect 확인). `CFBundleDevelopmentRegion`은 플러그인이 건드리지 않아 `$(DEVELOPMENT_LANGUAGE)`(Xcode 기본 en)로 남는다 → 사람이 `ko`로 함께 지정하기로 함(`app.json` `ios.infoPlist.CFBundleDevelopmentRegion: "ko"`). 앱 글자는 원래 한국어 전용이다. 기기 언어와 맞는 지원 언어가 없을 때 쓰는 대체 언어가 ko가 되어, 영어 기기에서도 iOS 기본 UI가 한국어로 맞춰진다. 바이너리에서 영어 신호도 없어진다. 글로벌 확장 때 다음 네이티브 빌드에서 바꿀 수 있다.
   - introspect: 운영·개발 모두 Step 3 대비 달라진 것은 `CFBundleLocalizations`, 플러그인 목록, 자동 연결 모듈 목록(두 모듈 추가)뿐이다. `tsc`·`lint` 통과. iOS 번들 export 성공(5,705,020 → 5,715,380바이트, +10KB).
 - **Step 5(방침)**: 바뀐 문장 목록 / 시행일 /
+  - `privacy.html`: 개정일 2026-11-05(초안 날짜 — main 머지로 게시할 때(배포 순서 3) 실제 게시일로 맞춘다). §1에 '언어·시간대 설정'과 '오류·크래시 정보' 항목 추가. §2·§3의 영역 전송 문구를 "텍스트가 부족하거나 사용자가 ‘제품 영역으로 분석’을 누른 경우, 사용자가 직접 선택한 제품 영역 이미지만 ‘분석’을 누를 때 전송"으로 정정. §4(PostHog)의 수집 항목에 '언어·시간대 설정', 수집하지 않는 항목에 'IP로 추정한 위치'를 더함. IP는 "전송 과정에서 전달되지만 저장하지 않음"으로 별도 줄에 적음(아예 보내지 않는 콘텐츠와 구분 — 사람 검토 반영, §5도 같음). §5 '오류·크래시 수집 및 국외 이전'(Sentry)을 PostHog 절과 같은 형식으로 새로 넣음. 수집 항목: 오류 종류·발생 위치·오류 직전 앱 동작 기록(화면 터치·앱이 보낸 서버 요청의 주소(세부 값 제외) — 앱이 기기에서 남기는 기록이며 서버 측 기록과 무관)·앱 실행·종료 상태, 기기 정보(모델·OS·앱 버전·언어 설정·메모리·배터리 등 기기 상태 — sentry-cocoa 8.58 소스 확인), 설치별 무작위 식별자. 수집하지 않는 항목에 익명 계정 식별자·위치. 이전받는 자 Functional Software, Inc. d/b/a Sentry (compliance@sentry.io — Sentry 방침 14절, 사람 확인 완료). 보유 기간 '수집일로부터 최대 90일'(사람 결정 — 체험·상위 플랜까지 포괄). 이후 절 번호를 하나씩 미룸(인증 6 ~ 문의 10).
+  - `privacy.ts`: 같은 내용을 네 문단으로 맞춤(영역 전송 정정, PostHog 언어·시간대, Sentry 한 문장(최대 90일 포함), 두 서비스 공통 '콘텐츠 미수집·IP와 위치 미저장').
+  - `register.tsx` 최초 영역 고지: "텍스트를 찾지 못했습니다"로 시작하던 문장을 버튼으로 열었을 때도 맞는 문장으로 바꿈("…선택하고 ‘분석’을 누르면, 그 영역만 AI 분석에 전송됩니다. 이 영역은 분석에만 쓰이며 저장하지 않습니다. 사진은 원본 그대로 저장됩니다.").
+  - 주석 정정: `register.tsx`(고지 effect·시트), `RegionSelectSheet.tsx`, `parse.ts`, `VisionOcrEngine.ts`. `README.md`·`CLAUDE.md`의 같은 문구는 Step 6에서 고친다. `supabase/functions/parse-screenshot-text/index.ts` 주석은 레인 경계에 따라 Phase 15에서 고친다.
 - **Step 7(실기기)**: 체크 결과 /
 - **Step 8(제출)**: 빌드 번호 / 제출·승인·출시일 /
 - **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다). PostHog 서버의 GeoIP 변환도 바로 껐다. iOS 개발 기본 언어(`CFBundleDevelopmentRegion`)를 `ko`로 지정하기로 했다.
