@@ -64,8 +64,14 @@ const LOW_CONFIDENCE_THRESHOLD = 0.5;
 const THRESHOLDS = [0.3, 0.4, 0.5, 0.6, 0.7];
 /** 측정용 호출 타임아웃. 운영(20초)보다 넉넉히 — 정확도를 재는 것이지 지연을 재는 게 아니다. */
 const CALL_TIMEOUT_MS = 60_000;
-const TYPES = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
+/** 화면 유형(LABELING.md 2절). G = 중고거래 상세(2026-11-05 추가 — 정답은 판매자 등록가, 정가 우선 미적용). */
+const TYPES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'] as const;
 type LabelType = (typeof TYPES)[number];
+/**
+ * 라벨 선택 열 price_foreign 형식: ISO 통화 코드 + 공백 + 화면의 숫자(콤마 없이, 소수점은 화면대로). 예: `JPY 3980`, `USD 17.51`.
+ * 채점에는 쓰지 않는다 — 다음 Phase 에서 외화 처리를 바꿀 때 같은 정답셋으로 다시 재기 위한 기록(2026-11-05 결정).
+ */
+const FOREIGN_RE = /^[A-Z]{3} \d+(\.\d+)?$/;
 /**
  * 품목(라벨 item_category, 2026-11-04 추가). 판정엔 쓰지 않고 품목별 집계에만 쓴다.
  * 입력은 norm() 으로 비교해 가운뎃점·슬래시·공백 차이를 같은 값으로 받는다('가구/인테리어' → '가구·인테리어').
@@ -434,7 +440,7 @@ export async function loadInputs(dataDir: string | URL, crlfToLf = false): Promi
       continue;
     }
     const type = (r.type ?? '').trim().toUpperCase();
-    if (!(TYPES as readonly string[]).includes(type)) errors.push(`${where}: type 은 A~F 여야 합니다`);
+    if (!(TYPES as readonly string[]).includes(type)) errors.push(`${where}: type 은 A~G 여야 합니다`);
     const catRaw = (r.item_category ?? '').trim();
     const category = toCategory(catRaw);
     if (catRaw === '') errors.push(`${where}: item_category 가 비어 있습니다`);
@@ -454,6 +460,11 @@ export async function loadInputs(dataDir: string | URL, crlfToLf = false): Promi
     };
     const priceList = optInt('price_list');
     const priceSale = optInt('price_sale');
+    // 외화 금액 기록(선택 열, 채점 미사용). 열이 없거나 빈칸이면 기록 없음.
+    const priceForeign = (r.price_foreign ?? '').trim();
+    if (priceForeign !== '' && !FOREIGN_RE.test(priceForeign)) {
+      errors.push(`${where}: price_foreign 은 '통화코드 숫자'(예: JPY 3980, USD 17.51 — 콤마 없이) 또는 빈칸`);
+    }
     const ho = (r.holdout ?? '').trim();
     let holdout: boolean | null = null;
     if (ho === '1') holdout = true;
@@ -461,14 +472,22 @@ export async function loadInputs(dataDir: string | URL, crlfToLf = false): Promi
     else if (ho !== '') errors.push(`${where}: holdout 은 1·0·빈칸`);
 
     // 라벨 규칙 점검(경고 — 사람이 확인). 원문·값은 찍지 않고 id 와 사유만.
-    if (priceList !== null && priceSale !== null) {
+    if (type === 'G') {
+      // 중고거래는 정가 우선을 적용하지 않는다(정답 = 판매자 등록가). 정가·할인가 보조 칸은 비운다.
+      if (priceList !== null || priceSale !== null) {
+        warnings.push(`${where}: G(중고거래)는 price_list·price_sale 을 비웁니다 — 본문의 정가·구매가는 note 에`);
+      }
+    } else if (priceList !== null && priceSale !== null) {
       if (priceSale > priceList) warnings.push(`${where}: price_sale 이 price_list 보다 큽니다`);
       if (priceGold !== priceList) warnings.push(`${where}: 정가·할인가가 모두 있는데 price_gold ≠ price_list(정가 우선 규칙)`);
     } else if (priceGold !== null && (priceList !== null || priceSale !== null) && priceGold !== priceList && priceGold !== priceSale) {
       warnings.push(`${where}: price_gold 가 price_list·price_sale 어느 쪽과도 다릅니다`);
     }
     if (type === 'E' && priceGold !== null) warnings.push(`${where}: E(외화만)인데 price_gold 가 숫자입니다`);
-    if (type === 'C' && priceGold !== null) warnings.push(`${where}: C(SNS)인데 price_gold 가 숫자입니다 — 본문에 원화 가격이 있었는지 확인`);
+    if (type === 'E' && priceForeign === '') warnings.push(`${where}: E(외화만)인데 price_foreign 이 비어 있습니다`);
+    if (type === 'C' && priceGold !== null) {
+      warnings.push(`${where}: C(가격 없는 SNS)인데 price_gold 가 숫자입니다 — 가격이 적힌 SNS 게시물은 B`);
+    }
 
     labels.set(id, {
       id,

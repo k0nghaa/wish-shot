@@ -1,4 +1,5 @@
-id,type,item_category,price_gold,price_list,price_sale,name_keywords,brand_aliases,holdout,note
-fx-0001,A,패션,59000,59000,47200,셔츠,가상브랜드|Gasang,0,가상 fixture — 정가·할인가 병기
-fx-0002,C,뷰티,null,,,,,1,가상 fixture — SNS 좋아요·댓글 수만
-fx-0003,E,생활용품,null,,,Mug|머그,,0,가상 fixture — 외화만
+id,type,item_category,price_gold,price_list,price_sale,price_foreign,name_keywords,brand_aliases,holdout,note
+fx-0001,A,패션,59000,59000,47200,,셔츠,가상브랜드|Gasang,0,가상 fixture — 정가·할인가 병기
+fx-0002,C,뷰티,null,,,,,,1,가상 fixture — SNS 좋아요·댓글 수만
+fx-0003,E,생활용품,null,,,USD 24.00,Mug|머그,,0,가상 fixture — 외화만
+fx-0004,G,가구·인테리어,52000,,,,사이드 테이블,,0,가상 fixture — 중고: 사진 속 옛 가격·본문 정가 섞임
