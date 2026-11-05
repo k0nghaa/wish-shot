@@ -486,7 +486,7 @@ export async function loadInputs(dataDir: string | URL, crlfToLf = false): Promi
     if (type === 'E' && priceGold !== null) warnings.push(`${where}: E(외화만)인데 price_gold 가 숫자입니다`);
     if (type === 'E' && priceForeign === '') warnings.push(`${where}: E(외화만)인데 price_foreign 이 비어 있습니다`);
     if (type === 'C' && priceGold !== null) {
-      warnings.push(`${where}: C(가격 없는 SNS)인데 price_gold 가 숫자입니다 — 가격이 적힌 SNS 게시물은 B`);
+      warnings.push(`${where}: C(가격 없는 SNS)인데 price_gold 가 숫자입니다 — 가격이 하나 적힌 SNS 게시물은 B, 정가·할인가가 함께면 A`);
     }
 
     labels.set(id, {
