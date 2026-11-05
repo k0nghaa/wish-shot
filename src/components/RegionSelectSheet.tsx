@@ -23,7 +23,7 @@ function clampW(v: number, min: number, max: number): number {
 type NatSize = { w: number; h: number };
 
 /**
- * 제품 영역 지정 시트(Phase 6). OCR 텍스트가 부족할 때 열린다.
+ * 제품 영역 지정 시트(Phase 6). OCR 텍스트가 부족하면 자동으로, 또는 "제품 영역으로 분석" 버튼으로 언제든 열린다.
  * 원본 이미지를 비율대로 보여주고, 중앙 사각 박스 + 4모서리 핸들로 영역을 고른다.
  * "분석" 시 선택 영역만 크롭·리사이즈·JPEG 로 만들어 onSubmit 으로 넘긴다(통이미지 전송 아님).
  *
