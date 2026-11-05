@@ -101,7 +101,10 @@
    - **scheme도 바꾸는 이유**: `expo-share-intent`(8.0.1)의 공유 확장은 `config.scheme`으로 본 앱을 연다. scheme이 같으면 개발용 앱의 공유 확장이 스토어 앱을 열 수 있다.
    - 플러그인은 App Group(`group.<번들ID>`)과 확장 번들 ID(`<번들ID>.share-extension`)를 번들 ID에서 자동으로 만든다(`node_modules/expo-share-intent/plugin/build/ios/constants.js`). 그래서 직접 적어 둔 `appExtensions` 블록만 변형별로 맞추면 된다. 이 블록은 정확히 1개여야 한다(2개면 플러그인이 빌드를 멈춘다).
 2. `eas.json`의 `development` 프로필에 `"env": { "APP_VARIANT": "development" }`를 추가한다. `production`·`preview`는 그대로 둔다.
-3. 로컬 개발 서버 명령을 정한다(PowerShell): `$env:APP_VARIANT='development'; npx expo start --dev-client --tunnel`.
+3. 로컬 개발 서버 명령을 정한다(PowerShell): `$env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wishshot-dev`.
+   - `APP_VARIANT`가 없으면 개발 서버가 운영 scheme(`wishshot`)을 앱에 넘긴다. 그러면 `expo-share-intent`가 공유 링크(`<scheme>://dataUrl=`)와 저장 키(`<scheme>ShareKey`)를 운영 scheme으로 찾아서, 개발용 앱에서 공유 시트로 받은 사진을 인식하지 못한다.
+   - `--scheme`이 필요한 이유: 개발 서버 QR 링크의 scheme은 `scheme` 값이 아니라 slug로 만든 `exp+wish-shot`이다(Expo CLI는 네이티브 폴더가 없으면 slug로 정한다). 이 scheme은 expo-dev-client 플러그인이 운영 빌드에도 넣으므로 스토어 앱과 개발용 앱이 같이 갖는다. slug는 EAS 프로젝트와 묶여 바꿀 수 없다. `--scheme`을 주면 Expo CLI가 그 값을 먼저 쓴다.
+   - `$env:` 값은 그 PowerShell 창에서만 유지된다.
 
 **DoD**
 - `npx expo config --type introspect`를 변형 없이 한 번, `APP_VARIANT=development`로 한 번 실행한다. 위 표의 값이 양쪽 다 맞는지 확인한다(Info.plist의 URL scheme·App Group·확장 번들 ID 포함).
@@ -184,6 +187,7 @@
 2. 스토어 앱을 지우지 않고 개발용 앱(`WishShot Dev`)을 설치한다. 두 앱이 나란히 있는지 확인한다.
 3. 확인 항목
    - 사진 앱 공유 시트에 두 앱이 따로 보이고, 각각 자기 앱을 연다.
+   - 개발 서버(Step 2의 명령)의 QR을 카메라로 찍으면 스토어 앱이 아니라 개발용 앱이 열린다. 안 열리면 개발용 앱을 직접 열어 개발 런처에서 서버를 고르거나 URL을 입력한다.
    - 개발용 앱에서 담기·OCR·저장이 동작한다(새 익명 계정).
    - `EXPO_PUBLIC_SENTRY_DEV=1`로 띄워 "테스트 에러 발생"·"네이티브 크래시 테스트"가 Sentry에 `development` 환경으로 들어온다. 이벤트에 사용자 콘텐츠·IP·위치(`geo`)가 없다.
    - 설정의 "계측 토글(개발용)"을 켜고 이벤트를 하나 보내, PostHog Activity에서 Step 4 표의 새 속성이 보이는지 확인한다. `$geoip_*` 속성은 없어야 한다.
@@ -256,11 +260,15 @@
   - 공식 규칙 확인(2026-11-03): 이름 2~30자(심사 제출 전까지, 그 뒤엔 새 버전에서 변경). 부제 30자(새 버전 제출 때 변경). 키워드 100바이트이며 **키워드 하나는 2자를 넘어야 함**. 앱 이름·회사명·다른 앱/회사 이름 금지(지침 2.3.7). 이름·부제·카테고리 단어 반복은 낭비. 키워드 변경 시점은 문서에 명시가 없으나 버전 단위 항목이라 1.0.2와 함께 바꾼다. 홍보 문구만 재제출 없이 언제든 수정할 수 있고 검색 순위와 무관하다. 개발자 사이트 가이드는 "100 characters", ASC 도움말은 "100 bytes"로 적어서 더 엄격한 바이트 기준으로 계산했다. ASC 입력 칸의 남은 글자 수 표시로 다시 확인한다.
   - 변경 전 순위(iTunes 검색 API·KR, 2026-11-02, 출시 뒤 비교용): 위시리스트 56위, 스크린샷 33위, 스크린샷 정리 74위, 쇼핑 위시리스트 52위, 상품 저장 8위, 관심상품 9위. 찜목록·사고싶은·갖고싶은·캡처는 200위 밖. 스토어 언어 표기는 `EN`(Step 4 대상).
 - **Step 2(변형)**: introspect 비교 결과 /
+  - 변형 없음: 이 Step 전 출력과 비교해 달라진 것은 `_internal.dynamicConfigPath`(설정 파일 경로 메타데이터)뿐이다. 앱 이름·번들 ID·scheme·URL scheme·App Group·확장 번들 ID 모두 같다(불변식 4).
+  - `APP_VARIANT=development`: 이름 `WishShot Dev`(`CFBundleDisplayName` 포함), 번들 ID `com.k0nghaa.wishshot.dev`, scheme `wishshot-dev`, URL scheme `wishshot-dev`·`com.k0nghaa.wishshot.dev`, App Group `group.com.k0nghaa.wishshot.dev`(본 앱 entitlements·`AppGroupIdentifier`·확장 블록), 확장 번들 ID `com.k0nghaa.wishshot.dev.share-extension`. Xcode 본 타깃 이름은 `WishShotDev`가 된다(이름에서 파생). `exp+wish-shot`은 두 변형 모두 그대로다(Step 2-3의 `--scheme`으로 우회).
+  - `npx eas-cli config`: development 프로필은 `development` EAS 환경과 `env`의 `APP_VARIANT`를 읽어 위 개발 값으로, production 프로필은 운영 값으로 풀린다.
+  - `npx tsc --noEmit`·`npx expo lint` 통과.
 - **Step 3(Sentry)**: 설치 버전 / 초기화·핸들러 순서 확인 / privacy manifest 범위 /
 - **Step 4(언어)**: 택한 방식 / 출시 뒤 스토어 표기 /
 - **Step 5(방침)**: 바뀐 문장 목록 / 시행일 /
 - **Step 7(실기기)**: 체크 결과 /
 - **Step 8(제출)**: 빌드 번호 / 제출·승인·출시일 /
 - **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다).
-- **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈.
-- **에이전트가 구현한 것**:
+- **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈. 개발 서버 명령에 `--scheme wishshot-dev` 추가(`exp+wish-shot` 충돌 우회).
+- **에이전트가 구현한 것**: `app.config.js`(`APP_VARIANT=development`일 때만 이름·번들 ID·scheme·공유 확장 블록을 덮어씀. 확장 블록이 1개가 아니면 설정 단계에서 멈춤), `eas.json` development 프로필의 `env.APP_VARIANT`.
