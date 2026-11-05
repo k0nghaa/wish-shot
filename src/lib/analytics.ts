@@ -63,6 +63,9 @@ export function initAnalytics(): void {
       defaultOptIn: !__DEV__,
       // 개발 검증 시 이벤트를 즉시 전송해 PostHog Activity 에서 바로 확인.
       flushAt: __DEV__ ? 1 : 20,
+      // IP 로 추정한 위치(국가·도시)를 남기지 않는다. 기본값 false 면 서버가 이벤트에 $geoip_* 를 붙인다
+      // (이벤트마다 $geoip_disable 을 보냄). PostHog 프로젝트의 GeoIP 변환도 꺼 두었다 — 두 겹.
+      disableGeoip: true,
     });
     // 백그라운드 진입 시 큐를 즉시 전송 — iOS 는 백그라운드 직후 앱을 일시정지해 SDK 의 주기 전송
     // (기본 10초)이 돌지 못할 수 있다. "한 번 쓰고 닫는" 사용자의 마지막 이벤트 유실을 줄인다.
@@ -107,9 +110,9 @@ export function identifyUser(uid: string): void {
 let errorHandlerInstalled = false;
 
 /**
- * 전역 JS 에러 수집(갈래 F-2) — app_error{name, is_fatal}만. TestFlight 베타 크래시 리포트가 없는
- * 실제 앱(App Store) 배포 테스트의 임시 가시성이며 크래시 모니터링의 대체가 아니다 —
- * 네이티브 크래시는 못 잡는다(Sentry 는 v1.1 네이티브 배치, tracking-plan 보류 목록).
+ * 전역 JS 에러 수집(갈래 F-2) — app_error{name, is_fatal}만. 사용량 지표용 집계이며 크래시 모니터링이 아니다 —
+ * 오류 상세·네이티브 크래시는 Sentry(src/lib/monitoring.ts)가 맡는다. 렌더 오류는 RN 이 전역 핸들러를 거치지 않으므로
+ * monitoring.ts 의 루트 경계가 켜져 있을 때(Sentry DSN 설정 시)만 여기로 들어온다.
  * 기존 핸들러를 반드시 체이닝해 개발 redbox·기본 크래시 동작을 보존한다.
  */
 export function installJsErrorCapture(): void {

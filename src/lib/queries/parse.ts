@@ -15,7 +15,7 @@ export interface ParseResult {
   suggestedCategory: string | null;
 }
 
-/** 이미지 폴백(Phase 6): 사용자가 선택한 제품 영역 크롭만. 텍스트 부족 시에만 전송(NFR-3 개정). */
+/** 이미지 폴백(Phase 6): 사용자가 선택한 제품 영역 크롭만. 텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누른 경우, '분석' 때만 전송(NFR-3 개정). */
 export interface ParseImage {
   base64: string;
   mediaType: 'image/jpeg' | 'image/png';
@@ -27,8 +27,8 @@ export interface ParseImage {
  * 카테고리 이름 목록도 함께 보낸다(사용자가 만든 라벨 — OCR 텍스트와 같은 수준의 민감도).
  * 함수 호출엔 로그인 세션 토큰이 자동으로 실린다.
  *
- * image 를 주면(텍스트를 못 찾아 사용자가 "제품 영역"을 직접 선택한 경우) 그 크롭만 함께 보낸다.
- * 통이미지·자동 전송 아님 — 호출부(register)가 명시 동의 후에만 넘긴다.
+ * image 를 주면(사용자가 "제품 영역"을 직접 선택하고 '분석'을 누른 경우 — 텍스트 부족으로 시트가 자동으로 열렸든
+ * "제품 영역으로 분석" 버튼으로 열었든) 그 크롭만 함께 보낸다. 통이미지·자동 전송 아님.
  *
  * 실패(네트워크/타임아웃/LLM 오류/거부)는 throw → 상위(useAnalysis)가 E-2 로 폴백한다.
  */
