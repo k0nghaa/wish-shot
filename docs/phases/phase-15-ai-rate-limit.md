@@ -37,12 +37,13 @@
 
 1. **검사 위치**: 입력 검증을 통과한 뒤, Anthropic을 부르기 전에 센다. 검증 실패(400)는 세지 않는다. LLM 실패·타임아웃은 센다(비용이 났을 수 있다).
 2. **원자성**: 동시에 요청이 와도 한도를 넘지 않게, 증가와 판정을 DB 한 문장(예: `insert ... on conflict do update ... returning`)으로 한다.
-3. **본인 것만 센다**: 카운터 함수는 `auth.uid()` 기준으로만 센다. `user_id`를 인자로 받지 않는다(남의 한도를 소진시키지 못하게).
+3. **본인 것만 센다**: 카운터 함수는 `auth.uid()` 기준으로만 센다. `user_id`를 인자로 받지 않는다(남의 한도를 소진시키지 못하게). 가중치를 인자로 받으면 함수 안에서 허용 범위(1~3)를 검사한다(음수 등으로 카운터를 줄이지 못하게).
 4. **비노출**: 카운터 테이블은 API로 노출되지 않는 스키마(`ops` 등 — `0004` 패턴)에 둔다. 카운터 함수는 `security definer` + `search_path` 고정, `public`·`anon`에서 EXECUTE를 revoke하고 `authenticated`에만 grant한다(`0003` 패턴, CLAUDE.md 규칙 9).
 5. **콘텐츠 미저장**: 카운터에는 `user_id`·시간 창·횟수만 둔다. 텍스트·이미지 길이 등 요청 내용은 넣지 않는다.
 6. **응답 형식**: 한도를 넘으면 `429` + `{ "error": "rate_limited", "scope": "user" | "global" }` + `Retry-After` 헤더. 다른 응답은 지금과 같다.
 7. **되돌리기**: 마이그레이션마다 되돌리는 SQL을 함께 둔다(테이블·함수·권한 제거).
 8. **문서 정합(규칙 8)**: `CLAUDE.md`·`README.md`에 같은 PR로 반영한다. 영역 이미지 전송 서술은 실제 동작(텍스트 부족 시 자동, 또는 '제품 영역으로 분석' 버튼으로 언제든 — 사용자가 고른 영역만)으로 맞춘다.
+9. **입력 크기 상한**: OCR 텍스트가 2,000자(`length` 기준)를 넘거나, 카테고리 목록이 프롬프트에 들어가는 형태(정리 후 `JSON.stringify` — 따옴표·쉼표 포함)로 2,000자를 넘으면 LLM을 부르지 않고 `400`(`text_too_long` / `categories_too_long`)으로 거절한다. 자르지 않는다 — 상한 안의 요청은 LLM 입력이 지금과 같고, 입력 형태(필드·타입)도 그대로다. 이 거절은 불변식 1의 검증 실패라 세지 않는다. 이미지는 기존 검사(요청당 1장, base64 길이 상한)를 그대로 쓴다.
 
 ---
 
@@ -75,14 +76,14 @@
 **대상**: 새 `supabase/migrations/0005_parse_quota.sql`, 새 되돌리기 SQL(`supabase/rollback/0005_parse_quota_down.sql`), `supabase/functions/parse-screenshot-text/index.ts`, 새 `supabase/tests/quota.sql`, `CLAUDE.md`, `README.md`.
 
 1. 마이그레이션: 카운터 테이블(사용자별 시간 창, 전체 일 창)과 카운터 함수(불변식 2~5). 오래된 창은 같은 함수 안에서 정리하거나 기존 cron 패턴을 쓴다(선택 근거 보고). 사용자 행은 `auth.users` 삭제 시 함께 지워진다(FK cascade — 빈 익명 계정 정리 cron과 맞물림).
-2. `index.ts`: 입력 검증 뒤 카운터 함수를 사용자 JWT로 호출 → 넘으면 `429`(불변식 6). 카운터 오류는 Step 2 결정대로 처리하고 `console.log`에는 사용자 콘텐츠 없이 오류 종류만 남긴다. 맨 위 계약 주석의 영역 이미지 서술을 실제 동작으로 고친다.
+2. `index.ts`: 입력 검증(크기 상한 포함 — 불변식 9) 뒤 카운터 함수를 사용자 JWT로 호출 → 넘으면 `429`(불변식 6). 카운터 오류는 Step 2 결정대로 처리하고 `console.log`에는 사용자 콘텐츠 없이 오류 종류만 남긴다. 맨 위 계약 주석의 영역 이미지 서술을 실제 동작으로 고친다.
 3. `quota.sql`: SQL Editor에서 한 트랜잭션 안에 사용자를 흉내 내(`set local role authenticated` + `request.jwt.claims`) 카운터를 한도+1번 호출하고 마지막만 거부되는지 확인한 뒤 `rollback`으로 흔적을 남기지 않는 시험(`rls.sql` 패턴). 전체 한도도 같은 방식으로 시험한다. `anon`이 함수를 못 부르는지도 확인한다.
 4. `CLAUDE.md`: 데이터 레이어·Edge Function 설명에 요청 제한, 명령어·환경 변수에 한도 변수, 디렉터리에 `rollback/`.
 
 **DoD**
 - `deno check supabase/functions/parse-screenshot-text/index.ts` 통과
 - `prompt.ts`·`src/**`·`samples/**` diff 없음
-- 이미지 없는 요청의 Anthropic 요청 바디가 이전과 같음(코드 리뷰로 확인)
+- 상한 안의 요청은 이미지 유무와 관계없이 Anthropic 요청 바디가 이전과 같음(코드 리뷰로 확인)
 - 보고 → 승인 → 커밋
 
 ## Step 4 — 적용 (사람)
@@ -116,17 +117,17 @@
 
 ## 미결 사항 (사람 결정)
 
-1. 한도 값(Step 2 표)
-2. 카운터 DB 오류 때 fail-open / fail-closed(권장 fail-open)
-3. 제한 전용 앱 안내 문구가 필요한지(Step 1 결과를 보고 — 필요하면 후속 Phase)
+1. 한도 값(Step 2 표) — 결정(결과 기록 Step 2)
+2. 카운터 DB 오류 때 fail-open / fail-closed(권장 fail-open) — fail-open으로 결정
+3. 제한 전용 앱 안내 문구가 필요한지(Step 1 결과를 보고 — 필요하면 후속 Phase) — 후속으로 결정(이번엔 앱 변경 없음)
 
 ## 결과 기록 (구현 세션이 채움)
 
 - **완료일**:
-- **Step 1**: 429 때 앱 동작 / IP 헤더 조사 /
-- **Step 2**: 한도 값 / 실패 시 동작 /
+- **Step 1**: 429 때 앱 동작 — 다른 정제 실패와 같은 E-2 경로(실패 안내·재시도·직접 입력 가능, 저장은 막히지 않음). 앱·PostHog·`analysis_logs`에서는 429를 다른 실패와 구분할 수 없고 함수 로그에만 남는다(Free 플랜 보관 1일) → 제한 전용 안내·계측은 후속 / IP 헤더 조사 — 공식 문서에서 신뢰할 수 있는 클라이언트 IP 헤더를 찾지 못함(`x-forwarded-for` 첫 값은 위조 가능), Edge Function 기본 요청 제한 없음. Postgres 카운터로 충분하다고 판단(공식 문서 예시도 Redis·Postgres 카운터) → IP 제한 보류. CAPTCHA는 `signInAnonymously`가 토큰을 받지만 앱에 위젯(네이티브 작업)이 필요해 후속 /
+- **Step 2**: 한도 값 — 사용자 시간당 30, 사용자 하루 100, 전체 하루 300, 이미지 가중치 1. Edge Function 환경 변수 `PARSE_LIMIT_USER_HOURLY`·`PARSE_LIMIT_USER_DAILY`·`PARSE_LIMIT_GLOBAL_DAILY`·`PARSE_IMAGE_WEIGHT`(코드 기본값 같음). 하루 경계는 한국 시간 0시. 전체 한도는 홍보 전 트래픽에 맞춰 낮게 시작하고 홍보 시작 때 올린다. 이미지 요청 비중이 커지면 가중치를 올린다. 입력 크기 상한(불변식 9) — OCR 텍스트 2,000자, 카테고리 2,000자 / 실패 시 동작 — fail-open(호출 허용 + 오류 종류만 로그) /
 - **Step 5**: 시험 결과 /
 - **Step 6**: 지출 상한·익명 로그인 한도 값 /
-- **사람이 정한 것**:
-- **에이전트가 제안해 채택한 것**:
+- **사람이 정한 것**: 한도 값·하루 경계·fail-open·입력 상한 값(Step 2)
+- **에이전트가 제안해 채택한 것**: 입력 크기 상한(횟수 한도만으로는 요청 하나의 크기가 묶이지 않음), 이미지 가중치 환경 변수화와 범위 검사, 429 앱 안내·계측은 후속
 - **에이전트가 구현한 것**:
