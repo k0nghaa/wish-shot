@@ -175,7 +175,7 @@
 ## Step 6 — 문서 정합 (에이전트)
 
 - `CLAUDE.md`: 기술 스택에 Sentry(수집 범위·불변식 요약), 계측 항목의 "선택 peer 의존성 설치 금지" 서술을 "이 빌드부터 설치"로 바꾼다(`expo-device`는 처음부터 설치돼 있었음도 바로잡는다), 디렉터리에 `app.config.js`·`metro.config.js`·`src/lib/monitoring.ts`, 명령어에 개발용 변형 실행 명령, OTA 뒤 소스맵 업로드 명령(아래), 환경 변수에 `EXPO_PUBLIC_SENTRY_DSN`·`SENTRY_AUTH_TOKEN`(EAS secret). 영역 전송 서술도 확정된 결정에 맞춘다.
-- OTA 소스맵 업로드(7.11 기준 — 설치 버전 문서로 확인): `npx expo export --platform ios --dump-sourcemap` → `npx eas-cli update ...` → `npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist`(`SENTRY_AUTH_TOKEN`은 셸 환경 변수로 사람이 설정). 스코프 패키지 `@sentry/expo-upload-sourcemaps`는 8.9.0 이상 전용이라 쓰지 않는다.
+- OTA 소스맵 업로드(7.11 기준 — 설치 버전 문서로 확인): `npx eas-cli update ...` → `npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist`(`SENTRY_AUTH_TOKEN`은 셸 환경 변수로 사람이 설정). `eas update`가 export할 때 `dist`에 소스맵을 이미 만들어서(eas-cli `--dump-sourcemap` 기본, 코드 확인) 별도 `expo export`는 필요 없다. 스코프 패키지 `@sentry/expo-upload-sourcemaps`는 8.9.0 이상 전용이라 쓰지 않는다.
 - `README.md`: 기술 스택 줄.
 - `docs/testing/tracking-plan.md`: 보류 목록의 Sentry 행과 `app_error` 한계 설명을 "Sentry 도입(1.0.2)"으로 갱신한다.
 
@@ -204,7 +204,7 @@
 3. TestFlight 내부 테스터로 회귀 확인(담기·공유 시트·OCR·편집·링크·온보딩). 스토어 앱 자리에 설치되므로 기존 데이터가 그대로인지 함께 본다.
 4. App Store Connect
    - 새 버전: 이름·부제·키워드(Step 1 결과), 새로운 기능 문구
-   - 앱 개인정보: Sentry 수집 유형 추가(크래시 데이터·기타 진단 데이터 — 사용자와 연결 안 됨, 추적 안 함, 목적은 Sentry 문서 기준 앱 기능/분석 중 사람 판단). tracing을 껐으므로 성능 데이터는 넣지 않는다.
+   - 앱 개인정보: Sentry 수집 유형 반영 — '기타 진단 데이터'를 새로 추가한다(Sentry만 수집, 설치별 무작위 ID라 사용자와 연결 안 됨, 추적 안 함). '충돌 데이터'는 이미 PostHog `app_error`로 "연결됨=예"로 선언돼 있다(tracking-plan §5). ASC는 같은 유형을 한 번만 선언하고 하나라도 연결되면 '연결됨'이므로 그대로 두고 목적만 확인한다. 목적은 Sentry 문서 기준 앱 기능/분석 중 사람이 판단한다. tracing을 껐으므로 성능 데이터는 넣지 않는다.
    - 출시 옵션은 **수동 출시**로 둔다(아래 배포 순서 3).
 5. 심사 제출.
 
@@ -301,8 +301,9 @@
   - `privacy.ts`: 같은 내용을 네 문단으로 맞춤(영역 전송 정정, PostHog 언어·시간대, Sentry 한 문장(최대 90일 포함), 두 서비스 공통 '콘텐츠 미수집·IP와 위치 미저장').
   - `register.tsx` 최초 영역 고지: "텍스트를 찾지 못했습니다"로 시작하던 문장을 버튼으로 열었을 때도 맞는 문장으로 바꿈("…선택하고 ‘분석’을 누르면, 그 영역만 AI 분석에 전송됩니다. 이 영역은 분석에만 쓰이며 저장하지 않습니다. 사진은 원본 그대로 저장됩니다.").
   - 주석 정정: `register.tsx`(고지 effect·시트), `RegionSelectSheet.tsx`, `parse.ts`, `VisionOcrEngine.ts`. `README.md`·`CLAUDE.md`의 같은 문구는 Step 6에서 고친다. `supabase/functions/parse-screenshot-text/index.ts` 주석은 레인 경계에 따라 Phase 15에서 고친다.
+- **Step 6(문서)**: `CLAUDE.md`(기술 스택에 Sentry 항목, 계측 항목의 선택 의존성 서술 정정(`expo-device`는 처음부터 설치), 위치·IP 처리, 디렉터리에 `app.config.js`·`metro.config.js`·`monitoring.ts`, 개발용 앱 실행 명령, 개발 빌드 변형 설명, OTA 소스맵 업로드 명령, `env:create`→`env:set`, 환경 변수에 Sentry·`APP_VARIANT`, 개발용 앱 크레덴셜, 영역 전송 서술 4곳 정정, Phase 14 문서 링크). `README.md`(기술 스택에 Sentry·개발용 앱, PostHog 줄, 개발 서버 명령, 영역 전송 문구, 문서 링크). `tracking-plan.md`(Sentry·기기 메타데이터 보류 행을 '1.0.2 도입'으로, `app_error` 트리거·한계, SDK 자동 속성·위치/IP 노트, `Application Installed/Updated`, 개발용 앱 uid 제외 규칙, §5 GeoIP 정정과 1.0.2 체크리스트, §7 flush 검증 설명). `.env.example`(`env:set`). 지시서 Step 6의 OTA 명령(별도 `expo export` 불필요)과 Step 8의 ASC 앱 개인정보 안내('충돌 데이터'는 이미 연결됨으로 선언)를 정정.
 - **Step 7(실기기)**: 체크 결과 /
 - **Step 8(제출)**: 빌드 번호 / 제출·승인·출시일 /
 - **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다). PostHog 서버의 GeoIP 변환도 바로 껐다. iOS 개발 기본 언어(`CFBundleDevelopmentRegion`)를 `ko`로 지정하기로 했다.
-- **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈. 개발 서버 명령에 `--scheme wishshot-dev` 추가(`exp+wish-shot` 충돌 우회). Sentry 네이티브 자동 기록(네트워크·화면 제목) 끄기, 렌더 오류 경계, URL·메시지 거르기 범위, SDK import lint 규칙.
+- **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈. 개발 서버 명령에 `--scheme wishshot-dev` 추가(`exp+wish-shot` 충돌 우회). Sentry 네이티브 자동 기록(네트워크·화면 제목) 끄기, 렌더 오류 경계, URL·메시지 거르기 범위, SDK import lint 규칙. 문서의 `eas env:create`(deprecated)를 `env:set`으로 교체. 방침에서 IP를 "전송 과정에서 전달되지만 저장하지 않음"으로 따로 적기.
 - **에이전트가 구현한 것**: `app.config.js`(`APP_VARIANT=development`일 때만 이름·번들 ID·scheme·공유 확장 블록을 덮어씀. 확장 블록이 1개가 아니면 설정 단계에서 멈춤), `eas.json` development 프로필의 `env.APP_VARIANT`. `src/lib/monitoring.ts`(초기화·거르기·렌더 오류 경계·`wrapRoot`), `_layout.tsx` 연결, 설정의 `__DEV__` "네이티브 크래시 테스트"·"렌더 오류 테스트", `metro.config.js`, `app.json`(Sentry 플러그인·privacy manifest), `.env.example`, `eslint.config.js`. `expo-application`·`expo-localization` 설치와 `expo-localization` 플러그인(`supportedLocales.ios: ['ko']`), `CFBundleDevelopmentRegion: "ko"`, `analytics.ts`의 `disableGeoip: true`.
