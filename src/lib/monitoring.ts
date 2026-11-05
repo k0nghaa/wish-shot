@@ -9,7 +9,8 @@ import { Component, createElement, type ComponentType, type ReactNode } from 're
  * 불변식:
  * - 오류·크래시만 수집한다. 성능 추적·세션 리플레이·스크린샷·뷰 계층은 쓰지 않는다.
  * - 콘텐츠 미수집: 사진·OCR 원문·상품명·브랜드·가격·URL·메모를 싣지 않는다. setUser 로 uid 를 붙이지 않는다.
- *   Sentry 로 보내는 기록에서만 URL 을 줄인다(Supabase 는 경로만 남기고 쿼리·UUID 를 지움, 그 밖의 URL 은 통째로 지움).
+ *   네트워크 요청 기록(xhr·fetch·http)과 콘솔 기록은 버린다. 그 밖의 기록·오류 메시지에서는 URL 을 줄인다
+ *   (Supabase 는 경로만 남기고 쿼리·UUID 를 지움, 그 밖의 URL 은 통째로 지움).
  *   앱이 실제로 쓰는 URL·signed URL 캐시는 건드리지 않는다.
  * - DSN(EXPO_PUBLIC_SENTRY_DSN)이 없으면 초기화하지 않는다 → 이후 전부 no-op(루트 감싸기도 하지 않는다).
  * - __DEV__ 는 기본 비활성. EXPO_PUBLIC_SENTRY_DEV=1 일 때만 켠다(검증용).
@@ -50,9 +51,20 @@ function scrubUrlsDeep(value: unknown, depth: number): unknown {
   return out;
 }
 
+/**
+ * 버리는 기록 종류.
+ * - console: 오류 원문(DB 오류 상세 등)에 사용자 입력이 섞일 수 있다.
+ * - xhr·fetch·http(네트워크 요청): 방침 §5에 요청 주소를 수집 항목으로 두지 않았다. Expo SDK 57 은 전역 fetch 를
+ *   expo/fetch 로 바꿔 Sentry(모바일 기본 XHR 만 기록)가 요청을 거의 보지 못하지만, SDK·라이브러리가 바뀌어도
+ *   방침과 어긋나지 않게 여기서 확정적으로 버린다. 켜려면 방침을 먼저 고친다(고지 선행).
+ */
+function isDroppedBreadcrumb(breadcrumb: Breadcrumb): boolean {
+  const { category, type } = breadcrumb;
+  return category === 'console' || category === 'xhr' || category === 'fetch' || type === 'http';
+}
+
 function scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
-  // 콘솔 기록은 오류 원문(DB 오류 상세 등)에 사용자 입력이 섞일 수 있어 버린다.
-  if (breadcrumb.category === 'console') return null;
+  if (isDroppedBreadcrumb(breadcrumb)) return null;
   const next: Breadcrumb = { ...breadcrumb };
   if (typeof next.message === 'string') next.message = scrubUrls(next.message);
   if (next.data) {
