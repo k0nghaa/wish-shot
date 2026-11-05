@@ -191,6 +191,7 @@
    - 개발용 앱에서 담기·OCR·저장이 동작한다(새 익명 계정).
    - `EXPO_PUBLIC_SENTRY_DEV=1`로 띄워 "테스트 에러 발생"·"네이티브 크래시 테스트"가 Sentry에 `development` 환경으로 들어온다. 이벤트에 사용자 콘텐츠·IP·위치(`geo`)가 없다.
    - 설정의 "계측 토글(개발용)"을 켜고 이벤트를 하나 보내, PostHog Activity에서 Step 4 표의 새 속성이 보이는지 확인한다. `$geoip_*` 속성은 없어야 한다.
+   - `EXPO_PUBLIC_SENTRY_DEV=1`로 띄워 "렌더 오류 테스트(개발용)"를 누르면 redbox가 뜨고, Sentry에 이벤트가 들어온다(PostHog `app_error`도 함께). 이 플래그로 띄우면 Sentry가 Promise 거부 추적을 맡아 RN 개발 경고 "Possible Unhandled Promise Rejection"이 뜨지 않는다.
    - 스토어 앱은 그대로 열리고 기존 데이터가 보인다.
 4. 개발용 앱의 uid를 SQL Editor에서 `ops.internal_users`에 넣는다(uid는 git에 남기지 않는다).
 
@@ -252,6 +253,7 @@
 
 - **완료일**:
 - **Step 0(준비)**: org 슬러그 `wishshot`, project 슬러그 `wishshot`. 저장 위치 US(DSN 호스트 `ingest.us.sentry.io`로 확인). IP 저장 방지를 조직 단위로 켬(프로젝트는 잠긴 채 상속). Business 체험 14일(2026-11-05 시작), 결제 정보·결제 수단 없음 → 끝나면 Developer 플랜(요금 페이지 기준 보존 30일). EAS 환경 변수: `SENTRY_AUTH_TOKEN`(Secret, production·preview·development), `EXPO_PUBLIC_SENTRY_DSN`(Plain text, production). 로컬 `.env`에 DSN 추가. 위치 제거 규칙(`$user.geo.**`): 사람이 추가 예정.
+  - PostHog 확인(2026-11-05, 최근 7일 이벤트 99건): `$ip`가 있는 이벤트 0건(IP는 이벤트에 저장되지 않음). `$geoip_country_code`가 있는 이벤트 99건(전부) → 1.0.1도 IP로 추정한 위치를 남기고 있었다. 앱 업데이트를 기다리지 않고 PostHog 서버 설정의 GeoIP 변환을 끄기로 함(사람). Step 4의 `disableGeoip: true`는 그대로 넣는다.
 - **Step 1(ASO)**: 고른 이름 / 부제 / 키워드(바이트 수) /
   - 이름: `WishShot 위시샷 - 스크린샷 위시리스트` (25자)
   - 부제: `캡처 한 장으로 내 취향과 관심사 저장, 통합 장바구니` (30자)
@@ -265,10 +267,21 @@
   - `npx eas-cli config`: development 프로필은 `development` EAS 환경과 `env`의 `APP_VARIANT`를 읽어 위 개발 값으로, production 프로필은 운영 값으로 풀린다.
   - `npx tsc --noEmit`·`npx expo lint` 통과.
 - **Step 3(Sentry)**: 설치 버전 / 초기화·핸들러 순서 확인 / privacy manifest 범위 /
+  - 설치: `@sentry/react-native` 7.11.0(`@sentry/core` 10.37.0, 네이티브 sentry-cocoa 8.58.0, `@sentry/cli` 2.58.4). 네이티브 의존성 추가는 이것 하나다. CLI 바이너리는 플랫폼별 선택 의존성으로 들어온다(lockfile에 macOS용 포함). 설정 플러그인은 `app.json`에 `@sentry/react-native/expo`로 넣었다(`url` `https://sentry.io/`, org·project `wishshot`). `app.config.js`가 `app.json`을 이어받으므로 두 변형 모두 적용된다.
+  - Metro: `getSentryExpoConfig(__dirname)`. 기본 설정과 비교해 Babel 변환기가 같다(React Compiler·reanimated 그대로). 다른 것은 Sentry가 의도한 세 가지(개발 서버 미들웨어, LogBox 프레임 접기, 번들 Debug ID 직렬화)뿐이다. `npx expo export --platform ios --dump-sourcemap` 성공, 번들·소스맵에 Debug ID가 들어간다.
+  - 수집 범위(설치 버전 코드로 확인): `tracesSampleRate`·리플레이 비율 키는 0이어도 있으면 추적·리플레이 통합이 등록돼서 아예 넣지 않았다. 스크린샷·뷰 계층·실패 요청 수집은 끔. `sendDefaultPii: false`이면 SDK가 `infer_ip: 'never'`를 보낸다. 네이티브 전용 키 `enableNetworkBreadcrumbs: false`·`enableAutoBreadcrumbTracking: false`를 넣었다. 네이티브는 요청마다 URL과 쿼리(`http.query`, signed URL token 포함)를, 화면 제목(`navigationItem.title`)을 기록하는데 네이티브 크래시에는 JS 필터가 적용되지 않기 때문이다. 함수가 아닌 옵션은 네이티브로 그대로 넘어가고 cocoa 8.58이 두 키를 읽는다. 네트워크 기록을 끄면 네이티브 URL 가로채기 자체가 꺼져 추적 헤더도 붙지 않는다.
+  - 거르기: 콘솔 기록은 버린다. URL은 Supabase만 경로를 남기고(UUID는 `<id>`) 쿼리를 지우며, 그 밖의 URL(상품 링크·`file://`·`ph://`)은 `<url>`로 바꾼다. 오류 메시지는 UUID와 큰따옴표 값(Postgres가 입력값을 넣는 형식)도 가린다. `extra`는 지운다(Error가 아닌 값을 throw하면 SDK가 그 객체를 통째로 넣는다). `contexts`의 문자열도 URL을 줄인다. 거르기 함수가 실패하면 그 기록·이벤트를 버린다.
+  - 초기화·핸들러 순서: `_layout.tsx` 모듈 최상단에서 `initMonitoring()` → `Sentry.init`이 전역 핸들러를 바로 설치한다. 그 뒤 AuthGate effect의 `installJsErrorCapture`가 그것을 잇는다. 결과 순서는 PostHog `app_error` → Sentry → expo-router → RN 기본(redbox·크래시)이다. 운영에서는 Sentry가 전송(최대 2초)을 마친 뒤 기본 처리를 부른다(SDK 동작, 받아들인 변경).
+  - 렌더 오류 경계(리뷰 지적 반영): RN 0.86은 처리되지 않은 렌더 오류를 전역 핸들러를 거치지 않고 바로 치명 처리한다(`onUncaughtError` → `ExceptionsManager.handleException`). 네이티브 SDK는 이를 "Unhandled JS Exception"으로 보고 버린다. 그래서 렌더 오류가 Sentry·PostHog 어디에도 가지 않았다(PostHog `app_error`의 기존 공백). `wrapRoot`가 루트를 렌더 오류 경계로 감싸 전역 핸들러 체인으로 넘긴다. DSN이 없으면 감싸지 않는다(불변식 2).
+  - 받아들인 한계: `_layout.tsx`가 import하는 모듈이 불러오는 도중 throw하면(예: EAS 환경 변수 누락으로 `supabase.ts` 실패) 경계가 생기기 전이라 잡히지 않는다. 막으려면 별도 진입 파일이 필요해 이번에는 하지 않았다(실기기·TestFlight 확인에서 바로 드러나는 실패). 네이티브 크래시의 메시지는 JS로 거를 수 없다.
+  - 수집되는 것(Step 5 방침 반영 대상): 설치별 무작위 식별자(`user.id`, Supabase uid 아님), 실행 단위 세션(정상 종료·크래시 여부, 크래시 없는 비율 계산용), 기기 정보(모델·OS·앱 버전, 기기 언어 설정 `device.locale`).
+  - privacy manifest: Sentry 문서의 세 항목(UserDefaults `CA92.1`, SystemBootTime `35F9.1`, FileTimestamp `C617.1`)을 `ios.privacyManifests`에 넣었다. Expo가 이 파일을 만들고, `pod install` 때 RN이 다른 라이브러리 항목을 덧붙인다(기존 항목이 지워지지 않음, 코드 확인). 수집 데이터 유형(`NSPrivacyCollectedDataTypes`)은 Expo가 지원하지만 넣지 않았다. 앱 단위 선언은 PostHog까지 함께 다뤄야 해서 Step 8의 ASC 앱 개인정보와 같이 정한다.
+  - 캡슐화: `@sentry/react-native`·`posthog-react-native`를 래퍼 밖에서 import하면 lint 오류가 난다(`eslint.config.js` `no-restricted-imports`).
+  - 확인: introspect 운영·개발 모두 Step 2 대비 달라진 것은 Sentry 플러그인과 privacy manifest뿐이다. `tsc`·`lint` 통과. `expo-doctor` 21개 중 20개 통과(실패 1건은 기존 Expo 패키지 14개 패치 버전 불일치, Sentry 무관, `--fix` 안 함). OTA 소스맵 명령 `sentry-expo-upload-sourcemaps`가 7.11에 있음을 확인했다.
 - **Step 4(언어)**: 택한 방식 / 출시 뒤 스토어 표기 /
 - **Step 5(방침)**: 바뀐 문장 목록 / 시행일 /
 - **Step 7(실기기)**: 체크 결과 /
 - **Step 8(제출)**: 빌드 번호 / 제출·승인·출시일 /
 - **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다).
-- **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈. 개발 서버 명령에 `--scheme wishshot-dev` 추가(`exp+wish-shot` 충돌 우회).
-- **에이전트가 구현한 것**: `app.config.js`(`APP_VARIANT=development`일 때만 이름·번들 ID·scheme·공유 확장 블록을 덮어씀. 확장 블록이 1개가 아니면 설정 단계에서 멈춤), `eas.json` development 프로필의 `env.APP_VARIANT`.
+- **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈. 개발 서버 명령에 `--scheme wishshot-dev` 추가(`exp+wish-shot` 충돌 우회). Sentry 네이티브 자동 기록(네트워크·화면 제목) 끄기, 렌더 오류 경계, URL·메시지 거르기 범위, SDK import lint 규칙.
+- **에이전트가 구현한 것**: `app.config.js`(`APP_VARIANT=development`일 때만 이름·번들 ID·scheme·공유 확장 블록을 덮어씀. 확장 블록이 1개가 아니면 설정 단계에서 멈춤), `eas.json` development 프로필의 `env.APP_VARIANT`. `src/lib/monitoring.ts`(초기화·거르기·렌더 오류 경계·`wrapRoot`), `_layout.tsx` 연결, 설정의 `__DEV__` "네이티브 크래시 테스트"·"렌더 오류 테스트", `metro.config.js`, `app.json`(Sentry 플러그인·privacy manifest), `.env.example`, `eslint.config.js`.
