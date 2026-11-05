@@ -77,6 +77,7 @@
 | 세션 리플레이 | 화면에 사용자 사진이 상시 노출되는 앱 특성상 비권장 |
 | A/B 테스트 | 표본상 무의미 — 릴리스 전후 비교로 대체 |
 | ~~Sentry(크래시)~~ | **Sentry 도입(1.0.2, Phase 14)** — `src/lib/monitoring.ts`, 오류·크래시만 수집(성능 추적·리플레이 없음). 1.0.1 이하 사용자는 계속 기존 커버리지: JS 에러는 `app_error`, TestFlight 크래시는 App Store Connect 웹, App Store 사용자 크래시(동의 기기분)는 Mac의 Xcode Organizer 열람 |
+| Sentry 네트워크 요청 기록(xhr·fetch) | 지금은 필터에서 버리고 방침 §5에도 수집 항목으로 두지 않았다(Expo SDK 57은 `fetch`를 `expo/fetch`로 바꿔 원래 기록되지도 않음). **켜는 조건**: 같은 오류가 반복되는데 Sentry 스택·PostHog 상태값·서버 DB 오류 기록(Phase 15)·Supabase 로그로 원인을 좁히지 못할 때 / Storage 업로드·다운로드나 DB 조회 구간이 의심될 때 / 네트워크를 많이 쓰는 기능(Phase 21 구매처 찾기, Phase 22 로그인) 출시 직후 안정화 기간. **켜는 순서**: 방침 §5·앱 안 고지에 '앱이 보낸 서버 요청의 주소(세부 값 제외)'를 넣어 게시 → `monitoring.ts`의 버리는 목록에서 xhr·fetch·http 제거 + `breadcrumbsIntegration({ fetch: true })`(Expo `fetch`는 XHR을 거치지 않음) → 사진 업로드·다운로드 회귀와 주소의 `?` 뒤·ID 제거 확인 → JS만 바뀌므로 OTA 가능(방침 게시가 먼저) |
 | ~~기기 메타데이터 보강~~ | **1.0.2에서 반영(Phase 14)** — `expo-application`·`expo-localization` 설치(`expo-device`는 처음부터 설치돼 있었음). 속성은 §2 구현 노트 'SDK 자동 속성' |
 
 ## 5. 프라이버시 체크리스트 (사람 확인란 — 전부 체크 전에는 production 채널 배포 금지)
