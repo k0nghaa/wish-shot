@@ -9,13 +9,19 @@ import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/o
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
 import { colors } from '@/constants/theme';
 import { identifyUser, initAnalytics, installJsErrorCapture } from '@/lib/analytics';
+import { initMonitoring, wrapRoot } from '@/lib/monitoring';
 import { hydrateSignedUrlCache, signInAnonymouslyIfNeeded } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
+
+// 오류·크래시 수집(Sentry): 모듈 최상단에서 가장 먼저 초기화한다. DSN 이 없거나 __DEV__ 면 no-op.
+// Sentry 가 전역 JS 에러 핸들러를 먼저 설치해야, AuthGate 의 installJsErrorCapture 가 그것을 이어 호출한다
+// (PostHog app_error → Sentry → RN 기본 처리(redbox·크래시) 순).
+initMonitoring();
 
 // Phase 1: 루트 레이아웃.
 // - ShareIntentProvider: iOS 공유 시트 수신 (Step 4)
 // - AuthGate: 세션 부트스트랩 (Phase 5 Step 6 — 익명 로그인, 로그인 벽 없음)
-export default function RootLayout() {
+function RootLayout() {
   const router = useRouter();
   return (
     <ShareIntentProvider
@@ -29,6 +35,8 @@ export default function RootLayout() {
     </ShareIntentProvider>
   );
 }
+
+export default wrapRoot(RootLayout);
 
 function AuthGate() {
   const [session, setSession] = useState<Session | null>(null);

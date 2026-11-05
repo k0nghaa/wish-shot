@@ -18,6 +18,22 @@
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          }
+        ]
       }
     },
     "android": {
@@ -67,6 +83,14 @@
           "photosPermission": "방금 캡처한 스크린샷을 위시샷에 바로 담거나, 위시샷에 담은 스크린샷을 아이폰 앨범에서 삭제하려면 '모든 사진' 접근 권한이 필요합니다.",
           "savePhotosPermission": "위시샷에 담은 사진을 아이폰 앨범에 저장하려면 사진 접근 권한이 필요합니다.",
           "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "wishshot",
+          "project": "wishshot"
         }
       ]
     ],
