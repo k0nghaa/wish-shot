@@ -16,7 +16,7 @@
 - **코호트 필터(모든 집계 공통)**: `created_at >= 테스트 시작일` + 개발자 uid 제외. 기존 Supabase 데이터(전부 개발자 데이터)는 지우지 않고 이 필터로 거른다 — 기존 데이터의 "현재값"은 지표가 아니라 SQL 드라이런용이다.
 - **개발자 uid 제외 목록** (2026-10-17 확정): uid 자체는 git에 두지 않고 **DB `ops.internal_users`**(마이그레이션 `0004`, API 비노출·SQL Editor 전용)에 둔다. `metrics.sql`은 이 테이블을 서브쿼리로 참조한다.
   - 선정 기준: 테스트 시작 전 생성된 uid 17개 중 TestFlight 외부 테스터 1명(09-27 가입, 시작 후 활동 없음)을 뺀 **16개**. 시작 후 활동이 있는 건 현 개발 기기 1개뿐이라 SQL 지표엔 사실상 이 1개만 영향을 주지만, PostHog(앱만 연 세션도 DAU에 잡힘)와 기준을 통일하려고 전부 넣는다. 시작 후 생성된 개발자 uid는 없음(현 기기 uid가 10-02 생성분 그대로).
-  - 갱신 규칙: 개발 기기에서 재설치하면 새 uid가 생기므로 `ops.internal_users`에 insert하고 PostHog Person에도 `$internal_or_test_user = true`를 붙인다. 개발용 앱(`WishShot Dev`, 1.0.2~ — 스토어 앱과 별도 익명 계정)의 uid도 같은 방법으로 넣는다. PostHog에서는 `$app_namespace = com.k0nghaa.wishshot.dev`로도 구분된다.
+  - 갱신 규칙: 개발 기기에서 재설치하면 새 uid가 생기므로 `ops.internal_users`에 insert하고 PostHog Person에도 `$internal_or_test_user = true`를 붙인다. 개발용 앱(`WishShot Dev`, 1.0.2~ — 스토어 앱과 별도 익명 계정)은 **DB 쪽만** uid를 `ops.internal_users`에 넣는다(2026-11-05 첫 설치분 반영). **PostHog 쪽은 사람 표시 대신** 프로젝트 내부 사용자 필터에 "`$app_namespace` = `com.k0nghaa.wishshot.dev` 제외" 조건을 한 번 둔다(사람이 설정) — 개발용 앱을 재설치해 uid가 바뀌어도 자동으로 빠진다. 개발용 앱은 `__DEV__`라 기본 옵트아웃이지만, 계측 토글 상태가 앱에 저장돼 켜 둔 채 잊으면 지표에 섞이기 때문이다.
 - **PostHog 쪽 오염 방지**: `__DEV__` 빌드는 기본 옵트아웃이라 개발 중 이벤트는 대부분 자동 제외된다. production 빌드를 쓰는 개발 기기는 Person 속성 `$internal_or_test_user = true`(BOOLEAN) → 동적 코호트 "Internal / Test users" → 프로젝트 내부 사용자 필터(신규·기존 인사이트 모두 ON)로 제외한다. Person 단위라 identify 전 anon ID 이벤트까지 함께 빠진다. 프로젝트 시간대는 `Asia/Seoul`.
 
 ## 2. 이벤트 택소노미 (정본)
