@@ -28,12 +28,13 @@
 - **영역 전송 문구**: 동작은 바꾸지 않고 문구를 실제 동작에 맞춘다. 실제 동작은 "OCR 텍스트가 부족하면 시트가 자동으로 뜨고, 사진이 있으면 '제품 영역으로 분석' 버튼으로 언제든 열 수 있다. 어느 경우든 사용자가 직접 고른 영역만 '분석'을 눌렀을 때 전송된다"이다(`src/hooks/useAnalysis.ts:151`, `src/app/register.tsx:568`, 커밋 `4af69c4`).
 - **Sentry 범위**: 오류·크래시만 수집한다. 성능 추적(tracing)·세션 리플레이·스크린샷은 쓰지 않는다(아래 불변식 1).
 - **Sentry 데이터 저장 위치**: US. 방침의 이전 국가는 미국이다(PostHog와 같다).
+- **IP로 추정한 위치는 남기지 않는다(2026-11-05)**: Sentry·PostHog 모두 IP로 추정한 위치(국가·도시)를 끈다. Sentry는 IP 저장을 막아도 위치를 따로 남겨서 서버 규칙으로 지운다(Step 0). PostHog는 SDK 기본값이 위치 추정 켜짐이라 `disableGeoip: true`로 끈다(Step 4). 다시 켜려면 방침·앱 안 고지·ASC 앱 개인정보('대략적 위치')를 먼저 고친다. 켠 시점부터만 수집되고 과거 데이터에는 생기지 않는다. 국가별 사용량은 App Store Connect 앱 분석(국가별)에서 본다.
 - **PostHog 기기 정보 보강을 이 빌드에 넣는다**: 선택 peer 의존성 `expo-application`·`expo-localization`을 추가한다. `expo-device`는 이미 설치돼 있다(Step 4).
-- **마케팅 버전 1.0.2**: 사용자에게 보이는 새 기능이 없어 패치로 올린다. 다음 로그인 빌드는 1.1.0이다.
+- **마케팅 버전 1.0.2**: 사용자에게 보이는 새 기능이 없어 패치로 올린다. 다음 1.1.0은 영역 후보·얼굴 가리기(Phase 20) 빌드다.
 
 ## 하지 않는 것
 
-- 로그인·계정 연결(Phase 17), 요청 제한(Phase 15), RLS 점검(Phase 16)
+- 로그인·계정 연결(Phase 22 — 보류), 요청 제한(Phase 15), RLS 점검(Phase 16)
 - dev용 Supabase 프로젝트 분리
 - 앱 화면에 보이는 이름(홈 화면 아이콘 아래 `WishShot`) 변경 — 스토어 이름만 바꾼다
 
@@ -43,7 +44,7 @@
 
 1. **콘텐츠 미수집**: Sentry 이벤트에 사진·OCR 원문·상품명·브랜드·가격·URL·메모를 싣지 않는다.
    - 세션 리플레이 끔, 스크린샷 첨부 끔, 뷰 계층 첨부 끔(화면에 사용자 사진·텍스트가 있다).
-   - `sendDefaultPii: false`. `setUser`로 uid를 붙이지 않는다. IP는 저장하지 않는다(SDK에서 `ip_address`를 비우는 방법 + Sentry 프로젝트 설정 둘 다 — 정확한 방법은 설치 버전 문서로 확인).
+   - `sendDefaultPii: false`. `setUser`로 uid를 붙이지 않는다. IP는 저장하지 않는다(SDK에서 `ip_address`를 비우는 방법 + Sentry 프로젝트 설정 둘 다 — 정확한 방법은 설치 버전 문서로 확인). IP로 추정한 위치(`user.geo`)도 남기지 않는다(Step 0 서버 규칙).
    - **Sentry로 보내는 기록(브레드크럼·이벤트)에서만** URL의 쿼리 문자열을 지운다. Storage signed URL의 `token`은 하루 동안 사진을 여는 열쇠라서 Sentry에 남기지 않는다. 앱이 실제로 쓰는 URL·signed URL 영속 캐시(`wishshot.signedurl.*`)·`expo-image` 디스크 캐시는 바꾸지 않는다(CLAUDE.md의 Storage·Egress 규칙 그대로). 그 밖의 브레드크럼·이벤트에도 사용자 콘텐츠가 들어가지 않게 `beforeBreadcrumb`/`beforeSend`에서 거른다.
    - `captureException`에 사용자 콘텐츠가 든 extra/context를 붙이지 않는다.
 2. **DSN이 없으면 no-op**: `EXPO_PUBLIC_SENTRY_DSN`이 비어 있으면 초기화하지 않는다. 키 없이 빌드해도 동작이 같아야 한다(PostHog와 같은 패턴).
@@ -63,7 +64,8 @@
 1. Sentry 가입 → 조직 생성. 데이터 저장 위치는 **US**를 고른다(확정된 결정). 조직을 만들 때만 고를 수 있고 나중에 못 바꾼다.
 2. React Native 프로젝트 생성 → DSN, org 슬러그, project 슬러그를 에이전트에게 전달한다(공개 값).
 3. Sentry 프로젝트 설정
-   - IP 주소 저장 끄기(Security & Privacy 메뉴. 정확한 항목명은 화면에서 확인)
+   - IP 주소 저장 끄기(Security & Privacy 메뉴의 'Prevent Storing of IP Addresses'. 조직 단위로 켜면 프로젝트 설정은 잠긴 채 켜진다)
+   - IP로 추정한 위치 지우기: Project Settings → Security & Privacy → Advanced Data Scrubbing → Add Rule. 방식 `Remove`, 대상 `Anything`, 출처 `$user.geo.**`. IP 저장을 막아도 Sentry는 IP로 추정한 위치를 따로 남긴다(Sentry 서버 측 스크러빙 문서).
    - 무료 한도를 넘었을 때 과금되지 않게 지출 한도 확인
    - 오류 보존 기간 확인(방침 '보유 기간'에 쓴다)
 4. Sentry 조직 설정에서 auth token 발급 → EAS 환경 변수 `SENTRY_AUTH_TOKEN`으로 등록(production·preview·development, secret 공개 범위). 값은 채팅에 붙이지 않는다.
@@ -132,18 +134,21 @@
 
 ## Step 4 — PostHog 기기 정보 보강 + iOS 언어 한국어 표기 (에이전트)
 
-**대상**: `package.json`, `app.config.js`(또는 `app.json`) 플러그인, (필요하면) `docs/legal/privacy.html`·`src/constants/privacy.ts`.
+**대상**: `package.json`, `app.config.js`(또는 `app.json`) 플러그인, `src/lib/analytics.ts`(위치 추정 끄기), (필요하면) `docs/legal/privacy.html`·`src/constants/privacy.ts`.
 
 1. `npx expo install expo-application expo-localization`.
-2. **PostHog 보강**: 설치된 `posthog-react-native` 버전 문서로, 이 모듈들이 있으면 자동으로 쓰는지와 **어떤 속성이 새로 수집되는지**를 확인해 표로 보고한다. `analytics.ts` 변경은 원칙적으로 없다(필요하면 보고 후 진행).
+2. **PostHog 보강**: 설치된 `posthog-react-native` 버전 문서로, 이 모듈들이 있으면 자동으로 쓰는지와 **어떤 속성이 새로 수집되는지**를 확인해 표로 보고한다. `analytics.ts` 변경은 아래 3 외에는 원칙적으로 없다(필요하면 보고 후 진행).
    - 지금 방침은 '기기 기본 정보(모델·OS 버전·앱 버전)'만 적는다. 새로 수집되는 속성에 언어·시간대처럼 이 범위를 벗어나는 항목이 있으면 Step 5에서 방침·앱 안 고지에 더한다(고지 선행).
-3. **iOS 언어**: `expo-localization` 설정 플러그인의 `supportedLocales: { ios: ['ko'] }`(Expo 공식 현지화 가이드의 방식)를 쓴다.
+3. **PostHog 위치 추정 끄기**(확정된 결정): `analytics.ts`의 PostHog 초기화 옵션에 `disableGeoip: true`를 넣는다. 설치된 `@posthog/core`(1.55.3)는 클라이언트 SDK의 기본값이 `false`라서, 그대로 두면 서버가 이벤트에 IP로 추정한 위치(`$geoip_*`)를 붙인다. JS만 바뀐다.
+   - PostHog가 이벤트에 `$ip`를 저장하는지는 PostHog 프로젝트 설정(클라이언트 IP 버리기)에 달려 있다. 사람이 이벤트 속성으로 확인하고, 저장되고 있으면 그 설정을 켠다. 항목명은 화면에서 확인한다.
+4. **iOS 언어**: `expo-localization` 설정 플러그인의 `supportedLocales: { ios: ['ko'] }`(Expo 공식 현지화 가이드의 방식)를 쓴다.
    - 플러그인이 Info.plist에 실제로 쓰는 키를 introspect로 확인한다. `CFBundleDevelopmentRegion`이 `en`으로 남으면 `ios.infoPlist`로 `ko`를 함께 지정할지 보고한다(Expo 문서에는 없는 방식이라 사람이 판단).
-4. 스토어 '언어' 표기는 Apple이 바이너리의 현지화로 정한다. 정확한 규칙은 공식 문서에 없으므로 **출시 뒤 스토어 페이지에서 사람이 확인**한다(결과 기록에 적는다).
+5. 스토어 '언어' 표기는 Apple이 바이너리의 현지화로 정한다. 정확한 규칙은 공식 문서에 없으므로 **출시 뒤 스토어 페이지에서 사람이 확인**한다(결과 기록에 적는다).
 
 **DoD**
 - introspect 출력에 언어 설정이 보이고, 운영 변형의 다른 값은 그대로다.
 - PostHog 새 속성 표 보고(방침 범위 안/밖 표시).
+- `analytics.ts`에 `disableGeoip: true`가 들어갔다(이벤트에 `$geoip_*`가 없는지는 Step 7에서 확인).
 - `tsc`·`lint` 통과. `package.json`의 네이티브 의존성 추가는 Step 3과 합쳐 셋뿐이다.
 
 ## Step 5 — 방침·앱 안 고지·영역 고지 문구 (에이전트 초안 → 사람 검토)
@@ -154,7 +159,8 @@
    - `privacy.html` 2절·3절, `privacy.ts`, 최초 영역 고지 Alert(`register.tsx:220` — 지금은 "텍스트를 찾지 못했습니다"로 시작해 버튼으로 열었을 때 사실과 다르다), 위 파일들의 주석.
 2. **Sentry 추가**: `privacy.html`에 오류 수집과 국외 이전 항목을 PostHog 절과 같은 형식으로 넣는다.
    - 수집 항목: 오류·크래시 정보(오류 종류, 발생 위치(스택), 앱 상태), 기기 기본 정보(모델·OS 버전·앱 버전), 설치별 무작위 식별자
-   - 수집하지 않는 항목: 사진·인식된 텍스트·사용자가 입력하거나 저장한 콘텐츠, IP 주소(저장하지 않음)
+   - 수집하지 않는 항목: 사진·인식된 텍스트·사용자가 입력하거나 저장한 콘텐츠, IP 주소(저장하지 않음), IP로 추정한 위치
+   - PostHog 절의 '수집하지 않는 항목'에도 IP로 추정한 위치를 적는다. IP는 Step 4에서 확인한 PostHog 설정에 맞춰 적는다.
    - 이전받는 자(법인명은 Sentry 방침에서 사람이 확인), 이전 국가(미국), 이전 일시·방법, 이용 목적(오류 분석·안정성 개선), 보유 기간(Step 0의 보존 기간)
    - Step 4에서 PostHog 새 속성이 방침 범위 밖으로 나왔으면 PostHog 절의 수집 항목에도 더한다.
 3. `privacy.ts`에 같은 내용을 한 문장으로 더한다(단일 소스 원칙 — 인앱 고지와 방침이 같은 말을 한다).
@@ -179,8 +185,8 @@
 3. 확인 항목
    - 사진 앱 공유 시트에 두 앱이 따로 보이고, 각각 자기 앱을 연다.
    - 개발용 앱에서 담기·OCR·저장이 동작한다(새 익명 계정).
-   - `EXPO_PUBLIC_SENTRY_DEV=1`로 띄워 "테스트 에러 발생"·"네이티브 크래시 테스트"가 Sentry에 `development` 환경으로 들어온다. 이벤트에 사용자 콘텐츠·IP가 없다.
-   - 설정의 "계측 토글(개발용)"을 켜고 이벤트를 하나 보내, PostHog Activity에서 Step 4 표의 새 속성이 보이는지 확인한다.
+   - `EXPO_PUBLIC_SENTRY_DEV=1`로 띄워 "테스트 에러 발생"·"네이티브 크래시 테스트"가 Sentry에 `development` 환경으로 들어온다. 이벤트에 사용자 콘텐츠·IP·위치(`geo`)가 없다.
+   - 설정의 "계측 토글(개발용)"을 켜고 이벤트를 하나 보내, PostHog Activity에서 Step 4 표의 새 속성이 보이는지 확인한다. `$geoip_*` 속성은 없어야 한다.
    - 스토어 앱은 그대로 열리고 기존 데이터가 보인다.
 4. 개발용 앱의 uid를 SQL Editor에서 `ops.internal_users`에 넣는다(uid는 git에 남기지 않는다).
 
@@ -209,6 +215,7 @@
 ## 미결 사항 (사람 결정)
 
 1. **Sentry 이벤트 목적 분류**(ASC 앱 개인정보): 앱 기능 / 분석.
+2. **방침의 Sentry 보유 기간 표기**(Step 5): Developer 플랜 기준 30일 / 체험 기간·상위 플랜까지 감싸는 '최대 90일'.
 
 ## 완료 기준 (Phase DoD)
 
@@ -240,6 +247,7 @@
 ## 결과 기록 (구현 세션이 채움)
 
 - **완료일**:
+- **Step 0(준비)**: org 슬러그 `wishshot`, project 슬러그 `wishshot`. 저장 위치 US(DSN 호스트 `ingest.us.sentry.io`로 확인). IP 저장 방지를 조직 단위로 켬(프로젝트는 잠긴 채 상속). Business 체험 14일(2026-11-05 시작), 결제 정보·결제 수단 없음 → 끝나면 Developer 플랜(요금 페이지 기준 보존 30일). EAS 환경 변수: `SENTRY_AUTH_TOKEN`(Secret, production·preview·development), `EXPO_PUBLIC_SENTRY_DSN`(Plain text, production). 로컬 `.env`에 DSN 추가. 위치 제거 규칙(`$user.geo.**`): 사람이 추가 예정.
 - **Step 1(ASO)**: 고른 이름 / 부제 / 키워드(바이트 수) /
   - 이름: `WishShot 위시샷 - 스크린샷 위시리스트` (25자)
   - 부제: `캡처 한 장으로 내 취향과 관심사 저장, 통합 장바구니` (30자)
@@ -253,6 +261,6 @@
 - **Step 5(방침)**: 바뀐 문장 목록 / 시행일 /
 - **Step 7(실기기)**: 체크 결과 /
 - **Step 8(제출)**: 빌드 번호 / 제출·승인·출시일 /
-- **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다.
+- **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다).
 - **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈.
 - **에이전트가 구현한 것**:
