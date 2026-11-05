@@ -2,11 +2,14 @@
 
 > **최소판으로 진행 (2026-10-27 결정 — 아래 본문보다 이 상자가 우선한다)**
 > - **왜 지금**: 이후 Phase에서 프롬프트나 LLM에 보내는 OCR 텍스트를 바꾼다(가격 정확도 개선, OCR 텍스트 개인정보 가리기 등). 바꾸고 나면 지금 버전을 같은 조건으로 잴 수 없다. 그래서 **프롬프트·입력을 바꾸기 전에 기준선 측정(Step 2~5)을 끝낸다**. 개선은 같은 정답셋(홀드아웃 포함)으로 다음 Phase에서 다시 잰다.
-> - **표본**: 30~40장, 패션·뷰티 화면 위주로 모은다.
+> - **표본**: 30~40장, 실제 쓰임대로 품목을 섞는다(생활용품·가구/인테리어·패션·뷰티·기타).
 >   - A 정가·할인가, B 할인가만, C 릴스·피드, D 추천 섞임 — 각 7~10장
 >   - E 외화 — 3~5장
 >   - F 텍스트 적음 — 생략
-> - **변형**: `v0`(10/04)·`v1`(현재)·`v1h`(현재 프롬프트 + 최신 Haiku), 각 3회. `v2`는 생략한다.
+>   - 2026-11-04 변경(사람 결정): 실제 사용자는 생활용품·가구를 많이 담는다. 그래서 '패션·뷰티 위주'를 '실제 쓰임대로 품목 섞기'로 바꿨다. 화면 유형 A~E와 장수는 그대로이고, 이미 캡처한 패션·뷰티 화면도 그대로 쓴다. 품목은 라벨 `item_category` 열에 적고, 결과를 품목별로도 나눠 본다. 품목별 장수 할당은 없다.
+> - **변형**: `v0`(10/04)·`v1`(현재)·`v2`(현재 프롬프트 + 당시 온도)·`v1h`(최신 Haiku, thinking 끔)·`v1h-think`(최신 Haiku, thinking 기본), 각 3회.
+>   - 2026-11-03 변경(Step 1): 최신 Haiku는 temperature 0을 받지 않는다(공식 문서: 생략해야 함 → 기본 1.0). 그래서 v1→v1h 비교에 온도 효과가 섞인다. 이를 나누려고 `v2`를 다시 넣었다(v0→v2 = 규칙 효과, v2→v1 = 온도 효과, v2→v1h = 모델 효과).
+>   - thinking은 최신 Haiku에서 기본으로 켜져 있다. 끈 경우와 켠 경우를 둘 다 잰다.
 > - **3일 일정**
 >   - 1일차: Step 0~1(에이전트), Step 2(캡처·담기)
 >   - 2일차: Step 3~5(내보내기·라벨링·실행)
@@ -82,6 +85,8 @@
 
 **브랜드(`brand_aliases`)**: 한·영 별칭을 `|`로 구분한다(예: `이솝|Aesop`). 하나라도 일치하면 정답이다.
 
+**품목(`item_category`)**: 주 상품의 품목 하나. `생활용품` / `가구·인테리어` / `패션` / `뷰티` / `전자` / `기타` 중에서 고른다(2026-11-04 추가). 정답 판정에는 쓰지 않고, 결과를 품목별로 나눠 보는 데만 쓴다.
+
 **라벨은 모델 출력을 보지 않고 붙인다.** 운영 함수의 출력(`parsed`)은 라벨링 시트에서 빼 둔다(Step 3).
 
 ## 2. 표본 설계
@@ -117,7 +122,7 @@
 | 보조 | 제품명 핵심어 포함, 브랜드 별칭 일치 |
 | 비용 | 응답 `usage`의 input/output 토큰 합계(변형별) |
 
-모든 지표는 **유형별(A~F)** 로도 나눠 보고한다.
+모든 지표는 **유형별(A~F)** 과 **품목별(`item_category`)** 로도 나눠 보고한다.
 
 ---
 
@@ -149,6 +154,12 @@
      - `v1` = 현재 `prompt.ts` + `TEMPERATURE`(0) + `MODEL`(현재 운영 모델)
      - `v1h` = 현재 `prompt.ts` + `TEMPERATURE`(0) + 최신 Haiku(5번에서 확인한 ID). 모델 ID는 실행기 안의 상수로만 둔다(`prompt.ts`의 `MODEL`은 바꾸지 않는다)
      - 선택 `v2` = 현재 프롬프트 + 당시 temperature. 규칙 효과와 온도 효과를 나눠 보려면 쓴다.
+     - **2026-11-03 확정(5번 확인 결과 반영)**: 최신 Haiku는 temperature 0을 거부하므로 `v1h`는 temperature를 **생략**(기본 1.0)한다. 변형은 다섯 개다.
+       - `v0`: 10/04 프롬프트 + temperature 생략 + `claude-haiku-4-5`
+       - `v1`: 현재 프롬프트 + temperature 0 + `claude-haiku-4-5`(운영과 같은 바디)
+       - `v2`: 현재 프롬프트 + temperature 생략 + `claude-haiku-4-5`
+       - `v1h`: 현재 프롬프트 + temperature 생략 + `claude-haiku-5-5`, `thinking: disabled`, effort `medium`, max_tokens 400
+       - `v1h-think`: 현재 프롬프트 + temperature 생략 + `claude-haiku-5-5`, `thinking: adaptive`(기본), effort `medium`, max_tokens 4000(생각 토큰 몫. 잘리면 `TRUNCATED`로 따로 셈)
    - **옵션**: `--runs 3`, `--variants v0,v1,v1h`, `--dry-run`(API를 부르지 않고 입력 검증과 호출 수만 출력), `--only-holdout` / `--exclude-holdout`
    - **출력**
      - `goldset/out/results.csv`: 행 = 장 × 변형 × 회차. 변형·모델 ID, price, productName, brand, confidence, usage 토큰을 담는다.
@@ -197,7 +208,7 @@ order by l.created_at;
 ## Step 4 — 라벨링 (사람)
 
 - `raw.csv`를 보고 `labels.csv`를 채운다(반나절 예상). 열은 다음과 같다.
-  - id, type(A~F), price_gold, price_list, price_sale, name_keywords, brand_aliases, holdout, note
+  - id, type(A~F), item_category(생활용품 / 가구·인테리어 / 패션 / 뷰티 / 전자 / 기타), price_gold, price_list, price_sale, name_keywords, brand_aliases, holdout, note
 - 애매한 행은 `note`에 사유를 적는다. 규칙에 없는 사례가 나오면 `LABELING.md`에 예를 추가한다(라벨 전부를 고친 뒤 측정 시작).
 - **홀드아웃**: 에이전트가 시드를 고정한 스크립트로 25%를 무작위 지정해 준다. 이후 프롬프트를 개선할 때는 홀드아웃을 보지 않고, 마지막 확인에만 쓴다.
 
@@ -209,14 +220,14 @@ order by l.created_at;
 deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
   --allow-read=supabase/functions/parse-screenshot-text/samples \
   --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/out \
-  supabase/functions/parse-screenshot-text/samples/goldset-eval.ts --runs 3 --variants v0,v1,v1h --dry-run
+  supabase/functions/parse-screenshot-text/samples/goldset-eval.ts --runs 3 --variants v0,v1,v2,v1h,v1h-think --dry-run
 ```
 - dry-run으로 호출 수를 확인한 뒤 `--dry-run`을 빼고 실행한다.
 - 비용은 실행기가 보고한 토큰 합계에 **공식 가격 페이지의 단가**(모델별)를 곱해 사람이 계산한다.
 
 **DoD**
 - `results.csv` 행 수 = 장 × 변형 × 3
-- `ERROR` 행은 재실행했거나 사유가 기록돼 있다
+- `ERROR` 행은 재실행했거나 사유가 기록돼 있다(같은 옵션에 `--retry-errors`를 붙이면 ERROR 행만 다시 부르고 summary를 다시 만든다)
 - 토큰 합계 기록(변형별)
 
 ## Step 6 — 집계와 리포트 (에이전트)
@@ -225,20 +236,24 @@ deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
 
 ```
 ## 정답셋 v1 — N장 (A a장 · B b장 · C c장 · D d장 · E e장 · F f장), 2026-MM-DD, 본인 캡처
+품목: 생활용품 ?장 · 가구·인테리어 ?장 · 패션 ?장 · 뷰티 ?장 · 전자 ?장 · 기타 ?장
 
-| 지표 | 10/04 프롬프트 | 10/20 프롬프트(현재) | 현재 프롬프트 + 최신 Haiku |
-|---|---|---|---|
-| 가격 정답 | ?/N | ?/N | ?/N |
-| 오추출(정답 없음인데 숫자) | ?/N_null | ?/N_null | ?/N_null |
-| 오값 | ?/N_num | ?/N_num | ?/N_num |
-| 누락 | ?/N_num | ?/N_num | ?/N_num |
-| 3회 일치 | ?/N | ?/N | ?/N |
-| 오답 중 저신뢰 안내 | ?/오답 | ?/오답 | ?/오답 |
-| 입력·출력 토큰 합계 | ? | ? | ? |
-| OCR에 정답 숫자 포함(공통) | ?/N_num | | |
+| 지표 | v0 10/04 프롬프트 | v1 현재(운영) | v2 현재 프롬프트 + 온도 1.0 | v1h 최신 Haiku(thinking 끔) | v1h-think 최신 Haiku(thinking 켬) |
+|---|---|---|---|---|---|
+| 가격 정답 | ?/N | ?/N | ?/N | ?/N | ?/N |
+| 오추출(정답 없음인데 숫자) | ?/N_null | ?/N_null | ?/N_null | ?/N_null | ?/N_null |
+| 오값 | ?/N_num | ?/N_num | ?/N_num | ?/N_num | ?/N_num |
+| 누락 | ?/N_num | ?/N_num | ?/N_num | ?/N_num | ?/N_num |
+| 3회 일치 | ?/N | ?/N | ?/N | ?/N | ?/N |
+| 오답 중 저신뢰 안내 | ?/오답 | ?/오답 | ?/오답 | ?/오답 | ?/오답 |
+| 입력·출력 토큰 합계 | ? | ? | ? | ? | ? |
+| OCR에 정답 숫자 포함(공통) | ?/N_num | | | | |
+
+- 효과 분리: v0→v2 = 10/20 규칙 효과, v2→v1 = 온도(1.0→0) 효과, v2→v1h = 모델 효과, v1h→v1h-think = thinking 효과
 
 - 기준값별 표(0.3~0.7, 현재 프롬프트 기준)
 - 유형별 정답표
+- 품목별 정답표(생활용품 / 가구·인테리어 / 패션 / 뷰티 / 전자 / 기타)
 - 실패 유형 Top 3
 - 다음 개선 후보 1개(한 번에 하나)
 - 한계: 본인 캡처 편향, 소표본, 텍스트 분기만
@@ -260,11 +275,50 @@ deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
 ## 결과 기록 (구현 세션이 채움)
 
 - **완료일**:
-- **Step 1**: raw_text·전송 텍스트 일치 여부 / 10/04 당시 temperature 기본값 / 최신 Haiku ID·지원 옵션·단가 /
+- **Step 1** (2026-11-03)
+  - **raw_text = 전송 텍스트(텍스트 분기)**: 일치한다. 실행기는 자르기·정규화를 재현할 필요가 없다.
+    - 흐름: `VisionOcrEngine`이 줄을 `\n`으로 잇는다 → `useAnalysis.analyze`가 `ocr.text.trim()`한 **같은 문자열**을 상태 `rawText`에 넣고 `parseScreenshotText(rawText)`로 보낸다.
+    - Edge Function은 `body.text`를 그대로 user content로 쓴다(trim은 빈 값 검사에만 씀).
+    - 저장 시 `register.tsx`가 같은 `analysisState.rawText`를 `analysis_logs.raw_text`로 기록한다. 재시도(`reparse`)도 같은 문자열이다.
+  - **운영과 다른 점(의도)**
+    - 카테고리를 보내지 않는다(운영은 사용자 카테고리 목록을 함께 보냄 → 시스템 프롬프트 끝 한 줄이 다름).
+    - 원문이 20자 미만이면 앱은 텍스트 정제를 부르지 않고 영역 지정 시트로 간다. 실행기도 같은 기준으로 건너뛰고 'OCR 부족'으로 센다.
+    - 이미지 분기 행(`parsed.source = 'image_region'`)은 운영 출력이 이미지 기반이다. 측정은 텍스트 분기로 다시 돌린다.
+    - 로그는 저장했을 때만 남는다.
+  - **10/04 당시 temperature**: 요청에 필드가 없었다 → API 기본값 **1.0**. 공식 문서 「Migrating to API version 2026-10-21」: "Without these parameters, a request samples with their defaults, including a `temperature` of 1.0, the same as a `2023-06-01` request that leaves them out."
+  - **최신 Haiku**: `claude-haiku-5-5`(2026-10-07 출시, 날짜 접미사·별칭 없음).
+    - 구조화 출력(`output_config` json_schema): 지원(구조화 출력 문서 지원 모델 목록).
+    - **temperature**: 생략해야 한다("Omit `temperature`, `top_p`, and `top_k`") → **0 불가 → 멈추고 보고 → 사람 결정**.
+    - thinking: adaptive가 기본으로 켜져 있고 effort 기본 `medium`. 생각 토큰도 `max_tokens`에 포함된다.
+    - 단가: 입력 $0.10, 출력 $0.50 /MTok(프롬프트 10만 토큰 이하. 초과 시 $0.50 / $2.50). Haiku 4.5는 $1 / $5. 같은 글이 약 30% 더 많은 토큰이 된다(토크나이저 변경).
+  - **검증**
+    - `deno check` 통과.
+    - fixture dry-run: 변형 5 · 측정 3장 · 총 호출 45회.
+    - API 없이 돌린 검증 59건 통과: v1 바디 = 운영 index.ts 바디 바이트 동일, v0 바디 = 10/04 바디, 응답 처리(thinking 블록·잘림·거부·깨진 출력·재시도·ERROR), 판정(다수결·불안정·응답 부족·오추출/오값/누락), 라벨 검증(품목 포함), 인코딩·CR 검사, 품목별 집계.
+    - `--retry-errors`: 키 없이 summary 재생성, 키가 없으면 중단, 옵션 불일치 시 중단을 확인했다.
+    - 데이터·결과 폴더가 git에 잡히지 않음.
+    - 별도 리뷰어 검토 후 반영:
+      - ERROR가 섞인 장을 '불안정'이 아니라 '응답 부족'으로 분리하고 저신뢰 지표에서 제외.
+      - 유형별로 전체 지표 표를 출력.
+      - UTF-8이 아닌 CSV(엑셀 CP949)와 원문 CR을 감지해 중단.
+      - 빈 출력·깨진 JSON은 재시도하지 않고 `BAD_OUTPUT`으로 기록. 재시도로 성공한 경우 첫 오류 코드를 보존.
+      - 저신뢰 판정을 '안내가 뜬 회차가 과반'으로 정의.
 - **Step 2**: 유형별 개수 / 수집 시각 /
 - **Step 3**: 행 수·status 분포 /
 - **Step 5**: 총 호출 수·ERROR 처리·변형별 토큰 /
 - **Step 6**: 리포트 요약(변형별 가격 정답) /
-- **사람이 정한 것**:
-- **에이전트가 제안해 채택한 것**:
-- **에이전트가 구현한 것**:
+- **사람이 정한 것**
+  - (2026-11-03) 최신 Haiku는 thinking 끔(`v1h`)·켬(`v1h-think`) 둘 다 측정한다.
+  - (2026-11-03) 생략했던 `v2`를 다시 넣는다. 규칙·온도·모델 효과를 나누기 위해서다.
+  - (2026-11-04) 표본을 '패션·뷰티 위주'에서 '실제 쓰임대로 품목 섞기(생활용품·가구/인테리어·패션·뷰티·기타)'로 바꾼다. 실제 사용자는 생활용품·가구를 많이 담기 때문이다. 화면 유형 A~E와 장수는 그대로이고, 이미 캡처한 패션·뷰티 화면은 유지한다. 라벨에 `item_category` 열을 더하고 summary에 품목별 표를 넣는다.
+- **에이전트가 제안해 채택한 것**
+  - `v2` 재도입(온도 효과 분리).
+  - `v1h-think`의 max_tokens 4000.
+  - 라벨 잠정 처리안(가격 범위·묶음가·외화+원화 환산·회원가 — LABELING.md 3절, 라벨링 시작 전 확인).
+- **에이전트가 구현한 것**
+  - `.gitignore`(data·out).
+  - `.gitattributes`(fixture CSV를 LF로 고정. 이 저장소는 autocrlf라 체크아웃 때 CR이 섞이면 CR 검사에 걸린다).
+  - `samples/goldset/LABELING.md`.
+  - `samples/prompt-2026-10-04.ts`(2a484b6 고정 사본 — 원본 블록과 글자 단위 대조).
+  - `samples/goldset-eval.ts`(5변형·다수결·지표·유형별·품목별 표·`--dry-run`·홀드아웃 옵션·`--force` 덮어쓰기 보호·`--retry-errors`·`--crlf-to-lf`).
+  - `samples/goldset/fixture/`(가상 3행).
