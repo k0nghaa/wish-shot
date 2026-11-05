@@ -252,8 +252,9 @@
 ## 결과 기록 (구현 세션이 채움)
 
 - **완료일**:
-- **Step 0(준비)**: org 슬러그 `wishshot`, project 슬러그 `wishshot`. 저장 위치 US(DSN 호스트 `ingest.us.sentry.io`로 확인). IP 저장 방지를 조직 단위로 켬(프로젝트는 잠긴 채 상속). Business 체험 14일(2026-11-05 시작), 결제 정보·결제 수단 없음 → 끝나면 Developer 플랜(요금 페이지 기준 보존 30일). EAS 환경 변수: `SENTRY_AUTH_TOKEN`(Secret, production·preview·development), `EXPO_PUBLIC_SENTRY_DSN`(Plain text, production). 로컬 `.env`에 DSN 추가. 위치 제거 규칙(`$user.geo.**`): 사람이 추가 예정.
+- **Step 0(준비)**: org 슬러그 `wishshot`, project 슬러그 `wishshot`. 저장 위치 US(DSN 호스트 `ingest.us.sentry.io`로 확인). IP 저장 방지를 조직 단위로 켬(프로젝트는 잠긴 채 상속). Business 체험 14일(2026-11-05 시작), 결제 정보·결제 수단 없음 → 끝나면 Developer 플랜(요금 페이지 기준 보존 30일). EAS 환경 변수: `SENTRY_AUTH_TOKEN`(Secret, production·preview·development), `EXPO_PUBLIC_SENTRY_DSN`(Plain text, production). 로컬 `.env`에 DSN 추가. 위치 제거 규칙: 프로젝트 Security & Privacy → Advanced Data Scrubbing에 `[Remove] [Anything] from [$user.geo.**]`(Dataset: Errors, Transactions, Attachments) 저장 완료.
   - PostHog 확인(2026-11-05, 최근 7일 이벤트 99건): `$ip`가 있는 이벤트 0건(IP는 이벤트에 저장되지 않음). `$geoip_country_code`가 있는 이벤트 99건(전부) → 1.0.1도 IP로 추정한 위치를 남기고 있었다. 앱 업데이트를 기다리지 않고 PostHog 서버 설정의 GeoIP 변환을 끄기로 함(사람). Step 4의 `disableGeoip: true`는 그대로 넣는다.
+  - PostHog GeoIP 끔(2026-11-05): Data pipelines → Transformations → GeoIP를 Paused로 바꿈. 15:52(PostHog 표시 시각) 이후 이벤트에는 `$geoip_country_code`가 없음을 쿼리로 확인했다. 그 전에 쌓인 이벤트·사람 속성의 위치는 남아 있다(GeoIP는 수집 시점에만 붙고 소급 삭제되지 않는다). 'Discard client IP data'(IP 버리기)는 켠 채로 둔다. 이 설정만으로는 위치가 지워지지 않는다(PostHog 문서: GeoIP가 IP를 버리기 전에 실행됨).
 - **Step 1(ASO)**: 고른 이름 / 부제 / 키워드(바이트 수) /
   - 이름: `WishShot 위시샷 - 스크린샷 위시리스트` (25자)
   - 부제: `캡처 한 장으로 내 취향과 관심사 저장, 통합 장바구니` (30자)
@@ -279,9 +280,25 @@
   - 캡슐화: `@sentry/react-native`·`posthog-react-native`를 래퍼 밖에서 import하면 lint 오류가 난다(`eslint.config.js` `no-restricted-imports`).
   - 확인: introspect 운영·개발 모두 Step 2 대비 달라진 것은 Sentry 플러그인과 privacy manifest뿐이다. `tsc`·`lint` 통과. `expo-doctor` 21개 중 20개 통과(실패 1건은 기존 Expo 패키지 14개 패치 버전 불일치, Sentry 무관, `--fix` 안 함). OTA 소스맵 명령 `sentry-expo-upload-sourcemaps`가 7.11에 있음을 확인했다.
 - **Step 4(언어)**: 택한 방식 / 출시 뒤 스토어 표기 /
+  - 설치: `npx expo install`이 `expo-application ~57.0.3`·`expo-localization ~57.0.2`를 넣었다. Expo 서버가 알려 준 SDK 57 호환 버전이라 로컬 `bundledNativeModules.json`(~57.0.2·~57.0.1)보다 패치가 하나 높지만, 지시서 범위(`~57.0.2`·`~57.0.1`)에 들어간다. Step 3·4를 합친 네이티브 의존성 추가는 `@sentry/react-native`·`expo-application`·`expo-localization` 셋이고, 기존 의존성 버전은 바뀌지 않았다.
+  - PostHog 속성 변화(`posthog-react-native` 4.78.4 `native-deps.js` 확인 — 설치된 모듈을 자동으로 쓴다, `analytics.ts` 변경 불필요):
+
+    | 출처 | 속성 | 이전 | 이후 | 방침 범위 |
+    |---|---|---|---|---|
+    | expo-application | `$app_version`·`$app_build` | 없음 | 수집 | 안(앱 버전) |
+    | expo-application | `$app_name`·`$app_namespace`(번들 ID) | 없음 | 수집 | 안(앱 정보, 개인정보 아님) — 개발용 앱은 `.dev`로 구분된다 |
+    | expo-localization | `$locale`(예: `ko-KR`) | 없음 | 수집 | **밖 → Step 5에서 '언어 설정' 추가** |
+    | expo-localization | `$timezone`(예: `Asia/Seoul`) | 없음 | 수집 | **밖 → Step 5에서 '시간대 설정' 추가** |
+    | expo-device(이미 설치) | `$device_manufacturer`·`$device_name`(모델명)·`$os_name`·`$os_version`·`$is_emulator` | 수집 | 수집 | 안 |
+    | SDK 기본 | `$device_type`·`$screen_width`·`$screen_height`·`$lib`·`$lib_version` | 수집 | 수집 | 안 |
+
+    `$app_build`가 생기면서 앱 라이프사이클 이벤트 `Application Installed`·`Application Updated`가 처음으로 발생한다. 지금까지는 SDK가 빌드 번호를 몰라서 만들지 못했다(Step 6에서 tracking-plan에 반영).
+  - 위치 추정 끄기: `analytics.ts`에 `disableGeoip: true`. SDK가 이벤트마다 `$geoip_disable`를 붙인다(`@posthog/core` 1.55.3 코드 확인).
+  - iOS 언어: `expo-localization` 플러그인 `supportedLocales: { ios: ['ko'] }` → Info.plist에 `CFBundleLocalizations: ["ko"]`만 추가된다(플러그인 코드·introspect 확인). `CFBundleDevelopmentRegion`은 플러그인이 건드리지 않아 `$(DEVELOPMENT_LANGUAGE)`(Xcode 기본 en)로 남는다 → 사람이 `ko`로 함께 지정하기로 함(`app.json` `ios.infoPlist.CFBundleDevelopmentRegion: "ko"`). 앱 글자는 원래 한국어 전용이다. 기기 언어와 맞는 지원 언어가 없을 때 쓰는 대체 언어가 ko가 되어, 영어 기기에서도 iOS 기본 UI가 한국어로 맞춰진다. 바이너리에서 영어 신호도 없어진다. 글로벌 확장 때 다음 네이티브 빌드에서 바꿀 수 있다.
+  - introspect: 운영·개발 모두 Step 3 대비 달라진 것은 `CFBundleLocalizations`, 플러그인 목록, 자동 연결 모듈 목록(두 모듈 추가)뿐이다. `tsc`·`lint` 통과. iOS 번들 export 성공(5,705,020 → 5,715,380바이트, +10KB).
 - **Step 5(방침)**: 바뀐 문장 목록 / 시행일 /
 - **Step 7(실기기)**: 체크 결과 /
 - **Step 8(제출)**: 빌드 번호 / 제출·승인·출시일 /
-- **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다).
+- **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다). PostHog 서버의 GeoIP 변환도 바로 껐다. iOS 개발 기본 언어(`CFBundleDevelopmentRegion`)를 `ko`로 지정하기로 했다.
 - **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈. 개발 서버 명령에 `--scheme wishshot-dev` 추가(`exp+wish-shot` 충돌 우회). Sentry 네이티브 자동 기록(네트워크·화면 제목) 끄기, 렌더 오류 경계, URL·메시지 거르기 범위, SDK import lint 규칙.
-- **에이전트가 구현한 것**: `app.config.js`(`APP_VARIANT=development`일 때만 이름·번들 ID·scheme·공유 확장 블록을 덮어씀. 확장 블록이 1개가 아니면 설정 단계에서 멈춤), `eas.json` development 프로필의 `env.APP_VARIANT`. `src/lib/monitoring.ts`(초기화·거르기·렌더 오류 경계·`wrapRoot`), `_layout.tsx` 연결, 설정의 `__DEV__` "네이티브 크래시 테스트"·"렌더 오류 테스트", `metro.config.js`, `app.json`(Sentry 플러그인·privacy manifest), `.env.example`, `eslint.config.js`.
+- **에이전트가 구현한 것**: `app.config.js`(`APP_VARIANT=development`일 때만 이름·번들 ID·scheme·공유 확장 블록을 덮어씀. 확장 블록이 1개가 아니면 설정 단계에서 멈춤), `eas.json` development 프로필의 `env.APP_VARIANT`. `src/lib/monitoring.ts`(초기화·거르기·렌더 오류 경계·`wrapRoot`), `_layout.tsx` 연결, 설정의 `__DEV__` "네이티브 크래시 테스트"·"렌더 오류 테스트", `metro.config.js`, `app.json`(Sentry 플러그인·privacy manifest), `.env.example`, `eslint.config.js`. `expo-application`·`expo-localization` 설치와 `expo-localization` 플러그인(`supportedLocales.ios: ['ko']`), `CFBundleDevelopmentRegion: "ko"`, `analytics.ts`의 `disableGeoip: true`.
