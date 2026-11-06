@@ -201,10 +201,10 @@
 
 1. PR 머지 → `dev`에서 `release/v1.0.2` 분기 → `app.json` `version`을 `1.0.2`로 올린다. 빌드 번호는 `autoIncrement`.
 2. `npx eas-cli build --platform ios --profile production` → 빌드 로그에서 소스맵 업로드 성공 확인 → `npx eas-cli submit --platform ios --profile production --latest`.
-3. TestFlight 내부 테스터로 회귀 확인(담기·공유 시트·OCR·편집·링크·온보딩). 스토어 앱 자리에 설치되므로 기존 데이터가 그대로인지 함께 본다.
+3. TestFlight 내부 테스터로 회귀 확인(담기·공유 시트·OCR·편집·링크·온보딩). 스토어 앱 자리에 설치되므로 기존 데이터가 그대로인지 함께 본다. (1.0.2에서는 개발자 기기의 정답셋 데이터를 지키려고 하지 않았다 — 결과 기록 Step 8)
 4. App Store Connect
    - 새 버전: 이름·부제·키워드(Step 1 결과), 새로운 기능 문구
-   - 앱 개인정보: Sentry 수집 유형 반영 — '기타 진단 데이터'를 새로 추가한다(Sentry만 수집, 설치별 무작위 ID라 사용자와 연결 안 됨, 추적 안 함). '충돌 데이터'는 이미 PostHog `app_error`로 "연결됨=예"로 선언돼 있다(tracking-plan §5). ASC는 같은 유형을 한 번만 선언하고 하나라도 연결되면 '연결됨'이므로 그대로 두고 목적만 확인한다. 목적은 Sentry 문서 기준 앱 기능/분석 중 사람이 판단한다. tracing을 껐으므로 성능 데이터는 넣지 않는다.
+   - 앱 개인정보: Sentry 수집 유형 반영 — '기타 진단 데이터'를 새로 추가한다(Sentry만 수집, 설치별 무작위 ID라 사용자와 연결 안 됨, 추적 안 함). '충돌 데이터'는 이미 PostHog `app_error`로 "연결됨=예"로 선언돼 있다(tracking-plan §5). ASC는 같은 유형을 한 번만 선언하고 하나라도 연결되면 '연결됨'이므로 그대로 두고 목적만 확인한다. 목적은 Sentry 문서 기준 앱 기능/분석 중 사람이 판단한다(→ 앱 기능으로 확정). **성능 데이터도 넣는다**(1.0.2 정정): tracing을 꺼도 Sentry iOS의 기본 '앱 멈춤' 보고가 Apple 정의의 성능 데이터(hang rate)에 해당한다.
    - 출시 옵션은 **수동 출시**로 둔다(아래 배포 순서 3).
 5. 심사 제출.
 
@@ -213,22 +213,23 @@
 1. ASC 앱 개인정보 반영(언제든 가능·재심사 없음)
 2. 심사 제출(수동 출시)
 3. 승인 뒤 **출시 버튼을 누르기 전에** `release/v1.0.2` → `main` 머지로 GitHub Pages 방침을 갱신하고 노션 방침 페이지를 동기화한다(사람). 방침 URL에서 개정 내용이 보이는지 확인한다.
+   - 1.0.2 실제: 앱 개인정보 라벨과 게시 방침이 심사 중 어긋나지 않게 **심사 제출 전에** 방침 파일만 `main`에 먼저 게시했다(PR #33). 결과 기록 Step 8 참고.
 4. 출시 → `main`에 태그 `v1.0.2` → `dev` 역머지(Phase 8 Step 0-3).
 
 ---
 
 ## 미결 사항 (사람 결정)
 
-1. **Sentry 이벤트 목적 분류**(ASC 앱 개인정보): 앱 기능 / 분석.
-2. **방침의 Sentry 보유 기간 표기**(Step 5): Developer 플랜 기준 30일 / 체험 기간·상위 플랜까지 감싸는 '최대 90일'.
+1. **Sentry 이벤트 목적 분류**(ASC 앱 개인정보): 앱 기능 / 분석. → **앱 기능**으로 확정(결과 기록 Step 8).
+2. **방침의 Sentry 보유 기간 표기**(Step 5): Developer 플랜 기준 30일 / 체험 기간·상위 플랜까지 감싸는 '최대 90일'. → **최대 90일**로 확정(결과 기록 Step 5).
 
 ## 완료 기준 (Phase DoD)
 
-- [ ] Step 1~6 DoD 충족, `tsc`·`lint` 통과, 네이티브 의존성 추가는 의도한 것뿐
-- [ ] 운영 변형 introspect 결과가 의도한 변경 외 동일
-- [ ] 사람 확인: 개발용 앱 나란히 설치·공유 시트 분리·Sentry 수신(콘텐츠·IP 없음)
-- [ ] 방침·앱 안 고지·ASC 앱 개인정보 반영 후 출시
-- [ ] CLAUDE.md·README·tracking-plan 갱신 포함 PR(템플릿 구조)
+- [x] Step 1~6 DoD 충족, `tsc`·`lint` 통과, 네이티브 의존성 추가는 의도한 것뿐
+- [x] 운영 변형 introspect 결과가 의도한 변경 외 동일
+- [x] 사람 확인: 개발용 앱 나란히 설치·공유 시트 분리·Sentry 수신(콘텐츠·IP 없음)
+- [x] 방침·앱 안 고지·ASC 앱 개인정보 반영 후 출시
+- [x] CLAUDE.md·README·tracking-plan 갱신 포함 PR(템플릿 구조)
 
 ## 근거·출처
 
@@ -251,7 +252,7 @@
 
 ## 결과 기록 (구현 세션이 채움)
 
-- **완료일**:
+- **완료일**: 2026-11-06(1.0.2 출시)
 - **Step 0(준비)**: org 슬러그 `wishshot`, project 슬러그 `wishshot`. 저장 위치 US(DSN 호스트 `ingest.us.sentry.io`로 확인). IP 저장 방지를 조직 단위로 켬(프로젝트는 잠긴 채 상속). Business 체험 14일(2026-11-05 시작), 결제 정보·결제 수단 없음 → 끝나면 Developer 플랜(요금 페이지 기준 보존 30일). EAS 환경 변수: `SENTRY_AUTH_TOKEN`(Secret, production·preview·development), `EXPO_PUBLIC_SENTRY_DSN`(Plain text, production). 로컬 `.env`에 DSN 추가. 위치 제거 규칙: 프로젝트 Security & Privacy → Advanced Data Scrubbing에 `[Remove] [Anything] from [$user.geo.**]`(Dataset: Errors, Transactions, Attachments) 저장 완료.
   - PostHog 확인(2026-11-05, 최근 7일 이벤트 99건): `$ip`가 있는 이벤트 0건(IP는 이벤트에 저장되지 않음). `$geoip_country_code`가 있는 이벤트 99건(전부) → 1.0.1도 IP로 추정한 위치를 남기고 있었다. 앱 업데이트를 기다리지 않고 PostHog 서버 설정의 GeoIP 변환을 끄기로 함(사람). Step 4의 `disableGeoip: true`는 그대로 넣는다.
   - PostHog GeoIP 끔(2026-11-05): Data pipelines → Transformations → GeoIP를 Paused로 바꿈. 15:52(PostHog 표시 시각) 이후 이벤트에는 `$geoip_country_code`가 없음을 쿼리로 확인했다. 그 전에 쌓인 이벤트·사람 속성의 위치는 남아 있다(GeoIP는 수집 시점에만 붙고 소급 삭제되지 않는다). 'Discard client IP data'(IP 버리기)는 켠 채로 둔다. 이 설정만으로는 위치가 지워지지 않는다(PostHog 문서: GeoIP가 IP를 버리기 전에 실행됨).
@@ -297,6 +298,7 @@
   - 위치 추정 끄기: `analytics.ts`에 `disableGeoip: true`. SDK가 이벤트마다 `$geoip_disable`를 붙인다(`@posthog/core` 1.55.3 코드 확인).
   - iOS 언어: `expo-localization` 플러그인 `supportedLocales: { ios: ['ko'] }` → Info.plist에 `CFBundleLocalizations: ["ko"]`만 추가된다(플러그인 코드·introspect 확인). `CFBundleDevelopmentRegion`은 플러그인이 건드리지 않아 `$(DEVELOPMENT_LANGUAGE)`(Xcode 기본 en)로 남는다 → 사람이 `ko`로 함께 지정하기로 함(`app.json` `ios.infoPlist.CFBundleDevelopmentRegion: "ko"`). 앱 글자는 원래 한국어 전용이다. 기기 언어와 맞는 지원 언어가 없을 때 쓰는 대체 언어가 ko가 되어, 영어 기기에서도 iOS 기본 UI가 한국어로 맞춰진다. 바이너리에서 영어 신호도 없어진다. 글로벌 확장 때 다음 네이티브 빌드에서 바꿀 수 있다.
   - introspect: 운영·개발 모두 Step 3 대비 달라진 것은 `CFBundleLocalizations`, 플러그인 목록, 자동 연결 모듈 목록(두 모듈 추가)뿐이다. `tsc`·`lint` 통과. iOS 번들 export 성공(5,705,020 → 5,715,380바이트, +10KB).
+  - 출시 뒤 스토어 표기(2026-11-06 확인): KR 스토어 페이지 '언어' **한국어**(1.0.1까지 영어), iTunes 조회 API `languageCodesISO2A: ["KO"]`(이전 `["EN"]`). 이름도 `WishShot 위시샷 - 스크린샷 위시리스트`로 반영됐다.
 - **Step 5(방침)**: 바뀐 문장 목록 / 시행일 /
   - `privacy.html`: 개정일 2026-11-05(초안 날짜 — main 머지로 게시할 때(배포 순서 3) 실제 게시일로 맞춘다). §1에 '언어·시간대 설정'과 '오류·크래시 정보' 항목 추가. §2·§3의 영역 전송 문구를 "텍스트가 부족하거나 사용자가 ‘제품 영역으로 분석’을 누른 경우, 사용자가 직접 선택한 제품 영역 이미지만 ‘분석’을 누를 때 전송"으로 정정. §4(PostHog)의 수집 항목에 '언어·시간대 설정', 수집하지 않는 항목에 'IP로 추정한 위치'를 더함. IP는 "전송 과정에서 전달되지만 저장하지 않음"으로 별도 줄에 적음(아예 보내지 않는 콘텐츠와 구분 — 사람 검토 반영, §5도 같음). §5 '오류·크래시 수집 및 국외 이전'(Sentry)을 PostHog 절과 같은 형식으로 새로 넣음. 수집 항목: 오류 종류·발생 위치·오류 직전의 화면 터치 기록·앱 실행·종료 상태(처음 초안의 '앱이 보낸 서버 요청의 주소'는 Step 7에서 실제로 수집되지 않음을 확인해 사람 결정으로 뺌 — 필터도 네트워크 기록을 버리게 맞춤), 기기 정보(모델·OS·앱 버전·언어 설정·메모리·배터리 등 기기 상태 — sentry-cocoa 8.58 소스 확인), 설치별 무작위 식별자. 수집하지 않는 항목에 익명 계정 식별자·위치. 이전받는 자 Functional Software, Inc. d/b/a Sentry (compliance@sentry.io — Sentry 방침 14절, 사람 확인 완료). 보유 기간 '수집일로부터 최대 90일'(사람 결정 — 체험·상위 플랜까지 포괄). 이후 절 번호를 하나씩 미룸(인증 6 ~ 문의 10).
   - `privacy.ts`: 같은 내용을 네 문단으로 맞춤(영역 전송 정정, PostHog 언어·시간대, Sentry 한 문장(최대 90일 포함), 두 서비스 공통 '콘텐츠 미수집·IP와 위치 미저장').
@@ -312,6 +314,21 @@
   - 개발용 앱 uid를 `ops.internal_users`에 넣음(uid는 git에 남기지 않음).
   - 진행 중 겪은 일: (1) Apple 개발자 약관(PLA) 갱신 미동의로 새 번들 ID 등록이 403 → 사람이 developer.apple.com에서 동의한 뒤 통과. (2) development 빌드가 "Runtime version calculated on local machine not equal…"로 실패 — 에이전트가 패키지 코드를 조사하며 `node_modules` 안으로 작업 위치를 옮겨 보조 도구 상태 폴더(`.omc`)가 생겼고, 이게 로컬 fingerprint에만 섞였다. 지운 뒤 `APP_VARIANT=development npx expo-updates fingerprint:generate --platform ios`가 EAS 값과 일치했고 다시 빌드해 성공. (3) `--clear`로 띄운 첫 연결이 번들 생성 중 시간 초과로 "Could not connect" → 다시 불러오기로 해결. 네이티브 크래시 뒤 재실행 때도 같은 오류가 나서 앱을 다시 열어 해결.
 - **Step 8(제출)**: 빌드 번호 / 제출·승인·출시일 /
+  - 빌드 12(EAS `b6b4c5e4-18f7-4561-b43a-4922029175a4`). `a167f6f`(버전 1.0.2)에서 빌드했다. 그 뒤 `release/v1.0.2`의 커밋은 방침 개정일 문서(`8401015`)뿐이라 앱 내용은 같다. 제출·승인·출시 모두 2026-11-06(스토어 출시 시각 16:40 KST — iTunes 조회 API `currentVersionReleaseDate`).
+  - 출시 방식(사람 결정): 수동 출시, 단계적 출시 안 함. 실사용자가 적어 단계적 출시로는 1.0.2의 효과를 가려내기 어렵고, 사용자가 바로 업데이트하지도 않는다.
+  - Sentry 업로드(빌드 12 Xcode 로그): 소스맵 artifact bundle 업로드 성공(Bundle ID `1ea04045-bfa1-576c-bf04-1b221ae4161a`, release `com.k0nghaa.wishshot@1.0.2+12`, dist `12`, debug id `7f3998ba-16a5-4f92-8da7-7906a981464e`). 디버그 심볼 27개 업로드(본 앱·ShareExtension 포함). EAS는 JS를 "Bundle JavaScript" 단계에서 따로 묶지만, Xcode 번들 단계에서 Sentry가 다시 묶어 올린다(로그는 EAS 빌드 화면의 Xcode logs).
+    - `WARN Using https://sentry.io (embedded in token) rather than … https://sentry.io/`: 플러그인 `url` 끝의 `/` 차이라 무해하다. 없애려면 다음 네이티브 빌드에서 `app.json` Sentry 플러그인 `url`을 `https://sentry.io`로 바꾼다.
+  - TestFlight 회귀를 개발자 기기에서 하지 않음(사람 결정): 개발자 아이폰 스토어 앱에 Phase 13 정답셋 데이터가 있다. TestFlight 설치 경고("데이터를 유실할 수 있습니다")의 위험을 피하려고 3번(회귀 확인)을 건너뛰었다. 대신 수동 출시 뒤 관찰한다(Sentry Issues `production`의 1.0.2 신규 오류, PostHog App namespace Breakdown에 `com.k0nghaa.wishshot` 줄이 생기고 내부 사용자 필터를 켜도 남는지). 개발자 기기는 자동 업데이트를 잠시 끄고 며칠 뒤 마지막에 App Store로 업데이트해 정답셋 데이터가 남는지 확인한다(삭제·재설치·TestFlight 교체 금지).
+  - ASC 앱 개인정보(사람 반영): 진단 > '성능 데이터'·'기타 진단 데이터' 추가(목적 앱 기능, 사용자와 연결 안 됨, 추적 안 함). '충돌 데이터'는 연결됨=예를 유지하고(PostHog `app_error`) 목적에 앱 기능을 더했다. 언어·시간대는 위치 유형이 아니라 따로 선언하지 않았다.
+    - **지시서 정정**: 성능 데이터는 tracing을 꺼도 넣는다. Sentry iOS의 기본 '앱 멈춤' 보고가 Apple 정의의 hang rate에 해당한다. 목적 '앱 기능'의 근거는 Apple 정의의 "minimize app crashes"다. 미결 사항 1은 앱 기능으로 확정.
+  - 방침 게시 순서 변경: 배포 순서는 "승인 뒤 출시 직전 게시"였다. 앱 개인정보 라벨(진단 데이터)과 게시 방침이 심사 중에 어긋나지 않도록 **심사 제출 전에 방침 파일만 먼저 게시**했다(PR #33 `docs/privacy-v1.0.2` → `main`, 2026-11-06 03:11 KST 머지). 고지가 수집보다 앞서므로 고지 선행 원칙(불변식 8)에도 맞다. 개정일은 게시일 2026-11-06(`8401015`). 노션 방침 페이지 동기화 완료(11곳 교체).
+  - '이 버전의 새로운 기능'(ASC 입력본):
+    ```
+    • 안정성 개선: 앱이 멈추거나 오류가 났을 때 원인을 빠르게 찾아 고칠 수 있도록 오류 정보를 수집합니다. 사진·인식된 글자·입력한 내용은 수집하지 않습니다. 자세한 내용은 개인정보처리방침에서 확인할 수 있습니다.
+    • 한국어 표시 개선: 앱 안의 기본 메뉴와 버튼이 한국어로 표시됩니다.
+    • 제품 영역 지정 안내 문구를 실제 동작에 맞게 다듬었습니다.
+    ```
+  - 릴리스 반영: `release/v1.0.2` → `main` PR #34. 1.0.1은 `main`에 머지되지 않은 채 출시돼서 #34에 함께 들어갔다. 태그 `v1.0.1`은 빌드 11의 커밋 `c553101`에 소급해 달았다(2026-11-06, EAS 빌드 기록으로 커밋 확인).
 - **사람이 정한 것**: ASO 후보 3안 중 A안(이름에 '스크린샷 위시리스트')을 골랐고, 부제 문구는 직접 썼다. IP로 추정한 위치를 Sentry·PostHog 모두 끄기로 했다(필요해지면 고지한 뒤 켠다). PostHog 서버의 GeoIP 변환도 바로 껐다. iOS 개발 기본 언어(`CFBundleDevelopmentRegion`)를 `ko`로 지정하기로 했다. Sentry 보유 기간을 '최대 90일'로 적었다. 방침 §5에서 '서버 요청의 주소'를 뺐다(실제로 수집되지 않음). PostHog에서 개발용 앱 이벤트는 `$app_namespace` 조건으로 한 번에 제외하기로 했다.
 - **에이전트가 제안해 채택한 것**: 키워드를 모두 3자 이상으로 구성(2자 이하는 구로만 넣음). 부제에 `장바구니`가 들어가면서 키워드의 `장바구니`를 `구매목록`으로 바꿈. 개발 서버 명령에 `--scheme wishshot-dev` 추가(`exp+wish-shot` 충돌 우회). Sentry 네이티브 자동 기록(네트워크·화면 제목) 끄기, 렌더 오류 경계, URL·메시지 거르기 범위, SDK import lint 규칙. 문서의 `eas env:create`(deprecated)를 `env:set`으로 교체. 방침에서 IP를 "전송 과정에서 전달되지만 저장하지 않음"으로 따로 적기.
 - **에이전트가 구현한 것**: `app.config.js`(`APP_VARIANT=development`일 때만 이름·번들 ID·scheme·공유 확장 블록을 덮어씀. 확장 블록이 1개가 아니면 설정 단계에서 멈춤), `eas.json` development 프로필의 `env.APP_VARIANT`. `src/lib/monitoring.ts`(초기화·거르기·렌더 오류 경계·`wrapRoot`), `_layout.tsx` 연결, 설정의 `__DEV__` "네이티브 크래시 테스트"·"렌더 오류 테스트", `metro.config.js`, `app.json`(Sentry 플러그인·privacy manifest), `.env.example`, `eslint.config.js`. `expo-application`·`expo-localization` 설치와 `expo-localization` 플러그인(`supportedLocales.ios: ['ko']`), `CFBundleDevelopmentRegion: "ko"`, `analytics.ts`의 `disableGeoip: true`.
