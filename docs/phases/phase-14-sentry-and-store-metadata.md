@@ -319,6 +319,10 @@
   - Sentry 업로드(빌드 12 Xcode 로그): 소스맵 artifact bundle 업로드 성공(Bundle ID `1ea04045-bfa1-576c-bf04-1b221ae4161a`, release `com.k0nghaa.wishshot@1.0.2+12`, dist `12`, debug id `7f3998ba-16a5-4f92-8da7-7906a981464e`). 디버그 심볼 27개 업로드(본 앱·ShareExtension 포함). EAS는 JS를 "Bundle JavaScript" 단계에서 따로 묶지만, Xcode 번들 단계에서 Sentry가 다시 묶어 올린다(로그는 EAS 빌드 화면의 Xcode logs).
     - `WARN Using https://sentry.io (embedded in token) rather than … https://sentry.io/`: 플러그인 `url` 끝의 `/` 차이라 무해하다. 없애려면 다음 네이티브 빌드에서 `app.json` Sentry 플러그인 `url`을 `https://sentry.io`로 바꾼다.
   - TestFlight 회귀를 개발자 기기에서 하지 않음(사람 결정): 개발자 아이폰 스토어 앱에 Phase 13 정답셋 데이터가 있다. TestFlight 설치 경고("데이터를 유실할 수 있습니다")의 위험을 피하려고 3번(회귀 확인)을 건너뛰었다. 대신 수동 출시 뒤 관찰한다(Sentry Issues `production`의 1.0.2 신규 오류, PostHog App namespace Breakdown에 `com.k0nghaa.wishshot` 줄이 생기고 내부 사용자 필터를 켜도 남는지). 개발자 기기는 자동 업데이트를 잠시 끄고 며칠 뒤 마지막에 App Store로 업데이트해 정답셋 데이터가 남는지 확인한다(삭제·재설치·TestFlight 교체 금지).
+    - 출시 후 관찰 결과(2026-11-06, 사람 확인):
+      - Sentry: 릴리스 `1.0.2 (12)`(`com.k0nghaa.wishshot@1.0.2+12`)에 세션이 들어온다. 이 릴리스는 운영 빌드에서만 나와서(개발용 앱은 `1.0.1 (1)`) 스토어 앱의 Sentry 연결이 확인됐다. 크래시 없는 세션 비율 100%, 처리한·처리 못 한 이슈 0. 릴리스 목록의 등록 시각(11-05)은 빌드 중 소스맵 업로드 때라서 연결 증거가 아니다. 세션 지표로 확인한다. 스택이 코드 줄로 보이는지(소스맵·디버그 심볼)는 첫 실제 오류 때 확인한다.
+      - PostHog(`Application Opened`, 최근 7일, App namespace Breakdown): 내부 사용자 필터 끔 — `com.k0nghaa.wishshot` 2, `com.k0nghaa.wishshot.dev` 1, 값 없음 28. 켬 — `com.k0nghaa.wishshot` 2(남음), `.dev` 사라짐, 값 없음 10(개발자 기기의 1.0.1 이벤트가 빠짐). 1.0.2 줄이 생기고 필터를 켜도 남는다.
+      - 개발자 기기: App Store로 1.0.2 업데이트 후 정답셋 데이터 유지.
   - ASC 앱 개인정보(사람 반영): 진단 > '성능 데이터'·'기타 진단 데이터' 추가(목적 앱 기능, 사용자와 연결 안 됨, 추적 안 함). '충돌 데이터'는 연결됨=예를 유지하고(PostHog `app_error`) 목적에 앱 기능을 더했다. 언어·시간대는 위치 유형이 아니라 따로 선언하지 않았다.
     - **지시서 정정**: 성능 데이터는 tracing을 꺼도 넣는다. Sentry iOS의 기본 '앱 멈춤' 보고가 Apple 정의의 hang rate에 해당한다. 목적 '앱 기능'의 근거는 Apple 정의의 "minimize app crashes"다. 미결 사항 1은 앱 기능으로 확정.
   - 방침 게시 순서 변경: 배포 순서는 "승인 뒤 출시 직전 게시"였다. 앱 개인정보 라벨(진단 데이터)과 게시 방침이 심사 중에 어긋나지 않도록 **심사 제출 전에 방침 파일만 먼저 게시**했다(PR #33 `docs/privacy-v1.0.2` → `main`, 2026-11-06 03:11 KST 머지). 고지가 수집보다 앞서므로 고지 선행 원칙(불변식 8)에도 맞다. 개정일은 게시일 2026-11-06(`8401015`). 노션 방침 페이지 동기화 완료(11곳 교체).
