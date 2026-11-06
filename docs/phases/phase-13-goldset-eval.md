@@ -312,7 +312,7 @@ deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
 
 ## 결과 기록 (구현 세션이 채움)
 
-- **완료일**:
+- **완료일**: 2026-11-06
 - **Step 1** (2026-11-03)
   - **raw_text = 전송 텍스트(텍스트 분기)**: 일치한다. 실행기는 자르기·정규화를 재현할 필요가 없다.
     - 흐름: `VisionOcrEngine`이 줄을 `\n`으로 잇는다 → `useAnalysis.analyze`가 `ocr.text.trim()`한 **같은 문자열**을 상태 `rawText`에 넣고 `parseScreenshotText(rawText)`로 보낸다.
