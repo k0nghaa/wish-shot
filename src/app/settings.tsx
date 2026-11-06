@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -7,6 +8,7 @@ import { resetOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, spacing } from '@/constants/theme';
 import { isAnalyticsAvailable, isCaptureEnabled, setCaptureEnabled } from '@/lib/analytics';
+import { isMonitoringEnabled, triggerNativeCrashForTest } from '@/lib/monitoring';
 import { readImageBytes } from '@/lib/imageBytes';
 import { makeThumbnail } from '@/lib/imageResize';
 import {
@@ -23,6 +25,9 @@ const SUPPORT_EMAIL = 'wishshot2026@gmail.com';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  // 렌더 오류 검증용(__DEV__ 전용): 켜면 다음 렌더에서 throw — 루트 경계가 받아 전역 오류 처리로 넘기는지 확인한다.
+  const [renderErrorTest, setRenderErrorTest] = useState(false);
+  if (renderErrorTest) throw new Error('렌더 오류 검증용 테스트 에러');
 
   // 의견 보내기(Phase 10 F-1): 실제 앱(App Store) 배포에선 TestFlight 스크린샷 피드백이 없어
   // 메일이 피드백 채널이다. 모든 사용자 노출.
@@ -95,6 +100,19 @@ export default function SettingsScreen() {
     setTimeout(() => {
       throw new Error('계측 검증용 테스트 에러');
     }, 0);
+  }
+
+  // 네이티브 크래시 검증용(__DEV__ 전용): 앱이 즉시 종료되고, 다음 실행 때 Sentry 로 보고된다.
+  // Sentry 는 __DEV__ 에서 기본 비활성이라 EXPO_PUBLIC_SENTRY_DEV=1 로 띄웠을 때만 동작한다.
+  function handleDevNativeCrash() {
+    if (!isMonitoringEnabled()) {
+      Alert.alert('Sentry 비활성', 'EXPO_PUBLIC_SENTRY_DSN 과 EXPO_PUBLIC_SENTRY_DEV=1 이 필요합니다(.env 확인).');
+      return;
+    }
+    Alert.alert('네이티브 크래시', '앱이 바로 종료됩니다. 다시 열면 Sentry 로 보고됩니다.', [
+      { text: '취소', style: 'cancel' },
+      { text: '종료', style: 'destructive', onPress: triggerNativeCrashForTest },
+    ]);
   }
 
   // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
@@ -170,6 +188,22 @@ export default function SettingsScreen() {
               accessibilityLabel="테스트 에러 발생(개발용)"
             >
               <Text style={styles.devButtonText}>테스트 에러 발생(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevNativeCrash}
+              accessibilityRole="button"
+              accessibilityLabel="네이티브 크래시 테스트(개발용)"
+            >
+              <Text style={styles.devButtonText}>네이티브 크래시 테스트(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={() => setRenderErrorTest(true)}
+              accessibilityRole="button"
+              accessibilityLabel="렌더 오류 테스트(개발용)"
+            >
+              <Text style={styles.devButtonText}>렌더 오류 테스트(개발용)</Text>
             </TouchableOpacity>
           </View>
         ) : null}

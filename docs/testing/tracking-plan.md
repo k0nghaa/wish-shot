@@ -11,12 +11,13 @@
 3. **공유 시트 비중** — "공유 시트로 담기"가 실제 주 진입 경로인가
 4. **AI 자동채움 품질** — 작동률(상태 분포)과 수정률
 
-- **기간**: 테스트 시작일 `____-__-__` (사람 기입) ~ 종료일 미정(릴리스 전후 비교 루프 지속)
+- **기간**: 테스트 시작 `2026-10-04 19:55 KST`(= `10:55 UTC`, 외부 공지 시점) ~ 종료일 미정(릴리스 전후 비교 루프 지속). Supabase `created_at`은 UTC로 표시되므로 비교 시 시간대에 유의한다.
 - **배포 경로**: **실제 앱(App Store) 사용자 + TestFlight 테스터가 같은 production 채널**로 받는다. 익명 인증 특성상 모집 테스터와 오가닉 사용자를 구분할 수 없으므로, **코호트 = "테스트 기간 내 전체 실사용자"** 로 정의한다.
 - **코호트 필터(모든 집계 공통)**: `created_at >= 테스트 시작일` + 개발자 uid 제외. 기존 Supabase 데이터(전부 개발자 데이터)는 지우지 않고 이 필터로 거른다 — 기존 데이터의 "현재값"은 지표가 아니라 SQL 드라이런용이다.
-- **개발자 uid 제외 목록** (사람 기입 — `select id from auth.users;` 또는 설정 화면에서 확인):
-  - `________-____-____-____-____________` ← 개발 기기 1
-- **PostHog 쪽 오염 방지**: `__DEV__` 빌드는 기본 옵트아웃이라 개발 중 이벤트는 대부분 자동 제외된다. 개발자가 production 빌드를 실사용하는 경우 해당 uid(Person)를 PostHog 코호트/필터에서 수동 제외한다.
+- **개발자 uid 제외 목록** (2026-10-17 확정): uid 자체는 git에 두지 않고 **DB `ops.internal_users`**(마이그레이션 `0004`, API 비노출·SQL Editor 전용)에 둔다. `metrics.sql`은 이 테이블을 서브쿼리로 참조한다.
+  - 선정 기준: 테스트 시작 전 생성된 uid 17개 중 TestFlight 외부 테스터 1명(09-27 가입, 시작 후 활동 없음)을 뺀 **16개**. 시작 후 활동이 있는 건 현 개발 기기 1개뿐이라 SQL 지표엔 사실상 이 1개만 영향을 주지만, PostHog(앱만 연 세션도 DAU에 잡힘)와 기준을 통일하려고 전부 넣는다. 시작 후 생성된 개발자 uid는 없음(현 기기 uid가 10-02 생성분 그대로).
+  - 갱신 규칙: 개발 기기에서 재설치하면 새 uid가 생기므로 `ops.internal_users`에 insert하고 PostHog Person에도 `$internal_or_test_user = true`를 붙인다. 개발용 앱(`WishShot Dev`, 1.0.2~ — 스토어 앱과 별도 익명 계정)은 **DB 쪽만** uid를 `ops.internal_users`에 넣는다(2026-11-05 첫 설치분 반영). **PostHog 쪽은 사람 표시 대신** 프로젝트 내부 사용자 필터에 "`$app_namespace` = `com.k0nghaa.wishshot.dev` 제외" 조건을 한 번 둔다(사람이 설정) — 개발용 앱을 재설치해 uid가 바뀌어도 자동으로 빠진다. 개발용 앱은 `__DEV__`라 기본 옵트아웃이지만, 계측 토글 상태가 앱에 저장돼 켜 둔 채 잊으면 지표에 섞이기 때문이다.
+- **PostHog 쪽 오염 방지**: `__DEV__` 빌드는 기본 옵트아웃이라 개발 중 이벤트는 대부분 자동 제외된다. production 빌드를 쓰는 개발 기기는 Person 속성 `$internal_or_test_user = true`(BOOLEAN) → 동적 코호트 "Internal / Test users" → 프로젝트 내부 사용자 필터(신규·기존 인사이트 모두 ON)로 제외한다. Person 단위라 identify 전 anon ID 이벤트까지 함께 빠진다. 프로젝트 시간대는 `Asia/Seoul`.
 
 ## 2. 이벤트 택소노미 (정본)
 
@@ -24,7 +25,7 @@
 
 | 이벤트 | 트리거 시점 | 속성 | 답하는 질문 | 구현 위치 |
 |---|---|---|---|---|
-| (자동) 앱 열림·세션 | SDK 라이프사이클 자동 수집(`captureAppLifecycleEvents`) | — | 질문 1 | `src/lib/analytics.ts` 초기화 옵션 |
+| (자동) 앱 열림·세션 | SDK 라이프사이클 자동 수집(`captureAppLifecycleEvents`). 1.0.2부터 `Application Installed`·`Application Updated`도 발생(SDK가 빌드 번호를 `expo-application`에서 읽게 됨 — 그 전엔 빌드 번호가 없어 만들지 못했다) | — | 질문 1 | `src/lib/analytics.ts` 초기화 옵션 |
 | `share_intent_received` | 홈이 공유 인텐트를 소비한 직후 | `type: image \| url` | 질문 3 | `src/app/(tabs)/index.tsx` |
 | `register_opened` | 등록 화면 마운트 | `entry: share \| manual` | 질문 2ⓐ·3 | `src/app/register.tsx` |
 | `analysis_completed` | 분석 상태머신 종료 전이 시 | `status: parsed \| low_confidence \| parse_failed \| ocr_empty` (analysis_logs와 동일 enum) | 질문 4 | `src/hooks/useAnalysis.ts` |
@@ -32,7 +33,7 @@
 | `item_saved` | 저장 **성공 응답** 시(버튼 탭 아님, 덮어쓰기 포함) | `source: share \| picker \| recent_photo`, `duration_ms`(마운트→성공), `had_analysis: boolean` | 질문 2ⓐ | `src/app/register.tsx` |
 | `onboarding_step_viewed` | 온보딩 각 스텝 표시 시 | `step: card_1 \| card_2 \| card_3 \| category_coachmark` | 완주율·이탈 스텝 | `src/components/Onboarding/OnboardingOverlay.tsx` |
 | `onboarding_finished` | 완주 또는 스킵 시 | `result: completed \| skipped`, `last_step`(step과 동일 enum) | 이탈 지점 | 〃 |
-| `app_error` (갈래 F) | 전역 JS 에러 핸들러 | `name: string`(에러 클래스명), `is_fatal: boolean` — **메시지·스택 미수집** | 임시 에러 가시성 | `src/lib/analytics.ts` |
+| `app_error` (갈래 F) | 전역 JS 에러 핸들러. 1.0.2부터 Sentry가 켜진 빌드에서는 루트 렌더 오류 경계가 넘긴 렌더 오류도 포함 | `name: string`(에러 클래스명), `is_fatal: boolean` — **메시지·스택 미수집** | 에러 빈도 집계(상세·네이티브 크래시는 Sentry) | `src/lib/analytics.ts`, `src/lib/monitoring.ts`(렌더 오류 경계) |
 
 ### 구현 노트 (코드와 1:1)
 
@@ -48,7 +49,9 @@
 - **`register_opened` 해석 유의**: 첫 실행 온보딩이 여는 등록 폼도 `manual`로 1회 집계된다(설치당 최대 1회). 퍼널 전환율을 읽을 때 감안한다.
 - **`onboarding_step_viewed`는 스텝당 1회**(뒤로 스와이프 재노출은 중복 발화하지 않음). 단 `last_step`은 재노출을 반영한다(스킵 시점에 보고 있던 스텝). `completed` = 카드·코치마크를 지나 등록 폼 투어 진입. 등록 폼 위 코치마크 2스텝(RegisterCoachmarkTour)은 계측하지 않는다.
 - **identify**: 익명 인증 부트스트랩 완료 후 Supabase 익명 uid로 `identify()` 1회(`_layout.tsx`) — PostHog 퍼널과 DB(`analysis_logs`·`items`) 지표를 같은 식별자로 조인하기 위함. uid는 가명 식별자이며 추가 개인정보를 싣지 않는다.
-- **수집 경로 강제**: 화면·훅은 `src/lib/analytics.ts`의 `capture()`만 쓴다(이벤트명·속성 타입 유니언으로 컴파일 타임 강제). 키 미설정 시 전 호출 no-op, 실패는 삼킨다.
+- **수집 경로 강제**: 화면·훅은 `src/lib/analytics.ts`의 `capture()`만 쓴다(이벤트명·속성 타입 유니언으로 컴파일 타임 강제, `posthog-react-native` 직접 import는 eslint `no-restricted-imports` 오류). 키 미설정 시 전 호출 no-op, 실패는 삼킨다.
+- **SDK 자동 속성**(이벤트마다 붙음, `posthog-react-native` 4.78.4 `native-deps.js`): `$device_type`·`$screen_width`·`$screen_height`·`$lib`·`$lib_version`, `expo-device`의 `$device_manufacturer`·`$device_name`(모델명)·`$os_name`·`$os_version`·`$is_emulator`. **1.0.2부터** `expo-application`의 `$app_version`·`$app_build`·`$app_name`·`$app_namespace`, `expo-localization`의 `$locale`·`$timezone`(방침 §1·§4 '언어·시간대 설정'). 1.0.1까지는 앱 버전 속성이 없다.
+- **위치·IP**: IP로 추정한 위치(`$geoip_*`)는 남기지 않는다 — PostHog 프로젝트 GeoIP 변환 Paused(2026-11-05) + 1.0.2부터 SDK `disableGeoip: true`. IP는 프로젝트 설정 "Discard client IP data"로 저장하지 않는다(`$ip` 0건 확인). **IP 버리기만으로는 GeoIP가 꺼지지 않는다**(PostHog 문서 — GeoIP가 IP를 버리기 전에 실행).
 
 ## 3. 이벤트 없이 나오는 지표 (SQL — `supabase/tests/metrics.sql`)
 
@@ -73,8 +76,9 @@
 | 온보딩→활성화 상관 분석 | 하지 않음(자기선택 편향 + 소표본) — 완주율만 본다 |
 | 세션 리플레이 | 화면에 사용자 사진이 상시 노출되는 앱 특성상 비권장 |
 | A/B 테스트 | 표본상 무의미 — 릴리스 전후 비교로 대체 |
-| Sentry(크래시) | 네이티브 — 공개 홍보 시작 전에 v1.1 네이티브 배치로(기기 메타데이터 보강과 한 빌드, 심사 1회). 그 전 커버리지: JS 에러는 `app_error`, TestFlight 크래시는 App Store Connect 웹, App Store 사용자 크래시(동의 기기분)는 Mac의 Xcode Organizer 열람 |
-| 기기 메타데이터 보강(`expo-application`·`expo-device`·`expo-localization` — 선택 peer 의존성) | 다음 네이티브 배치(현재는 네이티브 추가 금지) |
+| ~~Sentry(크래시)~~ | **Sentry 도입(1.0.2, Phase 14)** — `src/lib/monitoring.ts`, 오류·크래시만 수집(성능 추적·리플레이 없음). 1.0.1 이하 사용자는 계속 기존 커버리지: JS 에러는 `app_error`, TestFlight 크래시는 App Store Connect 웹, App Store 사용자 크래시(동의 기기분)는 Mac의 Xcode Organizer 열람 |
+| Sentry 네트워크 요청 기록(xhr·fetch) | 지금은 필터에서 버리고 방침 §5에도 수집 항목으로 두지 않았다(Expo SDK 57은 `fetch`를 `expo/fetch`로 바꿔 원래 기록되지도 않음). **켜는 조건**: 같은 오류가 반복되는데 Sentry 스택·PostHog 상태값·서버 DB 오류 기록(Phase 15)·Supabase 로그로 원인을 좁히지 못할 때 / Storage 업로드·다운로드나 DB 조회 구간이 의심될 때 / 네트워크를 많이 쓰는 기능(Phase 21 구매처 찾기, Phase 22 로그인) 출시 직후 안정화 기간. **켜는 순서**: 방침 §5·앱 안 고지에 '앱이 보낸 서버 요청의 주소(세부 값 제외)'를 넣어 게시 → `monitoring.ts`의 버리는 목록에서 xhr·fetch·http 제거 + `breadcrumbsIntegration({ fetch: true })`(Expo `fetch`는 XHR을 거치지 않음) → 사진 업로드·다운로드 회귀와 주소의 `?` 뒤·ID 제거 확인 → JS만 바뀌므로 OTA 가능(방침 게시가 먼저) |
+| ~~기기 메타데이터 보강~~ | **1.0.2에서 반영(Phase 14)** — `expo-application`·`expo-localization` 설치(`expo-device`는 처음부터 설치돼 있었음). 속성은 §2 구현 노트 'SDK 자동 속성' |
 
 ## 5. 프라이버시 체크리스트 (사람 확인란 — 전부 체크 전에는 production 채널 배포 금지)
 
@@ -83,7 +87,16 @@
 - [x] 노션 개인정보 방침 동기화 (현행 privacy.html 전체 미러링 — Phase 6 크롭 예외·지원 이메일 통일 포함)
 - [x] 인앱 고지(`src/constants/privacy.ts`)와 방침 내용 일치 재확인
 - [x] 과금 차단 확인 — **카드 미등록(Free 플랜)** 유지로 한도 초과 시 수집만 중단되고 과금 자체 불가(향후 카드 등록 시 billing limit 설정 필요). 부가로 "Discard client IP data" 켜서 GeoIP 비활성
+  - **정정(2026-11-05)**: IP 버리기만으로는 GeoIP가 꺼지지 않아 그동안 이벤트에 국가·도시가 붙었다(최근 7일 99건 전부). 프로젝트 GeoIP 변환을 Paused로 끄고(15:52 이후 0건 확인) 1.0.2부터 SDK `disableGeoip: true`도 넣었다. 그 전 이벤트·사람 속성의 위치는 남아 있다.
 - [x] `.env` + EAS production 환경에 `EXPO_PUBLIC_POSTHOG_KEY`/`EXPO_PUBLIC_POSTHOG_HOST` 등록
+
+**1.0.2(Sentry·언어·시간대) 추가 확인** — 출시 전에 전부 체크한다(지시서 `phase-14` 배포 순서)
+
+- [ ] App Store Connect 앱 개인정보에 Sentry 반영 — '기타 진단 데이터' 추가(Sentry만 수집, 설치별 무작위 ID라 연결 안 됨, 추적 안 함). '충돌 데이터'는 이미 PostHog `app_error`로 연결됨=예로 선언돼 있어 그대로 두고 목적만 확인한다(같은 유형은 한 번만 선언되며 하나라도 연결되면 '연결됨'). 성능 데이터는 넣지 않는다(추적 끔)
+- [ ] `docs/legal/privacy.html` 개정(§1·§4 언어·시간대, §5 Sentry) main 머지로 게시, 개정일을 게시일로 맞춤
+- [ ] 노션 개인정보 방침 동기화
+- [ ] 인앱 고지(`src/constants/privacy.ts`)와 방침 내용 일치 재확인
+- [x] Sentry 과금 차단 — 결제 수단 미등록(체험 종료 뒤 무료 Developer 플랜, 한도 초과 이벤트는 버려짐), IP 저장 방지·위치 제거 규칙 설정(2026-11-05)
 
 ## 6. 실발화 확인 체크리스트 (dev client — 사람 확인)
 
@@ -104,8 +117,12 @@
 
 ## 7. 측정 한계
 
-- **OTA 첫 세션 유실**: 계측은 OTA로 배포되므로 v1.0.0 바이너리 설치자의 **첫 세션은 내장 번들(계측 없음)로 동작**한다. 설치 직후 첫 실행 이벤트(온보딩 퍼널, 설치 당일 첫 저장)는 구조적으로 유실되고 두 번째 실행부터 정상 수집된다. **온보딩 지표는 계측이 내장된 다음 바이너리(v1.1) 이후 신규 설치자부터 유효**하다.
+- **OTA 첫 세션 유실**: 계측은 OTA로 배포되므로 v1.0.0 바이너리 설치자의 **첫 세션은 내장 번들(계측 없음)로 동작**한다. 설치 직후 첫 실행 이벤트(온보딩 퍼널, 설치 당일 첫 저장)는 구조적으로 유실되고 두 번째 **콜드 스타트**부터 정상 수집된다(백그라운드 복귀는 해당 없음 — 앱을 완전히 종료하지 않는 사용자는 계속 내장 번들로 남는다). **온보딩·첫 세션 지표는 계측이 내장된 바이너리(1.0.1) 이후 신규 설치자부터 유효**하다.
+  - **실측(2026-10-17, 1주차 교차검증)**: App Store 빌드 8(`9e5df21`, 09-22)에는 PostHog가 없다(계측 커밋 10-02). DB 대비 PostHog 커버리지 — 앱 실행 사용자 26 → `Application Opened` 12, 1개 이상 담은 사용자 12 → `item_saved` 6, 담은 수 28 → `analysis_completed` 17. 즉 **약 절반만 관측**되며, 관측되는 쪽은 재실행할 만큼 더 쓴 사용자로 편향된다(퍼널 전환율이 과대 추정됨).
+  - **운영 원칙**: 1.0.1 이전 구간은 **건수의 정본 = DB**(`metrics.sql`, items·auth.users), PostHog는 비율·경로 참고용. 온보딩 자체(09-21 커밋)는 빌드 8에 포함돼 첫 실행에서 정상 노출됐고 **이벤트만** 빠졌다.
+  - **대응**: 1.0.1 = 현 JS를 내장한 재빌드(네이티브 변경 없음 → OTA 줄기 유지) + 백그라운드 진입 시 `flush()`. 출시일에 PostHog Annotation을 남기고 여기 날짜를 기입한다: **2026-10-20 출시**(Annotation 동일 날짜). 업데이트 공지·설문 재공유는 하지 않았다 — 자연 업데이트로 반영되므로 전환 초기엔 1.0.0·1.0.1 사용자가 섞인다.
+  - **flush 검증 방법**: dev client로는 검증하지 않는다 — 1.0.1까지는 모든 프로필이 같은 번들 ID라 설치 시 App Store 앱을 덮어썼고(재설치하면 익명 계정이 새로 생김. 1.0.2부터 개발용 앱은 별도 번들 ID라 덮어쓰지 않는다), `__DEV__`는 `flushAt 1`이라 큐가 쌓이지 않아 백그라운드 flush 상황 자체가 재현되지 않는다. 대신 OTA 전 `tsc`·`lint`·`expo export --platform ios`(production 번들 생성)로 번들 무결성을 확인하고, OTA 후 **개발자의 production 앱**(internal 플래그라 지표 오염 없음)에서 백그라운드 진입 직후 PostHog Activity 도착을 확인한다.
 - **전송 지연·유실**: production은 이벤트를 20개 단위로 묶어 전송한다(배터리 절약). 미전송 큐는 로컬에 영속돼 다음 실행 때 전송되지만, 앱 삭제 직전 이벤트는 유실될 수 있다.
-- **`app_error`는 JS 에러만** 잡는다. 네이티브 크래시는 수집 불가 — 크래시 모니터링의 대체가 아니라 임시 가시성이다(Sentry는 보류 목록 참고).
+- **`app_error`는 JS 에러의 클래스명만** 잡는 집계용이다. 오류 상세와 네이티브 크래시는 **1.0.2부터 Sentry**가 맡는다. RN 0.86은 렌더 오류를 전역 핸들러에 보내지 않는다. 그래서 렌더 오류는 Sentry DSN이 있는 빌드(루트 경계가 켜짐)에서만 `app_error`에 잡히고, 1.0.1 이하에서는 빠져 있었다.
 - **개발 기기 미수집(의도)**: `__DEV__` 기본 옵트아웃. production 빌드를 쓰는 개발자 uid는 §1 제외 목록으로 거른다.
 - **소표본**: 테스터 수십 명 규모 — A/B·통계적 유의성 주장은 하지 않는다. 퍼널 + 릴리스 전후 비교 + UT 정성 데이터 삼각측량이 분석 프레임이다.

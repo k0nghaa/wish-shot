@@ -206,7 +206,7 @@ export default function RegisterScreen() {
     };
   }, [imageUri]);
 
-  // 제품 영역 지정 최초 고지: 텍스트를 못 찾아 시트가 처음 열릴 때만 1회. 선택 영역만 전송됨을 설명.
+  // 제품 영역 지정 최초 고지: 시트가 처음 열릴 때 1회(텍스트 부족으로 자동으로 열리든 버튼으로 열든). 선택 영역만 전송됨을 설명.
   useEffect(() => {
     if (analysisState.phase !== 'regionSelect') return;
     let cancelled = false;
@@ -217,7 +217,7 @@ export default function RegisterScreen() {
         if (cancelled) return;
         Alert.alert(
           '제품 영역 지정',
-          '텍스트를 찾지 못했습니다. 제품이 잘 보이는 부분을 사각형으로 선택하면, 그 영역만 AI 분석에 전송됩니다. 이 영역은 분석에만 쓰이며, 사진은 원본 그대로 저장됩니다.',
+          '제품이 잘 보이는 부분을 사각형으로 선택하고 ‘분석’을 누르면, 그 영역만 AI 분석에 전송됩니다. 이 영역은 분석에만 쓰이며 저장하지 않습니다. 사진은 원본 그대로 저장됩니다.',
           [{ text: '확인' }],
         );
       } catch {
@@ -629,7 +629,7 @@ export default function RegisterScreen() {
               <TextInput
                 ref={productNameRef}
                 style={formInput.rowInput}
-                placeholder="예: 무선 이어폰"
+                placeholder="제품명"
                 placeholderTextColor={colors.textDisabled}
                 value={productName}
                 onChangeText={(t) => {
@@ -641,7 +641,7 @@ export default function RegisterScreen() {
             <FormRow label="브랜드" ai={aiFilled.brand}>
               <TextInput
                 style={formInput.rowInput}
-                placeholder="예: 소니"
+                placeholder="브랜드명"
                 placeholderTextColor={colors.textDisabled}
                 value={brand}
                 onChangeText={(t) => {
@@ -736,7 +736,7 @@ export default function RegisterScreen() {
       {/* 원본 확대 보기(롱프레스) — 텍스트를 직접 읽고 입력할 때 */}
       <ImageZoomModal visible={zoomVisible} uri={imageUri} onClose={() => setZoomVisible(false)} />
 
-      {/* 제품 영역 지정(Phase 6): OCR 텍스트 부족 시 열림. 선택 영역만 크롭해 전송. */}
+      {/* 제품 영역 지정(Phase 6): OCR 텍스트 부족 시 자동으로, 또는 "제품 영역으로 분석" 버튼으로 열림. 선택 영역만 크롭해 '분석' 때 전송. */}
       <RegionSelectSheet
         visible={analysisState.phase === 'regionSelect' || analysisState.phase === 'imageParsing'}
         imageUri={imageUri}
