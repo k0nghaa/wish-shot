@@ -134,6 +134,24 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3
 ```
 
+- **정답셋 정확도 측정**은 `samples/goldset-eval.ts`로 합니다. 사람이 붙인 정답(라벨 규칙: `samples/goldset/LABELING.md`)으로 프롬프트·온도·모델 변형별 가격 정답률을 'N장 중 M장'으로 냅니다. 원문 데이터(`samples/goldset/data/`)와 결과(`samples/goldset/out/`)는 git에 올리지 않습니다. 기준선 측정 결과는 `samples/goldset/REPORT.md`에 숫자와 실패 패턴만 정리합니다.
+
+```bash
+# 키 없이 입력 검증·호출 수만 확인(--dry-run을 빼면 실제 호출)
+deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
+  --allow-read=supabase/functions/parse-screenshot-text/samples \
+  --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/out \
+  supabase/functions/parse-screenshot-text/samples/goldset-eval.ts --runs 3 --dry-run
+```
+
+- 홀드아웃은 `samples/goldset-holdout.ts`가 유형마다 25%를 시드 고정으로 지정합니다(`--write`일 때만 `labels.csv`의 `holdout` 열을 씀). 프롬프트를 고칠 때는 홀드아웃을 보지 않고 마지막 확인에만 씁니다.
+
+```bash
+deno run --allow-read=supabase/functions/parse-screenshot-text/samples \
+  --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/data \
+  supabase/functions/parse-screenshot-text/samples/goldset-holdout.ts --write
+```
+
 **OCR 엔진 참고**: 지시서의 Google ML Kit 대신 **Apple Vision**(로컬 모듈 `modules/expo-vision-ocr`)을
 씁니다 — iOS 전용이라 ML Kit iOS 이슈를 피하고 Expo SDK 57/New Architecture 호환 문제도 없습니다.
 이 모듈은 **네이티브라 추가·변경 시 EAS 재빌드**가 필요합니다.
