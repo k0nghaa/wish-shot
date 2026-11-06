@@ -79,7 +79,7 @@ supabase/
     0003_orphan_images_fn.sql    # 고아 이미지 키 열거 함수 list_orphan_item_images (원본∪썸네일 union, service_role 전용)
     0004_internal_users.sql      # 지표 제외용 개발자 uid 테이블 ops.internal_users (API 비노출·SQL Editor 전용, uid는 git 밖에서 insert)
   functions/
-    parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. prompt.ts(모델·스키마·프롬프트 단일 소스) + samples/(회귀 케이스 + eval.ts 배포 전 자동 검증 + goldset-eval.ts 정답셋 정확도 측정·goldset-holdout.ts 홀드아웃 지정(시드 고정)·prompt-2026-10-04.ts 비교용 고정 사본·goldset/LABELING.md 라벨 규칙. 원문 goldset/data·결과 goldset/out 은 git 제외)
+    parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. prompt.ts(모델·스키마·프롬프트 단일 소스) + samples/(회귀 케이스 + eval.ts 배포 전 자동 검증 + goldset-eval.ts 정답셋 정확도 측정·goldset-holdout.ts 홀드아웃 지정(시드 고정)·prompt-2026-10-04.ts 비교용 고정 사본·goldset/LABELING.md 라벨 규칙·goldset/REPORT.md 기준선 측정 리포트. 원문 goldset/data·결과 goldset/out 은 git 제외)
     cleanup-orphan-images/  # Edge Function(Deno, service_role): 고아 이미지 주 1회 스윕 — x-cron-secret 보호·dryRun 지원·Storage API로만 삭제 (Phase 11)
   tests/                # rls.sql(RLS/권한 검증) + metrics.sql(테스트 지표 4종, Phase 10) — 대시보드 SQL Editor 에서 사람이 실행
 assets/                 # 아이콘·스플래시, logo-v1(참고용)
