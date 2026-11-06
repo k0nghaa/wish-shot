@@ -12,3 +12,4 @@ deno run --allow-read=supabase/functions/parse-screenshot-text/samples \
 - `raw.csv` 는 따옴표 안 줄바꿈·콤마·`""` 를 일부러 넣어 CSV 파서를 검증합니다.
 - 유형: A(정가·할인가) 1 · C(SNS, 가격 없음) 1 · E(외화만) 1 · G(중고거래 — 사진 속 옛 가격·본문 정가가 섞인 매물) 1. 품목: 패션 1 · 뷰티 1 · 생활용품 1 · 가구·인테리어 1.
 - E 행은 선택 열 `price_foreign`(외화 금액 기록, 채점 미사용)을 채운 예입니다.
+- A·E·G 행은 선택 열 `name_gold`(원하는 제품명 기록, 채점 미사용)를 채운 예입니다. 주 상품이 없는 C 행은 빈칸입니다.

@@ -68,7 +68,8 @@ const CALL_TIMEOUT_MS = 60_000;
 const TYPES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'] as const;
 type LabelType = (typeof TYPES)[number];
 /**
- * 라벨 선택 열 price_foreign 형식: ISO 통화 코드 + 공백 + 화면의 숫자(콤마 없이, 소수점은 화면대로). 예: `JPY 3980`, `USD 17.51`.
+ * 라벨 선택 열 price_foreign 형식: ISO 통화 코드 + 공백 + 화면의 숫자(자릿수 구분 기호 없이, 소수점은 '.'). 예: `JPY 3980`, `USD 17.51`,
+ * 유럽식 `1.299,90 €` → `EUR 1299.90`.
  * 채점에는 쓰지 않는다 — 다음 Phase 에서 외화 처리를 바꿀 때 같은 정답셋으로 다시 재기 위한 기록(2026-11-05 결정).
  */
 const FOREIGN_RE = /^[A-Z]{3} \d+(\.\d+)?$/;
@@ -463,7 +464,7 @@ export async function loadInputs(dataDir: string | URL, crlfToLf = false): Promi
     // 외화 금액 기록(선택 열, 채점 미사용). 열이 없거나 빈칸이면 기록 없음.
     const priceForeign = (r.price_foreign ?? '').trim();
     if (priceForeign !== '' && !FOREIGN_RE.test(priceForeign)) {
-      errors.push(`${where}: price_foreign 은 '통화코드 숫자'(예: JPY 3980, USD 17.51 — 콤마 없이) 또는 빈칸`);
+      errors.push(`${where}: price_foreign 은 '통화코드 숫자'(예: JPY 3980, USD 17.51 — 자릿수 구분 기호 없이, 소수점은 '.') 또는 빈칸`);
     }
     const ho = (r.holdout ?? '').trim();
     let holdout: boolean | null = null;
