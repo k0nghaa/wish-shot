@@ -1,4 +1,4 @@
-// parse-screenshot-text 회귀 검증 — samples.md 케이스 1~7을 배포 없이 Anthropic API로 직접 호출한다.
+// parse-screenshot-text 회귀 검증 — samples.md 케이스 1~8을 배포 없이 Anthropic API로 직접 호출한다.
 // 배포 함수와 같은 prompt.ts 를 쓰므로 "배포 전 프롬프트"를 그대로 검증한다.
 //
 // 실행(Deno, 키는 셸 환경 변수로만 — 커밋·채팅 금지):
@@ -64,6 +64,15 @@ const CASES: Case[] = [
     text:
       '11:30 / 5G / store.example.com / Ceramic Pour-Over Dripper / $17.51 /\n' +
       'Free shipping over $50 / Add to cart',
+    expect: { price: null },
+  },
+  {
+    // 10/20 규칙 배포 후 실기기 릴스에서 쉼표 붙은 좋아요 수가 가격으로 뽑힌 모양을 만든 가상 원문.
+    // 케이스 2(라벨 없는 작은 수)·6(라벨 붙은 쉼표 수)과 달리 '라벨 없는 네 자리 쉼표 숫자'만 있다.
+    id: '8 라벨 없는 쉼표 숫자(릴스)',
+    text:
+      '9:41 / 5G 82 / 릴스 / mood.daily.studio / 팔로우 / 2,461 /\n' +
+      '요즘 매일 메는 미니 크로스백, 수납도 넉넉해서 출근룩에 딱 / ... 더 보기 / 1,093 / 3,208',
     expect: { price: null },
   },
 ];
