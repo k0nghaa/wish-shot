@@ -19,7 +19,10 @@
 //          502·504 Anthropic 호출 실패. 앱은 어떤 실패든 링크를 비워 둔다.
 //
 // 흐름: JWT 확인 → 입력 검증 → 요청 한도(0007) → 1차 호출(웹 검색 — 서버가 결과 블록에서 후보 URL 수집)
-//       → 2차 호출(구조화 출력, 도구 없음 — 후보 "번호"만 고른다) → 서버가 후보에서 URL 을 꺼내 반환.
+//       → 2차 호출(구조화 출력, 도구 없음 — 후보 "번호"만 고른다) → 서버가 후보에서 URL 을 꺼냄
+//       → 링크 안전 확인(① Google Web Risk 악성 목록 대조 → ② 직접 접속해 https·인증서·리다이렉트·응답 코드)
+//       → 통과한 링크만 반환.
+//   Web Risk 키: 함수 시크릿 WEB_RISK_API_KEY(사람이 등록). 없거나 조회 실패면 링크를 비운다(fail-closed).
 //   웹 검색 인용은 항상 켜져 있고 인용과 구조화 출력은 한 요청에 쓸 수 없어(400) 두 번 부른다.
 //
 // 규칙:
@@ -65,6 +68,8 @@ import {
   buildSearchTool,
   buildSearchUserMessage,
 } from './prompt.ts';
+import { checkWebRisk } from './safety.ts';
+import { verifyLink } from './verify.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -80,6 +85,10 @@ const PICK_TIMEOUT_MS = 15_000;
 const MAX_CONTINUATIONS = 2;
 // 남은 시간이 이보다 적으면 이어 보내지 않는다(중간에 끊겨 과금만 되고 결과를 버리는 것 방지).
 const MIN_CONTINUE_MS = 10_000;
+// 고른 링크 접속 확인(인증서·리다이렉트·응답 코드) 시간 제한(ms).
+const VERIFY_TIMEOUT_MS = 6_000;
+// Google Web Risk 대조 시간 제한(ms).
+const WEB_RISK_TIMEOUT_MS = 4_000;
 // 카운터·기록 DB 호출 시간 제한(ms).
 const DB_TIMEOUT_MS = 3_000;
 
@@ -128,7 +137,10 @@ type FailureReason =
   | 'llm_bad_json'
   | 'llm_max_tokens'
   | 'search_error'
-  | 'search_paused';
+  | 'search_paused'
+  | 'link_unsafe'
+  | 'link_check_unavailable'
+  | 'link_unverified';
 
 // 오류 객체에서 종류만 뽑는다(메시지엔 사용자 id 등이 섞일 수 있어 로그에 남기지 않음).
 function errorKind(e: unknown): string {
@@ -296,18 +308,19 @@ function addUsage(u: Usage, data: AnthropicMessage): void {
   u.outTokens += data.usage?.output_tokens ?? 0;
 }
 
-// stop: 검색·고르기 호출의 마지막 stop_reason(enum — 내용 노출 없음)
+// stop: 검색·고르기 호출의 마지막 stop_reason, verify: 링크 접속 확인 결과(모두 enum — 내용 노출 없음)
 function logResult(
   channel: Channel,
   harvest: Harvest,
   link: Link | null,
   u: Usage,
-  stop: { search: string; pick: string },
+  stop: { search: string; pick: string; verify?: string },
 ): void {
   console.log(
     `purchase: via=${channel.via} candidates=${harvest.candidates.length} filled=${!!link} kind=${link?.kind ?? '-'}` +
       ` searches=${u.searches} in=${u.inTokens} out=${u.outTokens}` +
-      ` searchStop=${stop.search} pickStop=${stop.pick} toolErrors=${harvest.errorCodes.join(',') || '-'}`,
+      ` searchStop=${stop.search} pickStop=${stop.pick} verify=${stop.verify ?? '-'}` +
+      ` toolErrors=${harvest.errorCodes.join(',') || '-'}`,
   );
 }
 
@@ -480,6 +493,28 @@ Deno.serve(async (req) => {
     }
   }
 
-  logResult(channel, harvest, link, usage, stop);
+  // 6) 링크 안전 확인 — 통과하지 못하면 버린다.
+  //   6-1) 알려진 악성 사이트 목록(Google Web Risk) 대조. 악성일 수 있는 사이트에 접속하기 전에 한다.
+  //        키가 없거나 조회에 실패하면 버린다(fail-closed).
+  //   6-2) 실제로 열리는 안전한 https 페이지인지 직접 접속해 확인(인증서·리다이렉트·응답 코드).
+  const verifyStop: { search: string; pick: string; verify?: string } = { ...stop };
+  if (link) {
+    const risk = await checkWebRisk(link.url, Deno.env.get('WEB_RISK_API_KEY'), WEB_RISK_TIMEOUT_MS);
+    if (risk !== 'safe') {
+      verifyStop.verify = `web_risk_${risk}`;
+      await recordFailure(user.id, risk === 'unsafe' ? 'link_unsafe' : 'link_check_unavailable');
+      link = null;
+    }
+  }
+  if (link) {
+    const v = await verifyLink(link.url, VERIFY_TIMEOUT_MS);
+    verifyStop.verify = v.ok ? `ok_${v.status}` : v.reason;
+    if (!v.ok) {
+      await recordFailure(user.id, 'link_unverified');
+      link = null;
+    }
+  }
+
+  logResult(channel, harvest, link, usage, verifyStop);
   return json({ link });
 });

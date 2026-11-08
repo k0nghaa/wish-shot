@@ -60,7 +60,10 @@ create table if not exists ops.purchase_link_failures (
                -- Anthropic 호출(502/504) — 검색·고르기 공통
                'llm_timeout', 'llm_unreachable', 'llm_error', 'llm_read_error',
                -- 응답은 왔지만 링크를 못 만든 경우(200 { link: null } 과 함께 기록)
-               'llm_refusal', 'llm_empty', 'llm_bad_json', 'llm_max_tokens', 'search_error', 'search_paused'
+               'llm_refusal', 'llm_empty', 'llm_bad_json', 'llm_max_tokens', 'search_error', 'search_paused',
+               -- 고른 링크의 안전 확인: 악성 사이트 목록(Google Web Risk)에 오름 / 목록 조회 불가(키 없음·오류) /
+               -- 접속 확인(https·인증서·리다이렉트·응답 코드) 실패
+               'link_unsafe', 'link_check_unavailable', 'link_unverified'
              )),
   llm_status integer not null default 0 check (llm_status between 0 and 599),  -- llm_error 의 Anthropic 상태 코드, 그 외 0
   count      integer not null check (count > 0),

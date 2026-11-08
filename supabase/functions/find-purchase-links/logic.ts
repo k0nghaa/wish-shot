@@ -110,10 +110,9 @@ export function searchScope(channel: Channel, brand: string | null): SearchScope
   return { mode: 'blocked', domains: blocked };
 }
 
-// URL 이 검색 범위 안이면 파서가 정리한 href 와 호스트를, 아니면 null(http·https 만).
-// 앱에는 검사한 그 형태(href)를 넘긴다 — 원본 문자열의 탭·줄바꿈·역슬래시를 다른 파서가
-// 다르게 읽어 검사한 호스트와 열리는 호스트가 달라지는 것을 막는다.
-export function inScope(url: string, scope: SearchScope): { href: string; host: string } | null {
+// 안전한 링크 형태인지: https 만, 기본 포트만, 호스트는 IP 가 아닌 도메인 이름, 아이디·비밀번호 없음.
+// 맞으면 파서가 정리한 href 와 호스트, 아니면 null.
+export function safeHttpsUrl(url: string): { href: string; host: string } | null {
   if (url.length > MAX_URL_LEN) return null;
   let u: URL;
   try {
@@ -121,12 +120,60 @@ export function inScope(url: string, scope: SearchScope): { href: string; host: 
   } catch {
     return null;
   }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  if (u.protocol !== 'https:') return null;
+  if (u.port !== '' || u.username !== '' || u.password !== '') return null;
   const host = u.hostname.toLowerCase().replace(/\.$/, '');
-  const matched = scope.domains.some((d) => hostMatches(host, d));
-  if (scope.mode === 'allowed' ? !matched : matched) return null;
+  if (!HOST_RE.test(host)) return null; // IP 주소·유니코드 호스트 거부
   if (u.href.length > MAX_URL_LEN) return null;
   return { href: u.href, host };
+}
+
+// URL 이 안전한 https 주소이고 검색 범위 안이면 파서가 정리한 href 와 호스트를, 아니면 null.
+// 앱에는 검사한 그 형태(href)를 넘긴다 — 원본 문자열의 탭·줄바꿈·역슬래시를 다른 파서가
+// 다르게 읽어 검사한 호스트와 열리는 호스트가 달라지는 것을 막는다.
+export function inScope(url: string, scope: SearchScope): { href: string; host: string } | null {
+  const ok = safeHttpsUrl(url);
+  if (!ok) return null;
+  const matched = scope.domains.some((d) => hostMatches(ok.host, d));
+  if (scope.mode === 'allowed' ? !matched : matched) return null;
+  return ok;
+}
+
+// ---------------------------------------------------------------------------
+// 링크 접속 확인(verify.ts)이 쓰는 판정 — 네트워크 없이 검증할 수 있게 여기 둔다.
+// ---------------------------------------------------------------------------
+
+// 사이트 기준 이름: www.·m. 같은 앞부분을 뗀 호스트. 리다이렉트는 이 이름(과 하위 도메인) 안에서만 허용.
+export function siteBase(host: string): string {
+  const stripped = host.replace(/^(?:www\d?|m|mobile)\./, '');
+  return stripped.includes('.') ? stripped : host;
+}
+
+// 사전의 몰(대형 쇼핑몰) 호스트인지 — 봇 접속을 막아 403 을 주는 경우가 많아 판정을 달리한다.
+export function isTrustedMallHost(host: string): boolean {
+  return mallForDomain(host) !== null;
+}
+
+// 리다이렉트 한 단계: 다음 주소가 안전한 https 이고 같은 사이트 안이면 정리한 href, 아니면 null.
+export function checkRedirect(location: string, current: string, base: string): string | null {
+  let next: string;
+  try {
+    next = new URL(location, current).href; // 상대 경로 허용
+  } catch {
+    return null;
+  }
+  const ok = safeHttpsUrl(next);
+  if (!ok || !hostMatches(ok.host, base)) return null;
+  return ok.href;
+}
+
+// 최종 응답 코드 판정. 2xx 는 정상. 대형 몰은 봇 차단(401·403·429)도 사이트가 살아 있는 것으로 본다
+// (인증서는 접속 단계에서 이미 확인됨). 그 밖(404·410·5xx 등)은 버린다.
+export function statusVerdict(status: number, trustedMall: boolean): 'ok' | 'redirect' | 'reject' {
+  if (status >= 200 && status < 300) return 'ok';
+  if ([301, 302, 303, 307, 308].includes(status)) return 'redirect';
+  if (trustedMall && (status === 401 || status === 403 || status === 429)) return 'ok';
+  return 'reject';
 }
 
 type Block = { type?: unknown; content?: unknown };
@@ -173,6 +220,18 @@ export function pickToLink(parsed: unknown, candidates: Candidate[], channel: Ch
   if (channel.via === 'none' && !official) return null;
   const c = candidates[index - 1];
   return { url: c.url, domain: c.domain, kind: official ? 'official' : 'site' };
+}
+
+// Google Web Risk Lookup API(uris.search) 응답 판정. 빈 응답 {} = 어느 목록에도 없음.
+// threat.threatTypes 가 하나라도 있으면 악성(목록에 오른 주소). 형식을 모르면 판정 불가.
+export function webRiskVerdict(body: unknown): 'safe' | 'unsafe' | 'unknown' {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'unknown';
+  const threat = (body as { threat?: unknown }).threat;
+  if (threat == null) return 'safe';
+  if (typeof threat !== 'object') return 'unknown';
+  const types = (threat as { threatTypes?: unknown }).threatTypes;
+  if (Array.isArray(types) && types.length > 0) return 'unsafe';
+  return 'safe';
 }
 
 // 한국 날짜(YYYY-MM-DD) — 검색 프롬프트에 넣는다.

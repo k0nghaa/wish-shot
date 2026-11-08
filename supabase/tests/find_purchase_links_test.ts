@@ -3,16 +3,24 @@
 import {
   type Channel,
   type Harvest,
+  checkRedirect,
   harvestCandidates,
   hasRealToolError,
   inScope,
+  isTrustedMallHost,
   kstDate,
   normalizeDomain,
   pickToLink,
   resolveChannel,
+  safeHttpsUrl,
   searchScope,
+  siteBase,
+  statusVerdict,
+  webRiskVerdict,
 } from '../functions/find-purchase-links/logic.ts';
 import { buildSearchTool } from '../functions/find-purchase-links/prompt.ts';
+import { checkWebRisk } from '../functions/find-purchase-links/safety.ts';
+import { verifyLink } from '../functions/find-purchase-links/verify.ts';
 
 function eq(actual: unknown, expected: unknown, msg = ''): void {
   const a = JSON.stringify(actual);
@@ -126,6 +134,7 @@ Deno.test('inScope: 범위·스킴 검사, 정리된 href 반환', () => {
     { href: 'https://www.musinsa.com/products/1', host: 'www.musinsa.com' },
     '줄바꿈 등은 파서가 정리한 형태로',
   );
+  eq(inScope('http://www.musinsa.com/products/1', allowed), null, 'http 는 받지 않는다');
   const blocked = { mode: 'blocked', domains: ['coupang.com'] } as const;
   eq(inScope('https://www.coupang.com/vp/products/1', blocked), null);
   eq(inScope('https://www.coupang.com./vp/1', blocked), null, '끝에 점이 붙어도 막는다');
@@ -191,6 +200,63 @@ Deno.test('pickToLink: 번호 범위·형식·채널 조건', () => {
   eq(pickToLink({ index: '1', isOfficial: true }, cands, none), null);
   eq(pickToLink(null, cands, none), null);
   eq(pickToLink({ index: 1, isOfficial: 'true' }, cands, none), null, 'isOfficial 은 true 만 공식');
+});
+
+Deno.test('safeHttpsUrl: https·기본 포트·도메인 이름만', () => {
+  eq(safeHttpsUrl('https://www.nike.com/kr/t/1'), { href: 'https://www.nike.com/kr/t/1', host: 'www.nike.com' });
+  eq(safeHttpsUrl('http://www.nike.com/kr/t/1'), null, 'http');
+  eq(safeHttpsUrl('https://www.nike.com:8443/x'), null, '기본 포트가 아님');
+  eq(safeHttpsUrl('https://www.nike.com:443/x'), { href: 'https://www.nike.com/x', host: 'www.nike.com' }, '443 은 기본 포트');
+  eq(safeHttpsUrl('https://1.2.3.4/x'), null, 'IP 주소');
+  eq(safeHttpsUrl('https://[::1]/x'), null, 'IPv6 주소');
+  eq(safeHttpsUrl('https://user:pw@www.nike.com/x'), null, '아이디·비밀번호 포함');
+  eq(safeHttpsUrl('https://xn--80ak6aa92e.com/'), { href: 'https://xn--80ak6aa92e.com/', host: 'xn--80ak6aa92e.com' }, '퓨니코드 도메인은 형식상 통과');
+});
+
+Deno.test('링크 접속 확인 판정: 리다이렉트·응답 코드', () => {
+  eq(siteBase('www.nike.com'), 'nike.com');
+  eq(siteBase('m.smartstore.naver.com'), 'smartstore.naver.com');
+  eq(siteBase('nike.com'), 'nike.com');
+
+  const cur = 'https://www.nike.com/kr/t/1';
+  eq(checkRedirect('/kr/t/1-new', cur, 'nike.com'), 'https://www.nike.com/kr/t/1-new', '상대 경로');
+  eq(checkRedirect('https://nike.com/kr/x', cur, 'nike.com'), 'https://nike.com/kr/x', '같은 사이트');
+  eq(checkRedirect('https://evil.com/phish', cur, 'nike.com'), null, '다른 사이트로 넘김');
+  eq(checkRedirect('https://nike.com.evil.com/x', cur, 'nike.com'), null, '접미어 위장');
+  eq(checkRedirect('http://www.nike.com/kr/x', cur, 'nike.com'), null, 'http 로 내림');
+  eq(checkRedirect('javascript:alert(1)', cur, 'nike.com'), null);
+
+  eq(statusVerdict(200, false), 'ok');
+  eq(statusVerdict(301, false), 'redirect');
+  eq(statusVerdict(404, false), 'reject');
+  eq(statusVerdict(410, true), 'reject');
+  eq(statusVerdict(500, true), 'reject');
+  eq(statusVerdict(403, false), 'reject', '일반 사이트의 403 은 확인 실패');
+  eq(statusVerdict(403, true), 'ok', '대형 몰의 봇 차단 403 은 사이트가 살아 있는 것으로');
+
+  eq(isTrustedMallHost('www.coupang.com'), true);
+  eq(isTrustedMallHost('smartstore.naver.com'), true);
+  eq(isTrustedMallHost('blog.naver.com'), false);
+  eq(isTrustedMallHost('www.nike.com'), false);
+});
+
+Deno.test('verifyLink: https 가 아니면 접속하지 않고 거절', async () => {
+  eq(await verifyLink('http://www.nike.com/', 1000), { ok: false, reason: 'not_https' });
+  eq(await verifyLink('https://1.2.3.4/', 1000), { ok: false, reason: 'not_https' });
+});
+
+Deno.test('webRiskVerdict: 빈 응답은 안전, 목록에 오르면 악성, 모르는 형식은 판정 불가', () => {
+  eq(webRiskVerdict({}), 'safe');
+  eq(webRiskVerdict({ threat: { threatTypes: ['SOCIAL_ENGINEERING'], expireTime: '2026-11-10T00:00:00Z' } }), 'unsafe');
+  eq(webRiskVerdict({ threat: { threatTypes: [] } }), 'safe');
+  eq(webRiskVerdict(null), 'unknown');
+  eq(webRiskVerdict([]), 'unknown');
+  eq(webRiskVerdict({ threat: 'x' }), 'unknown');
+});
+
+Deno.test('checkWebRisk: 키가 없으면 조회하지 않고 no_key(호출부가 링크를 비움)', async () => {
+  eq(await checkWebRisk('https://www.nike.com/', undefined, 1000), 'no_key');
+  eq(await checkWebRisk('https://www.nike.com/', '', 1000), 'no_key');
 });
 
 Deno.test('kstDate: 한국 날짜', () => {
