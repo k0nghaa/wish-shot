@@ -11,7 +11,7 @@
 - **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. (이메일 가입/승격은 이후 Phase)
 - **공유 시트**: `expo-share-intent` (iOS Share Extension)
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
-- **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**
+- **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**. 요청 한도(사용자·전체)·입력 크기 상한으로 API 비용 제한
 - **빌드**: EAS 클라우드 빌드 → TestFlight (Windows PC + Mac 없이 iOS 개발·배포)
 - **계측(Phase 10)**: PostHog (`posthog-react-native`). 커스텀 이벤트 + 자동 라이프사이클 수집, 전부 `src/lib/analytics.ts` 경유. **키 미설정 시 no-op**, `__DEV__` 기본 옵트아웃. 속성은 enum·수치만 — 사진·텍스트 등 콘텐츠 미수집, IP로 추정한 위치 미수집. 1.0.2부터 앱 버전·언어·시간대 자동 수집(`expo-application`·`expo-localization`). 정본: [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - **오류·크래시 수집(Phase 14, 1.0.2)**: Sentry (`@sentry/react-native` 7.11). 오류·크래시만(성능 추적·리플레이·스크린샷 끔), 전부 `src/lib/monitoring.ts` 경유, 사용자 내용·IP·위치 제외. **DSN 미설정 시 no-op**, `__DEV__` 기본 비활성. 소스맵은 EAS Build가 자동 업로드
@@ -60,6 +60,8 @@ $env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wi
 `0003_orphan_images_fn.sql`(고아 이미지 키 열거 함수)에 있습니다(아래 "익명 계정·고아 파일 정리").
 `0004_internal_users.sql`은 지표 집계에서 뺄 개발자 uid 목록 테이블(`ops.internal_users`, API 비노출)입니다 —
 uid는 git에 두지 않고 SQL Editor에서 직접 insert하며, `supabase/tests/metrics.sql`이 이를 참조합니다.
+`0005_parse_quota.sql`은 AI 정제 함수의 요청 한도 카운터와 실패 기록입니다(`ops` 스키마, 함수는 service_role 전용 —
+아래 "요청 한도·입력 상한·실패 기록"). 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/`에 함께 둡니다.
 
 **마이그레이션 적용** (둘 중 하나):
 
@@ -81,6 +83,8 @@ npx tsc --noEmit
 - 스키마 변경은 기존 파일을 고치지 말고 **새 `000N_*.sql`** 을 추가합니다.
 - RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다.
 - 테스트 지표(링크 보유율·AI 정제 상태 분포·필드 수정률·추천 채택률)는 `supabase/tests/metrics.sql` 을 같은 방식으로 실행합니다(블록 상단 코호트 값 기입 후 — Phase 10).
+- 요청 한도 검증은 `supabase/tests/quota.sql`(권한 확인 + 트랜잭션 안 동작 시험 후 rollback), AI 정제 실패 원인 조회는 `supabase/tests/parse_failures.sql` 을 같은 방식으로 실행합니다.
+- 요청 한도 실제 동작 시험은 `supabase/tests/parse_quota_live.ts`(Deno, 공개 anon 키만 사용)로 합니다. 사용자 시간당 한도를 시크릿으로 잠시 낮춘 뒤 실행하고 바로 되돌립니다(실행 방법은 파일 상단 주석).
 - `src/types/database.ts` 는 자동 생성 파일이라 직접 수정하지 않습니다.
 
 ## 이미지 저장·전송 (egress 최적화, Phase 9)
@@ -150,6 +154,25 @@ deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
 deno run --allow-read=supabase/functions/parse-screenshot-text/samples \
   --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/data \
   supabase/functions/parse-screenshot-text/samples/goldset-holdout.ts --write
+```
+
+**요청 한도·입력 상한·실패 기록** (익명 로그인이 열려 있어 공개 키만으로 함수를 부를 수 있으므로 API 비용을 묶는다):
+
+- **입력 상한**: OCR 텍스트 2,000자, 카테고리 목록(프롬프트에 들어가는 JSON 형태) 2,000자. 넘으면 LLM을 부르지 않고
+  `400`(`text_too_long` / `categories_too_long`) — 자르지 않으므로 상한 안의 요청은 Anthropic 요청이 이전과 같습니다.
+- **요청 한도**: 검증을 통과한 요청만 셉니다. 사용자 시간당 30 · 하루 100(한국 시간 0시 기준) · 전체 하루 300(차단기).
+  넘으면 `429` + `{ "error": "rate_limited", "scope": "user" | "global" }` + `Retry-After`(초). 앱은 다른 실패와 같은 수동 입력 경로로 갑니다.
+  카운터는 DB 함수 `consume_parse_quota`(`0005`)이고 **service_role 전용**이라 앱에서 직접 부를 수 없습니다.
+  카운터 응답이 3초를 넘기면 `503`(`quota_unavailable`)으로 거절하고(요청을 한꺼번에 쏟아내 한도를 우회하는 것 방지),
+  그 밖의 카운터 DB 오류면 호출을 허용합니다(fail-open). 이미지 요청은 `PARSE_IMAGE_WEIGHT`(기본 1)만큼 셉니다.
+- **실패 기록**: 로그인 확인 뒤의 실패 응답(입력 오류·한도 초과·LLM 실패)은 원인을 `ops.parse_failures`에 남깁니다
+  (사용자·한국 날짜·사유·횟수, LLM 오류는 Anthropic 상태 코드, 상한 초과는 넘은 길이 — 텍스트·이미지 내용 없음).
+  함수 로그는 Free 플랜에서 1일만 보관되기 때문입니다. 빈 익명 계정이 정리돼도 기록은 남겨, 에러를 만나고
+  저장 없이 떠난 사용자도 집계에 들어갑니다. 조회: `supabase/tests/parse_failures.sql`.
+- **한도 조정**(선택, 미설정이면 위 기본값 — 함수가 요청마다 읽어 재배포 없이 반영):
+
+```bash
+npx supabase secrets set PARSE_LIMIT_USER_HOURLY=30 PARSE_LIMIT_USER_DAILY=100 PARSE_LIMIT_GLOBAL_DAILY=300 PARSE_IMAGE_WEIGHT=1
 ```
 
 **OCR 엔진 참고**: 지시서의 Google ML Kit 대신 **Apple Vision**(로컬 모듈 `modules/expo-vision-ocr`)을
