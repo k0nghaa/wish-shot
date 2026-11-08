@@ -1,0 +1,182 @@
+// find-purchase-links 의 순수 로직(네트워크·환경 변수 없음).
+// index.ts(배포 함수)와 supabase/tests/find_purchase_links_test.ts(단위 검증)가 쓴다.
+//
+// 불변식 1(실제 URL만): 화면에 나가는 URL 은 harvestCandidates 가 웹 검색 결과 블록에서
+//   꺼낸 것뿐이다. 모델이 고르는 것은 후보 "번호"이고, URL 은 pickToLink 가 후보에서 꺼낸다.
+
+import { MALLS, type MallId, NON_SELLER_DOMAINS, isMallId } from './malls.ts';
+
+export const MAX_PRODUCT_NAME_LEN = 200;
+export const MAX_BRAND_LEN = 100;
+// 검색 1회 결과는 보통 10개 안팎 — 검색 3회분을 담을 수 있게.
+export const MAX_CANDIDATES = 30;
+const MAX_URL_LEN = 2048;
+
+// 입구 채널: 그 사이트(들) 안에서 찾는다 / 채널을 모른다(공식 홈페이지를 찾는다)
+export type Channel =
+  | { via: 'domain' | 'mall'; domains: readonly string[] }
+  | { via: 'none' };
+
+// 웹 검색 도구의 도메인 필터(allowed_domains·blocked_domains 는 둘 중 하나만)
+export type SearchScope =
+  | { mode: 'allowed'; domains: readonly string[] }
+  | { mode: 'blocked'; domains: readonly string[] };
+
+export type Candidate = { url: string; title: string; domain: string };
+
+export type Link = { url: string; domain: string; kind: 'official' | 'site' };
+
+// 호스트명 형식(ASCII 만 — 유니코드 도메인은 겉보기가 같은 다른 도메인일 수 있어 받지 않는다).
+// 라벨 1~63자, 영문 소문자·숫자·하이픈(양 끝 하이픈 불가), 점 하나 이상, 최상위 라벨은 영문으로 시작하는 2자 이상.
+const HOST_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+
+// 등록 기관 접미사만 남은 이름(주소창이 잘려 '…co.kr'만 읽힌 경우 등) — 검색 범위가 나라 전체가 된다.
+const PUBLIC_SUFFIX_ONLY = new Set([
+  'co.kr', 'or.kr', 'go.kr', 'ac.kr', 'ne.kr', 're.kr', 'pe.kr', 'kg.kr', 'es.kr', 'ms.kr', 'hs.kr', 'sc.kr', 'mil.kr',
+  'co.uk', 'org.uk', 'ac.uk', 'com.cn', 'net.cn', 'org.cn', 'co.jp', 'ne.jp', 'or.jp',
+  'com.au', 'net.au', 'com.tw', 'com.hk', 'com.sg', 'co.nz', 'com.br',
+]);
+// 공개 인터넷에 없는 예약 최상위 이름
+const RESERVED_TLDS = new Set([
+  'local', 'localhost', 'internal', 'localdomain', 'invalid', 'test', 'example', 'onion', 'lan', 'home', 'corp', 'arpa',
+]);
+
+// 캡처에서 읽은 도메인을 검색 범위로 쓸 수 있게 정리한다. 형식이 틀리면 null.
+// 앱이 이미 정리해 보내지만, 서버도 같은 규칙으로 한 번 더 정리한다.
+export function normalizeDomain(raw: string): string | null {
+  // 스킴·경로·포트가 붙어 와도 호스트명만 남긴다(예: https://m.musinsa.com/products/1 → m.musinsa.com)
+  let d = raw.trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').split(/[/?#:]/)[0].replace(/\.$/, '');
+  // 모바일·www 접두어는 떼어 사이트 전체를 범위로(하위 도메인은 자동 포함된다)
+  const stripped = d.replace(/^(?:www\d?|m|mobile)\./, '');
+  if (stripped.includes('.')) d = stripped;
+  if (!HOST_RE.test(d)) return null;
+  if (PUBLIC_SUFFIX_ONLY.has(d)) return null;
+  if (RESERVED_TLDS.has(d.slice(d.lastIndexOf('.') + 1))) return null;
+  return d;
+}
+
+export function hostMatches(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+// 도메인이 사전의 몰이면 그 몰 id
+export function mallForDomain(domain: string): MallId | null {
+  for (const [id, mall] of Object.entries(MALLS) as [MallId, (typeof MALLS)[MallId]][]) {
+    if (mall.domains.some((md) => hostMatches(domain, md))) return id;
+  }
+  return null;
+}
+
+export type ChannelResult = { ok: true; channel: Channel } | { ok: false; error: 'invalid_input' | 'invalid_domain' | 'invalid_mall' };
+
+// 입력의 domain·mall(둘 중 하나만)로 입구 채널을 정한다.
+export function resolveChannel(domain: unknown, mall: unknown): ChannelResult {
+  const hasDomain = domain != null && domain !== '';
+  const hasMall = mall != null && mall !== '';
+  if (hasDomain && hasMall) return { ok: false, error: 'invalid_input' };
+  if (hasDomain) {
+    if (typeof domain !== 'string') return { ok: false, error: 'invalid_domain' };
+    const d = normalizeDomain(domain);
+    if (!d) return { ok: false, error: 'invalid_domain' };
+    // 사전의 몰 도메인이면 그 몰의 검색 도메인 전체를 쓴다(예: brand.naver.com → 스마트스토어 포함)
+    const id = mallForDomain(d);
+    if (id) return { ok: true, channel: { via: 'domain', domains: [...MALLS[id].domains] } };
+    // 포털·블로그·SNS 같은 판매처가 아닌 곳이면 채널이 없는 것으로 본다(공식 홈페이지 찾기)
+    if (NON_SELLER_DOMAINS.some((n) => hostMatches(d, n))) return { ok: true, channel: { via: 'none' } };
+    return { ok: true, channel: { via: 'domain', domains: [d] } };
+  }
+  if (hasMall) {
+    if (!isMallId(mall)) return { ok: false, error: 'invalid_mall' };
+    return { ok: true, channel: { via: 'mall', domains: [...MALLS[mall].domains] } };
+  }
+  return { ok: true, channel: { via: 'none' } };
+}
+
+// 브랜드 비교용 정규화(앱 normalizeName 과 같은 방향: NFC·소문자·문자/숫자만)
+export function normalizeBrand(brand: string): string {
+  return brand.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+// 검색 범위. 채널이 있으면 그 사이트 안에서만, 없으면 사전의 몰을 빼고(공식 홈페이지 찾기).
+// 브랜드가 그 몰 자체이면(이케아·무신사 스탠다드 등 — ownBrands 와 정확히 같을 때) 그 몰은 빼지 않는다.
+export function searchScope(channel: Channel, brand: string | null): SearchScope {
+  if (channel.via !== 'none') return { mode: 'allowed', domains: [...channel.domains] };
+  const nb = brand ? normalizeBrand(brand) : '';
+  const blocked: string[] = [];
+  for (const mall of Object.values(MALLS)) {
+    const isBrandsOwn = nb !== '' && mall.ownBrands.some((n) => normalizeBrand(n) === nb);
+    if (!isBrandsOwn) blocked.push(...mall.domains);
+  }
+  return { mode: 'blocked', domains: blocked };
+}
+
+// URL 이 검색 범위 안이면 파서가 정리한 href 와 호스트를, 아니면 null(http·https 만).
+// 앱에는 검사한 그 형태(href)를 넘긴다 — 원본 문자열의 탭·줄바꿈·역슬래시를 다른 파서가
+// 다르게 읽어 검사한 호스트와 열리는 호스트가 달라지는 것을 막는다.
+export function inScope(url: string, scope: SearchScope): { href: string; host: string } | null {
+  if (url.length > MAX_URL_LEN) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  const host = u.hostname.toLowerCase().replace(/\.$/, '');
+  const matched = scope.domains.some((d) => hostMatches(host, d));
+  if (scope.mode === 'allowed' ? !matched : matched) return null;
+  if (u.href.length > MAX_URL_LEN) return null;
+  return { href: u.href, host };
+}
+
+type Block = { type?: unknown; content?: unknown };
+
+export type Harvest = { candidates: Candidate[]; errorCodes: string[] };
+
+// 응답 content 의 web_search_tool_result 블록에서 후보를 모은다(범위 밖·중복은 버림).
+// 오류 결과(content 가 목록이 아니라 객체)는 error_code 만 모은다.
+export function harvestCandidates(content: unknown, scope: SearchScope, into: Harvest): Harvest {
+  if (!Array.isArray(content)) return into;
+  for (const block of content as Block[]) {
+    if (block?.type !== 'web_search_tool_result') continue;
+    const c = block.content;
+    if (Array.isArray(c)) {
+      for (const r of c as { type?: unknown; url?: unknown; title?: unknown }[]) {
+        if (into.candidates.length >= MAX_CANDIDATES) break;
+        if (r?.type !== 'web_search_result' || typeof r.url !== 'string') continue;
+        const ok = inScope(r.url, scope);
+        if (!ok) continue;
+        if (into.candidates.some((x) => x.url === ok.href)) continue;
+        into.candidates.push({ url: ok.href, title: typeof r.title === 'string' ? r.title : '', domain: ok.host });
+      }
+    } else if (c && typeof c === 'object') {
+      const code = (c as { error_code?: unknown }).error_code;
+      into.errorCodes.push(typeof code === 'string' ? code : 'unknown');
+    }
+  }
+  return into;
+}
+
+// 실패로 기록할 도구 오류(max_uses_exceeded 는 허용 횟수를 다 쓴 것이라 "결과 없음"으로 본다)
+export function hasRealToolError(errorCodes: readonly string[]): boolean {
+  return errorCodes.some((c) => c !== 'max_uses_exceeded');
+}
+
+// 2차 호출(고르기)의 구조화 출력 → 링크. 번호는 1부터. 범위 밖·형식 오류는 null.
+// 채널이 없을 때는 공식 판매처일 때만 채운다(불변식 4).
+export function pickToLink(parsed: unknown, candidates: Candidate[], channel: Channel): Link | null {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const { index, isOfficial } = parsed as { index?: unknown; isOfficial?: unknown };
+  if (typeof index !== 'number' || !Number.isInteger(index)) return null;
+  if (index < 1 || index > candidates.length) return null;
+  const official = isOfficial === true;
+  if (channel.via === 'none' && !official) return null;
+  const c = candidates[index - 1];
+  return { url: c.url, domain: c.domain, kind: official ? 'official' : 'site' };
+}
+
+// 한국 날짜(YYYY-MM-DD) — 검색 프롬프트에 넣는다.
+export function kstDate(now: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(now);
+}
