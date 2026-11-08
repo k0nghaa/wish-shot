@@ -134,7 +134,7 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3
 ```
 
-- **정답셋 정확도 측정**은 `samples/goldset-eval.ts`로 합니다. 사람이 붙인 정답(라벨 규칙: `samples/goldset/LABELING.md`)으로 프롬프트·온도·모델 변형별 가격 정답률을 'N장 중 M장'으로 냅니다. 원문 데이터(`samples/goldset/data/`)와 결과(`samples/goldset/out/`)는 git에 올리지 않습니다. 기준선 측정 결과는 `samples/goldset/REPORT.md`에 숫자와 실패 패턴만 정리합니다.
+- **정답셋 정확도 측정**은 `samples/goldset-eval.ts`로 합니다. 사람이 붙인 정답(라벨 규칙: `samples/goldset/LABELING.md`)으로 프롬프트·온도·모델 변형별 가격 정답률을 'N장 중 M장'으로 냅니다. 원문 데이터(`samples/goldset/data/`)와 결과(`samples/goldset/out/`)는 git에 올리지 않습니다. 기준선(Phase 13)과 재측정(Phase 17 — 중고거래 가격 규칙) 결과는 `samples/goldset/REPORT.md`에 숫자와 실패 패턴만 정리합니다. 재측정은 `--out`으로 `samples/goldset/out/` 아래 하위 폴더에 써서 기준선 결과를 덮어쓰지 않습니다.
 
 ```bash
 # 키 없이 입력 검증·호출 수만 확인(--dry-run을 빼면 실제 호출)
@@ -166,6 +166,7 @@ deno run --allow-read=supabase/functions/parse-screenshot-text/samples \
 - Phase 10 작업 지시(테스트 계측 — PostHog): [`docs/phases/phase-10-testflight-analytics.md`](docs/phases/phase-10-testflight-analytics.md)
 - Phase 11 작업 지시(익명 계정 수명주기 — 빈 계정·고아 파일 정리): [`docs/phases/phase-11-anon-account-lifecycle.md`](docs/phases/phase-11-anon-account-lifecycle.md)
 - Phase 14 작업 지시·결과(Sentry 오류·크래시 수집 · App Store 메타데이터 · 개발용 앱 분리): [`docs/phases/phase-14-sentry-and-store-metadata.md`](docs/phases/phase-14-sentry-and-store-metadata.md)
+- Phase 17 작업 지시·결과(가격 정확도 — 중고거래 가격 규칙 · 좋아요 수 오추출 재현): [`docs/phases/phase-17-price-accuracy.md`](docs/phases/phase-17-price-accuracy.md)
 - 트래킹 플랜(이벤트 택소노미 정본): [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - 개인정보처리방침 원문(TestFlight 외부 공개용): [`docs/legal/privacy.html`](docs/legal/privacy.html)
 - 저장소 작업 규칙: [`CLAUDE.md`](CLAUDE.md)
