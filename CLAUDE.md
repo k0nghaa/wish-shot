@@ -17,6 +17,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - Phase 10 작업 지시: `docs/phases/phase-10-testflight-analytics.md` (테스트 계측 — PostHog)
 - Phase 11 작업 지시: `docs/phases/phase-11-anon-account-lifecycle.md` (익명 계정 수명주기 — 빈 계정·고아 파일 정리, 전부 서버 측)
 - Phase 14 작업 지시·결과: `docs/phases/phase-14-sentry-and-store-metadata.md` (Sentry 오류·크래시 수집 · App Store 메타데이터 · 개발용 앱 분리 · 1.0.2)
+- Phase 17 작업 지시·결과: `docs/phases/phase-17-price-accuracy.md` (가격 정확도 — 중고거래 가격 규칙 채택 · 좋아요 수 오추출 재현과 프롬프트 수정 미채택 · 프롬프트 시도 비교 부록)
 - 트래킹 플랜(이벤트 택소노미 **정본**): `docs/testing/tracking-plan.md`
 - 디자인 정본: `docs/design/phase-5-visual-spec.md`, `docs/design/color_tokens.md`
 - 개인정보처리방침 원문: `docs/legal/privacy.html` (TestFlight 외부 공개용)
@@ -82,7 +83,7 @@ supabase/
     0003_orphan_images_fn.sql    # 고아 이미지 키 열거 함수 list_orphan_item_images (원본∪썸네일 union, service_role 전용)
     0004_internal_users.sql      # 지표 제외용 개발자 uid 테이블 ops.internal_users (API 비노출·SQL Editor 전용, uid는 git 밖에서 insert)
   functions/
-    parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. prompt.ts(모델·스키마·프롬프트 단일 소스) + samples/(회귀 케이스 + eval.ts 배포 전 자동 검증 + goldset-eval.ts 정답셋 정확도 측정·goldset-holdout.ts 홀드아웃 지정(시드 고정)·prompt-2026-10-04.ts 비교용 고정 사본·goldset/LABELING.md 라벨 규칙·goldset/REPORT.md 기준선 측정 리포트. 원문 goldset/data·결과 goldset/out 은 git 제외)
+    parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. prompt.ts(모델·스키마·프롬프트 단일 소스) + samples/(회귀 케이스 + eval.ts 배포 전 자동 검증 + goldset-eval.ts 정답셋 정확도 측정·goldset-holdout.ts 홀드아웃 지정(시드 고정)·prompt-2026-10-04.ts 비교용 고정 사본·goldset/LABELING.md 라벨 규칙·goldset/REPORT.md 기준선·재측정 리포트. 원문 goldset/data·결과 goldset/out 은 git 제외)
     cleanup-orphan-images/  # Edge Function(Deno, service_role): 고아 이미지 주 1회 스윕 — x-cron-secret 보호·dryRun 지원·Storage API로만 삭제 (Phase 11)
   tests/                # rls.sql(RLS/권한 검증) + metrics.sql(테스트 지표 4종, Phase 10) — 대시보드 SQL Editor 에서 사람이 실행
 assets/                 # 아이콘·스플래시, logo-v1(참고용)
@@ -111,8 +112,8 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 - `npx supabase login` → `npx supabase gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts` — DB 스키마에서 타입 재생성 (마이그레이션 변경 시마다). 로그인은 최초 1회.
 - `npx supabase secrets set ANTHROPIC_API_KEY=...` — Edge Function 시크릿 등록(Claude 키). **앱·커밋·채팅엔 절대 넣지 않는다.**
 - `npx supabase functions deploy parse-screenshot-text` — Edge Function 배포(정제 프롬프트/로직 변경 시). **앱 재빌드와 무관**(서버 측). Docker 없이도 클라우드 번들로 배포됨(경고는 무시).
-- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3` — 정제 프롬프트 **배포 전 회귀 검증**(`prompt.ts`를 그대로 써서 API 직접 호출, 케이스당 3회). 키는 사람이 셸 환경 변수로만 설정 — 에이전트는 키를 다루지 않는다. 가격 원칙: 원화 금액만, 애매하면 null(틀린 값보다 빈칸). 샘플링은 `temperature 0`(추출 일관성 — 함수·eval 공통, `prompt.ts`).
-- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY --allow-read=supabase/functions/parse-screenshot-text/samples --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/out supabase/functions/parse-screenshot-text/samples/goldset-eval.ts --runs 3 --dry-run` — **정답셋 가격 정확도 측정**. 사람이 붙인 정답(`goldset/data/labels.csv`)으로 변형 5개(v0 10/04 프롬프트·v1 운영·v2 운영 프롬프트+온도 1.0·v1h/v1h-think 최신 Haiku)를 잰다. 결과는 `goldset/out/`의 results.csv·summary.md. `--dry-run`은 키 없이 입력 검증과 호출 수만 본다. 원문 데이터(`goldset/data/`)·결과는 **git 제외**(OCR 원문에 타인 계정명이 섞일 수 있음). 라벨 규칙: `samples/goldset/LABELING.md`. 가상 fixture 검증: `--data supabase/functions/parse-screenshot-text/samples/goldset/fixture --dry-run`. 홀드아웃(`holdout` 열)은 `samples/goldset-holdout.ts`가 유형마다 25%를 시드 고정으로 지정한다(`--write`일 때만 파일을 쓰고, 이미 지정돼 있으면 `--force` 없이 중단).
+- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3` — 정제 프롬프트 **배포 전 회귀 검증**(`prompt.ts`를 그대로 써서 API 직접 호출, 케이스당 3회). 키는 사람이 셸 환경 변수로만 설정 — 에이전트는 키를 다루지 않는다. 가격 원칙: 원화 금액만, 애매하면 null(틀린 값보다 빈칸), 정가 우선 — 단 중고거래 매물은 판매자 등록가(정가 우선 미적용, Phase 17). 샘플링은 `temperature 0`(추출 일관성 — 함수·eval 공통, `prompt.ts`).
+- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY --allow-read=supabase/functions/parse-screenshot-text/samples --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/out supabase/functions/parse-screenshot-text/samples/goldset-eval.ts --runs 3 --dry-run` — **정답셋 가격 정확도 측정**. 사람이 붙인 정답(`goldset/data/labels.csv`)으로 변형 5개(v0 10/04 프롬프트·v1 운영·v2 운영 프롬프트+온도 1.0·v1h/v1h-think 최신 Haiku)를 잰다. 결과는 `goldset/out/`의 results.csv·summary.md(Phase 13 기준선 — 덮어쓰지 않는다). 재측정은 `--variants v1`과 `--exclude-holdout`(고치는 동안) 또는 `--only-holdout`(최종 1회)로 하고, `--out supabase/functions/parse-screenshot-text/samples/goldset/out/<하위 폴더>`에 쓴다(부분 측정 결과 파일엔 접미사가 붙고, 다시 잴 땐 이전 결과를 옮긴 뒤 실행 — `--force` 금지). `--dry-run`은 키 없이 입력 검증과 호출 수만 본다. 원문 데이터(`goldset/data/`)·결과는 **git 제외**(OCR 원문에 타인 계정명이 섞일 수 있음). 라벨 규칙: `samples/goldset/LABELING.md`. 가상 fixture 검증: `--data supabase/functions/parse-screenshot-text/samples/goldset/fixture --dry-run`. 홀드아웃(`holdout` 열)은 `samples/goldset-holdout.ts`가 유형마다 25%를 시드 고정으로 지정한다(`--write`일 때만 파일을 쓰고, 이미 지정돼 있으면 `--force` 없이 중단).
 - `npx supabase functions deploy cleanup-orphan-images` — 고아 이미지 스윕 함수 배포(`config.toml`의 `verify_jwt = false`가 함께 적용됨). 시크릿: `npx supabase secrets set CRON_SECRET=<임의 난수>`. dry-run 확인·주간 스케줄 등록은 사람이 대시보드에서(Phase 11 지시서 참고).
 
 ## 환경 변수
