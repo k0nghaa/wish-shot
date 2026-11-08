@@ -81,7 +81,7 @@ order by g.day desc;
 -- -----------------------------------------------------------------------------
 -- §4 한 사용자의 오늘 기록 — 실제 동작 시험(Step 5) 확인용
 --   <UID> 를 시험 스크립트가 출력한 사용자 id 로 바꿔 실행한다.
---   기대(사용자 시간당 한도 2로 낮춘 시험): rate_limited_user 1건.
+--   기대(사용자 시간당 한도 2로 낮춘 parse_quota_live.ts 시험): rate_limited_user 1건, text_too_long 1건(max_len 2001).
 -- -----------------------------------------------------------------------------
 select reason, llm_status, count, max_len
 from ops.parse_failures

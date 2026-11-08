@@ -86,7 +86,7 @@ supabase/
   functions/
     parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. prompt.ts(모델·스키마·프롬프트 단일 소스) + samples/(회귀 케이스 + eval.ts 배포 전 자동 검증 + goldset-eval.ts 정답셋 정확도 측정·goldset-holdout.ts 홀드아웃 지정(시드 고정)·prompt-2026-10-04.ts 비교용 고정 사본·goldset/LABELING.md 라벨 규칙·goldset/REPORT.md 기준선 측정 리포트. 원문 goldset/data·결과 goldset/out 은 git 제외)
     cleanup-orphan-images/  # Edge Function(Deno, service_role): 고아 이미지 주 1회 스윕 — x-cron-secret 보호·dryRun 지원·Storage API로만 삭제 (Phase 11)
-  tests/                # rls.sql(RLS/권한 검증) + metrics.sql(테스트 지표 4종, Phase 10) + quota.sql(요청 한도 권한·동작 검증, rollback) + parse_failures.sql(AI 정제 실패 원인 조회) — 대시보드 SQL Editor 에서 사람이 실행
+  tests/                # rls.sql(RLS/권한 검증) + metrics.sql(테스트 지표 4종, Phase 10) + quota.sql(요청 한도 권한·동작 검증, rollback) + parse_failures.sql(AI 정제 실패 원인 조회) — 대시보드 SQL Editor 에서 사람이 실행. parse_quota_live.ts(요청 한도 실제 동작 시험, Deno — 공개 anon 키만, 사람이 터미널에서 실행)
 assets/                 # 아이콘·스플래시, logo-v1(참고용)
 app.json                # Expo 설정 = 운영(스토어) 정본 (플러그인: share-intent/image-picker/media-library/localization(ko)/Sentry, iOS 공유확장, privacy manifest, CFBundleDevelopmentRegion ko, EAS projectId)
 app.config.js           # 앱 변형(Phase 14): APP_VARIANT=development 일 때만 이름(WishShot Dev)·번들 ID(.dev)·scheme(wishshot-dev)·공유 확장 블록을 덮어씀. 그 외엔 app.json 그대로
