@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { uuid } from 'expo-modules-core';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { router as appRouter, useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -29,8 +29,10 @@ import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { capture } from '@/lib/analytics';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
+import { attachLinkAfterSave, usePurchaseLinkSearch } from '@/hooks/usePurchaseLinkSearch';
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
+import { normalizeName } from '@/lib/normalize';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
@@ -61,6 +63,17 @@ const REGION_NOTICE_KEY = 'wishshot.regionNoticeShown';
 function parsePrice(text: string): number | null {
   const digits = text.replace(/[^\d]/g, '');
   return digits ? Number(digits) : null;
+}
+
+/**
+ * 저장 뒤 링크를 붙였을 때 안내(구매처 찾기). 등록 화면이 이미 닫힌 뒤라 전역 router 로 이동한다.
+ * 사용자가 확인하지 못한 링크가 저장됐으므로 확인을 권한다.
+ */
+function notifyLinkAttached(itemId: string) {
+  Alert.alert('링크 추가', '저장한 위시에 판매처 링크를 붙였습니다. 확인하세요.', [
+    { text: '닫기', style: 'cancel' },
+    { text: '보기', onPress: () => appRouter.push({ pathname: '/item/[id]', params: { id: itemId } }) },
+  ]);
 }
 
 /** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
@@ -145,7 +158,9 @@ export default function RegisterScreen() {
   const [productNameEdit, setProductNameEdit] = useState<string | null>(null);
   const [brandEdit, setBrandEdit] = useState<string | null>(null);
   const [priceEdit, setPriceEdit] = useState<string | null>(null);
-  const [sourceLink, setSourceLink] = useState(params.sourceLink ?? '');
+  // 링크도 "사용자 편집분"만 상태로 둔다. null = 아직 손대지 않음(→ 구매처 찾기 결과를 보여 준다).
+  // 공유 시트로 받은 링크(params.sourceLink)는 사용자가 넣은 것과 같이 다룬다(찾지 않고 덮어쓰지 않음).
+  const [sourceLinkEdit, setSourceLinkEdit] = useState<string | null>(params.sourceLink ? params.sourceLink : null);
   const [memo, setMemo] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]); // 기존 태그(선택 칩용)
@@ -241,11 +256,35 @@ export default function RegisterScreen() {
   const productName = productNameEdit ?? aiResult?.productName ?? '';
   const brand = brandEdit ?? aiResult?.brand ?? '';
   const price = priceEdit ?? (aiResult?.price != null ? String(aiResult.price) : '');
+  // 구매처 찾기: AI 정제가 끝나 제품명이 있고 링크 칸을 손대지 않았으면 판매 페이지 링크를 자동으로 찾는다.
+  // 제품명·브랜드·입구 채널(OCR 원문에서 기기가 판별)만 보낸다. 실패·한도·없음은 조용히 빈칸.
+  // 저장이 시작되면 새 찾기를 시작하지 않는다(결과를 붙일 곳이 없다).
+  const saveStartedRef = useRef(false);
+  const purchase = usePurchaseLinkSearch({
+    enabled: Boolean(imageUri) && sourceLinkEdit === null,
+    productName: aiResult?.productName ?? null,
+    brand: aiResult?.brand ?? null,
+    ocrText: analysisState.rawText,
+    blockNewRef: saveStartedRef,
+  });
+  // AI 값으로 찾은 링크라, 사용자가 제품명·브랜드를 다른 제품으로 고쳤으면 쓰지 않는다(틀린 링크보다 빈칸).
+  const linkMatchesForm =
+    !!aiResult?.productName &&
+    normalizeName(brand, productName) === normalizeName(aiResult.brand, aiResult.productName);
+  const sourceLink = sourceLinkEdit ?? (linkMatchesForm ? purchase.link?.url : undefined) ?? '';
+  const linkSearching = linkMatchesForm && purchase.searching && sourceLink === '';
   const aiFilled = {
     productName: productNameEdit === null && !!aiResult?.productName,
     brand: brandEdit === null && !!aiResult?.brand,
     price: priceEdit === null && aiResult?.price != null,
+    link: sourceLinkEdit === null && linkMatchesForm && !!purchase.link,
   };
+
+  // 저장 직전에 부른다: 링크 칸이 비어 있고 손대지 않았는데 링크를 찾는 중이면, 저장 뒤 이어 받을 찾기를 잡아 둔다.
+  // (markSubmitted 로 화면 상태가 바뀌기 전에 잡아야 한다.)
+  function takeLinkHandOff() {
+    return sourceLinkEdit === null && sourceLink === '' && linkMatchesForm ? purchase.takeForHandOff() : null;
+  }
 
   // FR-8: AI가 추천한 카테고리(목록 내 이름)를 id 로 환산. 사용자가 아직 안 골랐으면 추천을 미리선택한다.
   const suggestedCategoryId = aiResult?.suggestedCategory
@@ -381,7 +420,15 @@ export default function RegisterScreen() {
     if (!wantsDelete) return;
     const result = await deletePhotoAsset(pickedAssetId);
     if (result === 'denied') {
-      Alert.alert('앨범 삭제 불가', "앨범 삭제는 '모든 사진' 접근이 필요합니다. 설정 > 위시샷 > 사진에서 허용하세요.");
+      // 닫힐 때까지 기다린다 — 이동 뒤 뜨는 '링크 추가' 안내와 겹치지 않게.
+      await new Promise<void>((resolve) => {
+        Alert.alert(
+          '앨범 삭제 불가',
+          "앨범 삭제는 '모든 사진' 접근이 필요합니다. 설정 > 위시샷 > 사진에서 허용하세요.",
+          [{ text: '확인', onPress: () => resolve() }],
+          { cancelable: true, onDismiss: () => resolve() },
+        );
+      });
     }
     // 'deleted' 는 OS 확인창으로 충분(별도 안내 없음), 'error'(취소 포함)는 위시가 이미 저장돼 조용히 넘긴다.
   }
@@ -398,6 +445,7 @@ export default function RegisterScreen() {
       }
       await performNewSave();
     } catch (e) {
+      saveStartedRef.current = false;
       setSaving(false);
       if (e instanceof ImageNotReadyError) {
         Alert.alert('사진 준비 중', e.message);
@@ -408,6 +456,8 @@ export default function RegisterScreen() {
   }
 
   async function performNewSave() {
+    const linkHandOff = takeLinkHandOff();
+    saveStartedRef.current = true;
     const userId = await getCurrentUserId();
     const id = uuid.v4();
     // 원본 uri(사용자가 고른 사진, OCR 은 이미 이걸로 돌았음)에서 저장 시점에만 축소·압축한다.
@@ -434,6 +484,7 @@ export default function RegisterScreen() {
       // 사전조회를 놓친 경합(23505) → 덮어쓰기 모달로 폴백
       if (e instanceof DuplicateItemError) {
         const existing = await findDuplicateItem(brand, productName.trim());
+        saveStartedRef.current = false;
         setSaving(false);
         if (existing) await openDuplicate(existing);
         return;
@@ -446,6 +497,8 @@ export default function RegisterScreen() {
     setSaving(false);
     await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
     goToSavedCategory();
+    // 저장 뒤 링크 붙이기: 이동한 뒤에 결과를 받아 붙이고 안내한다(앨범 삭제 안내와 겹치지 않게).
+    if (linkHandOff) attachLinkAfterSave(linkHandOff, id, notifyLinkAttached);
   }
 
   // 저장한 카테고리 화면으로 이동(미분류면 미분류 목록).
@@ -459,6 +512,10 @@ export default function RegisterScreen() {
     const existing = dupItem;
     if (!existing) return;
     setOverwriteBusy(true);
+    // 기존 위시에 링크가 있고 링크 칸을 손대지 않았으면 기존 링크를 그대로 둔다(불변식 5 — 찾은 링크로 바꾸지 않음).
+    const keepExistingLink = sourceLinkEdit === null && !!existing.source_link;
+    const linkHandOff = keepExistingLink ? null : takeLinkHandOff();
+    saveStartedRef.current = true;
     try {
       const userId = await getCurrentUserId();
       await ensureFileReady(imageUri!); // iCloud 처리 유지(불변식 3)
@@ -474,7 +531,7 @@ export default function RegisterScreen() {
         productName: productName.trim(),
         brand: emptyToNull(brand),
         price: parsePrice(price),
-        sourceLink: emptyToNull(sourceLink),
+        sourceLink: keepExistingLink ? existing.source_link : emptyToNull(sourceLink),
         memo: emptyToNull(memo),
         tags: tags.length ? tags : null,
       });
@@ -485,7 +542,9 @@ export default function RegisterScreen() {
       setOverwriteBusy(false);
       await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
       goToSavedCategory();
+      if (linkHandOff) attachLinkAfterSave(linkHandOff, existing.id, notifyLinkAttached);
     } catch (e) {
+      saveStartedRef.current = false;
       setOverwriteBusy(false);
       if (e instanceof ImageNotReadyError) {
         Alert.alert('사진 준비 중', e.message);
@@ -663,17 +722,24 @@ export default function RegisterScreen() {
                 }}
               />
             </FormRow>
-            <FormRow label="링크">
-              <TextInput
-                style={formInput.rowInput}
-                placeholder="https://"
-                placeholderTextColor={colors.textDisabled}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                value={sourceLink}
-                onChangeText={setSourceLink}
-              />
+            <FormRow label="링크" ai={aiFilled.link}>
+              <View style={styles.linkValue}>
+                {linkSearching ? (
+                  <ActivityIndicator size="small" color={colors.textSub} style={styles.statusSpinner} />
+                ) : null}
+                <TextInput
+                  style={formInput.rowInput}
+                  placeholder={linkSearching ? '링크 찾는 중…' : 'https://'}
+                  placeholderTextColor={colors.textDisabled}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  value={sourceLink}
+                  onChangeText={setSourceLinkEdit}
+                  editable={!saving && !overwriteBusy}
+                  accessibilityLabel={linkSearching ? '링크 찾는 중' : '링크'}
+                />
+              </View>
             </FormRow>
           </FormCard>
 
@@ -810,6 +876,8 @@ const styles = StyleSheet.create({
   },
   // 좁은 공간에 맞춰 스피너를 살짝 축소(약 -2px).
   statusSpinner: { transform: [{ scale: 0.9 }] },
+  // 링크 칸: '찾는 중' 스피너 + 입력(값은 우측 정렬)
+  linkValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.one },
   statusText: { fontSize: 13, fontWeight: '500' },
   errorBox: {
     gap: spacing.two,
