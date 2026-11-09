@@ -9,7 +9,7 @@
 - **앱**: Expo SDK 57 (React Native) + Expo Router + TypeScript, iOS 우선
 - **백엔드**: Supabase (Postgres + Storage + Auth), `@supabase/supabase-js`로 직접 호출 + RLS
 - **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. (이메일 가입/승격은 이후 Phase)
-- **공유 시트**: `expo-share-intent` (iOS Share Extension). 받은 공유는 루트 레이아웃의 공유 처리기(`ShareIntentHandler`)가 어느 탭·화면에서든 처리합니다 — 사진은 등록 폼, URL은 전체 탭 링크 저장 모드. 등록·편집 폼을 작성 중이면 새 공유를 열지 먼저 묻습니다
+- **공유 시트**: `expo-share-intent` (iOS Share Extension). 받은 공유는 루트 레이아웃의 공유 처리기(`ShareIntentHandler`)가 어느 탭·화면에서든 처리합니다 — 사진은 등록 폼, URL은 전체 탭 링크 저장 모드. 등록·편집 폼을 작성 중이면 [지금 열기](작성 중인 내용 버림)·[저장 후 열기](폼을 닫으면 이어서 열림) 중에서 고르게 묻습니다
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
 - **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**. 요청 한도(사용자·전체)·입력 크기 상한으로 API 비용 제한
 - **구매처 링크 찾기(Phase 21)**: Supabase Edge Function `find-purchase-links` (Deno) + Claude Haiku 5.5 웹 검색. 등록 폼에서 제품명이 채워지고 링크 칸이 비면 **제품명·브랜드·입구 채널(캡처에 보인 도메인 또는 몰)만** 보내 판매처 상품 페이지 링크를 채웁니다. 주소가 보인 카페24 쇼핑몰은 그 사이트의 검색 페이지를 먼저 읽고, 링크는 Google Web Risk 대조와 접속 확인을 거친 것만 넣습니다. 전용 요청 한도(`0007`)

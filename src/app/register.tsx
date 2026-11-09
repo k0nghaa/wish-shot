@@ -139,6 +139,15 @@ function analysisStatusInfo(
 
 export default function RegisterScreen() {
   const router = useRouter();
+  // 저장이 끝나기 전에 이 폼이 닫혔으면(예: 새 공유를 [지금 열기]) 저장 뒤 이동·앨범 삭제 제안을 하지 않는다
+  // — 새로 연 화면을 덮지 않게. 저장 자체와 링크 이어 찾기는 그대로 끝낸다.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   // sourceLink: 링크붙이기 모드(기능 1) "새로 담기"로 넘어온 공유 URL 프리필.
   // onboarding: 첫 실행 온보딩이 이 폼을 열었으면 '1' — 폼 위에 코치마크 투어를 띄운다(Phase 7 Batch D).
   const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string; onboarding?: string }>();
@@ -524,8 +533,8 @@ export default function RegisterScreen() {
     markSubmitted();
     captureItemSaved();
     setSaving(false);
-    await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
-    goToSavedCategory();
+    if (mountedRef.current) await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
+    if (mountedRef.current) goToSavedCategory();
     // 저장 뒤 링크 이어 찾기: 이동한 뒤에 결과를 받아 붙이고 알린다(타일 흐림 → 점 또는 흐림만 해제).
     if (linkHandOff) followLinkAfterSave(linkHandOff, { itemId: id, productName: productName.trim() });
   }
@@ -569,8 +578,8 @@ export default function RegisterScreen() {
       captureItemSaved();
       setDupVisible(false);
       setOverwriteBusy(false);
-      await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
-      goToSavedCategory();
+      if (mountedRef.current) await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
+      if (mountedRef.current) goToSavedCategory();
       if (linkHandOff) followLinkAfterSave(linkHandOff, { itemId: existing.id, productName: productName.trim() });
     } catch (e) {
       saveStartedRef.current = false;
