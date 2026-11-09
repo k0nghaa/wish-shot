@@ -29,10 +29,19 @@ import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { capture } from '@/lib/analytics';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
-import { attachLinkAfterSave, usePurchaseLinkSearch } from '@/hooks/usePurchaseLinkSearch';
+import { attachLinkAfterSave, usePurchaseLinkSearch, type LinkSearch, type SavedItemRef } from '@/hooks/usePurchaseLinkSearch';
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import { normalizeName } from '@/lib/normalize';
+import {
+  addLinkAttachedNotification,
+  clearLinkNotFound,
+  clearLinkPending,
+  markLinkNotFound,
+  markLinkPending,
+  NOTIFICATION_TITLE,
+} from '@/lib/notifications';
+import { showSnackbar } from '@/lib/snackbar';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
@@ -67,14 +76,35 @@ function parsePrice(text: string): number | null {
 }
 
 /**
- * 저장 뒤 링크를 붙였을 때 안내(구매처 찾기). 등록 화면이 이미 닫힌 뒤라 전역 router 로 이동한다.
- * 사용자가 확인하지 못한 링크가 저장됐으므로 확인을 권한다.
+ * 저장 뒤 링크를 붙였을 때 안내(구매처 찾기) — 흐름을 끊지 않게 모달 대신 알림 기록 + 3초 스낵바.
+ * 등록 화면이 이미 닫힌 뒤라 전역 router 로 이동한다. 링크 종류(상품 페이지·검색 결과)는 나누지 않는다.
  */
-function notifyLinkAttached(itemId: string) {
-  Alert.alert('링크 추가', '저장한 위시에 판매처 링크를 붙였습니다. 확인하세요.', [
-    { text: '닫기', style: 'cancel' },
-    { text: '보기', onPress: () => appRouter.push({ pathname: '/item/[id]', params: { id: itemId } }) },
-  ]);
+async function notifyLinkAttached(item: SavedItemRef) {
+  await addLinkAttachedNotification(item); // 알림 탭 기록·배지·타일 점
+  capture('link_attached', {});
+  showSnackbar({
+    title: NOTIFICATION_TITLE.link_attached,
+    subtitle: item.productName,
+    actionLabel: '보기',
+    announcement: `${item.productName}에 링크를 붙였습니다.`,
+    onAction: () => {
+      capture('notification_opened', { source: 'snackbar' });
+      appRouter.push({ pathname: '/item/[id]', params: { id: item.itemId } });
+    },
+  });
+}
+
+/**
+ * 저장 뒤 링크 이어 찾기: 찾는 동안 타일을 흐리게 하고, 붙으면 알리고, 못 찾으면 '못 찾은 위시'로 기록한다
+ * (편집 화면 링크 칸 자리표시). 앱이 켜져 있는 동안만 이어진다.
+ */
+function followLinkAfterSave(search: LinkSearch, item: SavedItemRef) {
+  markLinkPending(item.itemId);
+  attachLinkAfterSave(search, item, {
+    onAttached: notifyLinkAttached,
+    onNotFound: ({ itemId }) => void markLinkNotFound(itemId),
+    onSettled: ({ itemId }) => clearLinkPending(itemId),
+  });
 }
 
 /** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
@@ -286,8 +316,11 @@ export default function RegisterScreen() {
 
   // 저장 직전에 부른다: 링크 칸이 비어 있고 손대지 않았는데 링크를 찾는 중이면, 저장 뒤 이어 받을 찾기를 잡아 둔다.
   // (markSubmitted 로 화면 상태가 바뀌기 전에 잡아야 한다.)
+  // 찾기가 이미 끝나 링크가 없으면 넘겨받지 않는다(저장할 때 '못 찾은 위시'로 바로 기록 — 타일이 잠깐 흐려지지 않게).
   function takeLinkHandOff() {
-    return sourceLinkEdit === null && sourceLink === '' && linkMatchesForm ? purchase.takeForHandOff() : null;
+    return sourceLinkEdit === null && sourceLink === '' && linkMatchesForm && !purchase.notFound
+      ? purchase.takeForHandOff()
+      : null;
   }
 
   // FR-8: AI가 추천한 카테고리(목록 내 이름)를 id 로 환산. 사용자가 아직 안 골랐으면 추천을 미리선택한다.
@@ -424,7 +457,7 @@ export default function RegisterScreen() {
     if (!wantsDelete) return;
     const result = await deletePhotoAsset(pickedAssetId);
     if (result === 'denied') {
-      // 닫힐 때까지 기다린다 — 이동 뒤 뜨는 '링크 추가' 안내와 겹치지 않게.
+      // 닫힐 때까지 기다린 뒤 이동한다(저장 뒤 링크 이어 찾기는 이동한 뒤 시작).
       await new Promise<void>((resolve) => {
         Alert.alert(
           '앨범 삭제 불가',
@@ -496,13 +529,15 @@ export default function RegisterScreen() {
       throw e;
     }
     recordAnalysisLog(id);
+    // 저장 전에 찾기가 끝났는데 링크가 없었으면 '못 찾은 위시'로 기록한다(편집 화면 링크 칸 자리표시).
+    if (!linkHandOff && linkNotFound) void markLinkNotFound(id);
     markSubmitted();
     captureItemSaved();
     setSaving(false);
     await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
     goToSavedCategory();
-    // 저장 뒤 링크 붙이기: 이동한 뒤에 결과를 받아 붙이고 안내한다(앨범 삭제 안내와 겹치지 않게).
-    if (linkHandOff) attachLinkAfterSave(linkHandOff, id, notifyLinkAttached);
+    // 저장 뒤 링크 이어 찾기: 이동한 뒤에 결과를 받아 붙이고 알린다(타일 흐림 → 점 또는 흐림만 해제).
+    if (linkHandOff) followLinkAfterSave(linkHandOff, { itemId: id, productName: productName.trim() });
   }
 
   // 저장한 카테고리 화면으로 이동(미분류면 미분류 목록).
@@ -540,13 +575,16 @@ export default function RegisterScreen() {
         tags: tags.length ? tags : null,
       });
       recordAnalysisLog(existing.id);
+      // '못 찾은 위시' 기록: 링크가 저장됐으면 지우고, 찾기가 끝났는데 링크 없이 저장했으면 남긴다.
+      if (keepExistingLink || emptyToNull(sourceLink)) void clearLinkNotFound(existing.id);
+      else if (!linkHandOff && linkNotFound) void markLinkNotFound(existing.id);
       markSubmitted();
       captureItemSaved();
       setDupVisible(false);
       setOverwriteBusy(false);
       await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
       goToSavedCategory();
-      if (linkHandOff) attachLinkAfterSave(linkHandOff, existing.id, notifyLinkAttached);
+      if (linkHandOff) followLinkAfterSave(linkHandOff, { itemId: existing.id, productName: productName.trim() });
     } catch (e) {
       saveStartedRef.current = false;
       setOverwriteBusy(false);

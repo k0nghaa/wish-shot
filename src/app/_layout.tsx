@@ -8,9 +8,11 @@ import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
 import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
 import { ShareIntentHandler } from '@/components/ShareIntentHandler';
+import { SnackbarHost } from '@/components/SnackbarHost';
 import { colors } from '@/constants/theme';
 import { identifyUser, initAnalytics, installJsErrorCapture } from '@/lib/analytics';
 import { initMonitoring, wrapRoot } from '@/lib/monitoring';
+import { hydrateNotifications } from '@/lib/notifications';
 import { hydrateSignedUrlCache, signInAnonymouslyIfNeeded } from '@/lib/queries';
 import { wasLaunchedByShare } from '@/lib/shareIntent';
 import { supabase } from '@/lib/supabase';
@@ -61,6 +63,8 @@ function AuthGate() {
     // 영속 signed URL 캐시 복원(Phase 9 A): 앱 시작 1회. 콜드스타트 후에도 그리드/상세가
     // 재다운로드 없이 뜨도록 인메모리 Map 을 미리 채운다(실패는 무시 — 미스 시 재발급).
     void hydrateSignedUrlCache();
+    // 기기 안 알림·'못 찾은 위시' 기록 복원(탭 배지·타일 점·편집 자리표시). 실패는 빈 목록.
+    void hydrateNotifications();
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!cancelled) apply(data.session);
@@ -117,6 +121,8 @@ function AuthGate() {
       {/* 공유 시트 처리(앱 전체 1개): 세션 준비 뒤에만 그려지고, 어느 탭·화면에서든 공유 화면을 연다. */}
       <ShareIntentHandler />
       <OnboardingGate />
+      {/* 앱 전체 스낵바(1개): FullWindowOverlay 에 그려 네이티브 모달 위에도 보인다. 보일 것이 없으면 그리지 않는다. */}
+      <SnackbarHost />
     </OnboardingTargetProvider>
   );
 }

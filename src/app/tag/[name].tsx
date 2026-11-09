@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
 import { PhotoTile } from '@/components/PhotoTile';
+import { useNotifications } from '@/hooks/useNotifications';
 import { colors, spacing } from '@/constants/theme';
 import { getItemImageSignedUrls, getItemThumbSignedUrls, listItemsByTag, type Item } from '@/lib/queries';
 
@@ -13,6 +14,7 @@ const COLUMNS = 3;
 // 태그별 모아보기(FR-15a): 카테고리와 무관하게 그 태그가 달린 아이템만 최신순으로 보여준다.
 export default function TagItemsScreen() {
   const router = useRouter();
+  const linkState = useNotifications(); // 저장 뒤 링크 찾기 상태(타일 흐림·새 링크 점)
   const { width } = useWindowDimensions();
   const tileSize = width / COLUMNS; // 여백 없이 화면 폭 3등분(전체·폴더와 동일)
   const { name } = useLocalSearchParams<{ name: string }>();
@@ -65,12 +67,15 @@ export default function TagItemsScreen() {
           keyExtractor={(it) => it.id}
           numColumns={COLUMNS}
           contentContainerStyle={styles.list}
+          extraData={linkState}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
               fallbackUrl={fallbackUrls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
+              linkPending={linkState.pendingItemIds.has(item.id)}
+              unseen={linkState.unseenItemIds.has(item.id)}
               onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id, ctx: 'tag', ctxKey: name } })}
             />
           )}

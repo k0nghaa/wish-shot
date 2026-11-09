@@ -34,6 +34,8 @@
 | `item_saved` | 저장 **성공 응답** 시(버튼 탭 아님, 덮어쓰기 포함) | `source: share \| picker \| recent_photo`, `duration_ms`(마운트→성공), `had_analysis: boolean` | 질문 2ⓐ | `src/app/register.tsx` |
 | `onboarding_step_viewed` | 온보딩 각 스텝 표시 시 | `step: card_1 \| card_2 \| card_3 \| category_coachmark` | 완주율·이탈 스텝 | `src/components/Onboarding/OnboardingOverlay.tsx` |
 | `onboarding_finished` | 완주 또는 스킵 시. 온보딩 중에 공유가 와서 닫히면 보내지 않는다('봤음' 표시도 없어 다음 실행에 다시 뜬다 — 그 세션은 이탈처럼 보인다) | `result: completed \| skipped`, `last_step`(step과 동일 enum) | 이탈 지점 | 〃 |
+| `link_attached` | 저장 뒤 링크 붙이기가 성공했을 때(링크가 비어 있던 위시에 붙음 — `setSourceLinkIfEmpty` 성공) | — | 저장 뒤 붙이기가 얼마나 일어나는가 | `src/app/register.tsx`(`notifyLinkAttached`) |
+| `notification_opened` | 스낵바 [보기] 또는 알림 목록 행을 눌러 위시 상세로 갈 때 | `source: snackbar \| list` | 붙인 링크를 사용자가 확인하는가 | `src/app/register.tsx`(스낵바)·`src/app/(tabs)/notifications.tsx`(목록) |
 | `app_error` (갈래 F) | 전역 JS 에러 핸들러. 1.0.2부터 Sentry가 켜진 빌드에서는 루트 렌더 오류 경계가 넘긴 렌더 오류도 포함 | `name: string`(에러 클래스명), `is_fatal: boolean` — **메시지·스택 미수집** | 에러 빈도 집계(상세·네이티브 크래시는 Sentry) | `src/lib/analytics.ts`, `src/lib/monitoring.ts`(렌더 오류 경계) |
 
 ### 구현 노트 (코드와 1:1)
@@ -114,6 +116,8 @@
 - [x] `item_saved` — `source`·`duration_ms`·`had_analysis` 속성 확인(저장 성공 시에만 발화)
 - [x] `onboarding_step_viewed` `card_1~3`·`category_coachmark` (※ SDK 비동기 초기화로 `Application Opened`가 card_1 뒤에 찍힐 수 있음 — 정상)
 - [x] `onboarding_finished` `result=completed`(last_step=category_coachmark) / `result=skipped`
+- [ ] `link_attached` — 링크를 찾는 중에 저장 → 링크가 붙을 때 1회(속성 없음)
+- [ ] `notification_opened` `source=snackbar`(스낵바 [보기]) / `source=list`(알림 탭 행)
 - [x] `app_error` — 설정 → **테스트 에러 발생(개발용)**: redbox **정상 표시**(핸들러 체이닝 확인) + 이벤트 수신
 
 ## 7. 측정 한계

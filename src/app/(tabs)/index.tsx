@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { useTabBarVisibility } from '@/components/tabBarVisibility';
 import { colors, radius, shadow, spacing, type } from '@/constants/theme';
 import { useItemSelection } from '@/hooks/useItemSelection';
+import { useNotifications } from '@/hooks/useNotifications';
 import {
   getItemImageSignedUrls,
   getItemThumbSignedUrls,
@@ -31,6 +32,7 @@ const COLUMNS = 3;
  */
 export default function AllScreen() {
   const router = useRouter();
+  const linkState = useNotifications(); // 저장 뒤 링크 찾기 상태(타일 흐림·새 링크 점)
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { setHidden } = useTabBarVisibility();
@@ -74,6 +76,8 @@ export default function AllScreen() {
   );
 
   const selection = useItemSelection({ items, categories, setCategories, reload: load });
+  // 선택·링크 찾기 상태가 바뀔 때만 그리드를 다시 그린다(매 렌더 새 배열이면 FlatList 비교가 깨짐).
+  const gridExtra = useMemo(() => [selection.selected, linkState], [selection.selected, linkState]);
 
   // 링크붙이기 모드로 들어오면 진행 중이던 선택 모드는 접는다(두 모드 상호 배타).
   const { selectMode, exitSelect } = selection;
@@ -185,13 +189,15 @@ export default function AllScreen() {
           keyExtractor={(it) => it.id}
           numColumns={COLUMNS}
           contentContainerStyle={styles.list}
-          extraData={selection.selected}
+          extraData={gridExtra}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
               fallbackUrl={fallbackUrls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
+              linkPending={linkState.pendingItemIds.has(item.id)}
+              unseen={linkState.unseenItemIds.has(item.id)}
               selectionMode={!attachMode && selection.selectMode}
               selected={selection.selected.has(item.id)}
               onPress={() =>

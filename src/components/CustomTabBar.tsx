@@ -6,13 +6,14 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, shadow, spacing } from '@/constants/theme';
+import { useNotifications } from '@/hooks/useNotifications';
 
 import { CATEGORIES_TAB_TARGET, useOnboardingTarget } from './Onboarding/onboardingTarget';
 import { useTabBarVisibility } from './tabBarVisibility';
 
 /**
  * 하단 플로팅 알약 탭바 (카테고리 / 전체 / 알림 / 검색). JS 전용 — 재빌드 없음.
- * 활성 = label(검정, 굵게), 비활성 = inactive.
+ * 활성 = label(검정, 굵게), 비활성 = inactive. 알림 탭엔 안 읽은 알림 수 배지(wine — 디자인 정본 '탭바 배지').
  */
 type TabDef = { route: string; label: string; icon: SFSymbol };
 
@@ -30,6 +31,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const activeRoute = state.routes[state.index]?.name;
   const { register } = useOnboardingTarget();
   const setCategoriesTabRef = useCallback((n: View | null) => register(CATEGORIES_TAB_TARGET, n), [register]);
+  const { unreadCount } = useNotifications();
 
   // 다중 선택 중에는 숨겨 선택 액션바에 자리를 내준다.
   if (hidden) return null;
@@ -40,6 +42,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         {TABS.map((tab) => {
           const focused = activeRoute === tab.route;
           const tint = focused ? colors.textMain : colors.silverDark;
+          const badge = tab.route === 'notifications' && unreadCount > 0 ? unreadCount : 0;
           const onPress = () => {
             const event = navigation.emit({ type: 'tabPress', target: tab.route, canPreventDefault: true });
             if (!focused && !event.defaultPrevented) navigation.navigate(tab.route);
@@ -52,15 +55,24 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
               onPress={onPress}
               accessibilityRole="button"
               accessibilityState={{ selected: focused }}
-              accessibilityLabel={tab.label}
+              accessibilityLabel={badge ? `${tab.label}, 읽지 않은 알림 ${badge}개` : tab.label}
               hitSlop={8}
             >
-              <SymbolView
-                name={tab.icon}
-                size={24}
-                tintColor={tint}
-                weight={focused ? 'semibold' : 'regular'}
-              />
+              <View>
+                <SymbolView
+                  name={tab.icon}
+                  size={24}
+                  tintColor={tint}
+                  weight={focused ? 'semibold' : 'regular'}
+                />
+                {badge ? (
+                  <View style={styles.badge} pointerEvents="none">
+                    <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>
+                      {badge}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text
                 style={[styles.label, { color: tint, fontWeight: focused ? '700' : '500' }]}
                 numberOfLines={1}
@@ -105,4 +117,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
   },
+  // 안 읽은 알림 수 배지: 아이콘 우상단, wine 원 + 흰 숫자(알림은 최대 20개라 두 자리까지).
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  badgeText: { fontSize: 11, fontWeight: '700', color: colors.bg },
 });
