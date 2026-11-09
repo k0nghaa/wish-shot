@@ -121,19 +121,19 @@ export default function NotificationsScreen() {
                   <Thumbnail
                     url={it ? (thumbUrls[it.image_key] ?? null) : null}
                     fallbackUrl={it ? (fallbackUrls[it.image_key] ?? null) : null}
-                    style={styles.thumb}
+                    style={[styles.thumb, n.read && styles.thumbRead]}
                   />
                   {n.read ? null : <View style={styles.dot} />}
                 </View>
                 <View style={styles.texts}>
-                  <Text style={[styles.rowTitle, !n.read && styles.rowTitleUnread]} numberOfLines={1}>
+                  <Text style={[styles.rowTitle, n.read ? styles.rowTitleRead : styles.rowTitleUnread]} numberOfLines={1}>
                     {title}
                   </Text>
-                  <Text style={styles.rowName} numberOfLines={1}>
+                  <Text style={[styles.rowName, n.read && styles.rowNameRead]} numberOfLines={1}>
                     {name}
                   </Text>
                 </View>
-                <Text style={styles.time}>{time}</Text>
+                <Text style={[styles.time, n.read && styles.rowNameRead]}>{time}</Text>
               </TouchableOpacity>
             );
           }}
@@ -161,6 +161,8 @@ const styles = StyleSheet.create({
   },
   thumbWrap: { width: THUMB, height: THUMB, borderRadius: radius.sm, overflow: 'hidden' },
   thumb: { width: THUMB, height: THUMB },
+  // 읽은 알림은 연하게(사진 반투명·글자 회색) — 안 읽은 알림(점·굵은 검정 제목)과 한눈에 구분.
+  thumbRead: { opacity: 0.45 },
   // 타일과 같은 새 링크 점(좌상단 6pt 와인색, 외곽선 없음).
   dot: {
     position: 'absolute',
@@ -174,7 +176,9 @@ const styles = StyleSheet.create({
   texts: { flex: 1, gap: 2 },
   rowTitle: { ...type.subhead, color: colors.textMain },
   rowTitleUnread: { fontWeight: '600' },
+  rowTitleRead: { color: colors.textSub },
   rowName: { ...type.footnote, color: colors.textSub },
+  rowNameRead: { color: colors.textDisabled },
   time: { ...type.footnote, color: colors.textSub },
   sep: {
     height: hairlineWidth,
