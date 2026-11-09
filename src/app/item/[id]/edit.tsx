@@ -19,12 +19,10 @@ import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { ImageZoomModal } from '@/components/ImageZoomModal';
 import { DisclosureRow, FormBlock, FormCard, FormLineInput, FormRow, formInput } from '@/components/FormField';
 import { TagInput } from '@/components/TagInput';
-import { useNotifications } from '@/hooks/useNotifications';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
-import { clearLinkNotFound } from '@/lib/notifications';
 import {
   createCategory,
   DuplicateItemError,
@@ -140,9 +138,6 @@ export default function ItemEditScreen() {
   }
 
   const folderName = categoryId ? (categories.find((c) => c.id === categoryId)?.name ?? '미분류') : '미분류';
-  // 자동 찾기가 링크를 못 찾은 위시면(기기 안 기록) 빈 링크 칸에 직접 입력을 안내한다.
-  const { notFoundItemIds } = useNotifications();
-  const linkPlaceholder = notFoundItemIds.has(id) ? '링크를 직접 입력하세요' : 'https://';
   const canSave = !loading && !saving && productName.trim().length > 0;
 
   async function handleSave() {
@@ -160,7 +155,6 @@ export default function ItemEditScreen() {
         memo: emptyToNull(memo),
         tags: tags.length ? tags : null,
       });
-      if (emptyToNull(sourceLink)) void clearLinkNotFound(id); // 링크를 넣었으면 '못 찾음' 기록을 지운다
       // 필드 저장이 통과한 뒤에만 이미지를 같은 Storage 키에 덮어쓴다(image_key 불변).
       // 원본은 저장 시점에만 축소·압축하고, 썸네일도 함께 재업로드한다(불변식 1·2·3).
       if (newImage) {
@@ -279,7 +273,7 @@ export default function ItemEditScreen() {
               <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
               <FormRow label="링크">
                 <FormLineInput
-                  placeholder={linkPlaceholder}
+                  placeholder="링크를 직접 입력하세요" // 편집 화면은 링크를 자동으로 찾지 않는다 — 빈 칸이면 직접 입력
                   placeholderTextColor={colors.textDisabled}
                   autoCapitalize="none"
                   autoCorrect={false}

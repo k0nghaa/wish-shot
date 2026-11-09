@@ -8,7 +8,6 @@ import { uuid } from 'expo-modules-core';
  * - 알림: 저장 뒤 링크를 붙인 기록. 최근 20개·14일까지(읽거나 쓸 때 정리). 탭 배지 = 안 읽은 수,
  *   타일 와인색 점 = 안 읽은 알림이 있는 위시. 상세에서 그 위시를 보면 읽음.
  * - 찾는 중: 저장 뒤 링크를 이어 찾는 위시(타일을 흐리게). 앱이 켜져 있는 동안만 찾으므로 메모리에만 둔다.
- * - 못 찾은 위시: 자동 찾기가 링크를 못 찾은 위시(편집 화면 링크 칸 자리표시). 14일·최대 100개.
  * 저장 실패는 삼킨다(다음 실행에 비어 보일 뿐 흐름을 막지 않는다).
  */
 
@@ -30,10 +29,8 @@ export const NOTIFICATION_TITLE: Record<NotificationType, string> = {
 };
 
 const NOTIFICATIONS_KEY = 'wishshot.notifications';
-const LINK_NOT_FOUND_KEY = 'wishshot.linkNotFound';
 const KEEP_MS = 14 * 24 * 60 * 60_000;
 const MAX_NOTIFICATIONS = 20;
-const MAX_NOT_FOUND = 100;
 
 export type NotificationsSnapshot = {
   notifications: AppNotification[]; // 최신순
@@ -42,24 +39,21 @@ export type NotificationsSnapshot = {
   unseenItemIds: ReadonlySet<string>;
   /** 저장 뒤 링크를 찾는 중인 위시(타일 흐림). */
   pendingItemIds: ReadonlySet<string>;
-  /** 자동 찾기가 링크를 못 찾은 위시(편집 화면 자리표시). */
-  notFoundItemIds: ReadonlySet<string>;
 };
 
 let notifications: AppNotification[] = [];
-let notFound: Record<string, number> = {}; // itemId → 기록 시각
 const pending = new Set<string>();
 const listeners = new Set<() => void>();
 let snapshot: NotificationsSnapshot = buildSnapshot();
 let hydrating: Promise<void> | null = null;
 
 function buildSnapshot(): NotificationsSnapshot {
+  const unread = notifications.filter((n) => !n.read);
   return {
     notifications,
-    unreadCount: notifications.filter((n) => !n.read).length,
-    unseenItemIds: new Set(notifications.filter((n) => !n.read).map((n) => n.itemId)),
+    unreadCount: unread.length,
+    unseenItemIds: new Set(unread.map((n) => n.itemId)),
     pendingItemIds: new Set(pending),
-    notFoundItemIds: new Set(Object.keys(notFound)),
   };
 }
 
@@ -73,16 +67,10 @@ function prune(now = Date.now()) {
     .filter((n) => now - n.createdAt < KEEP_MS)
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, MAX_NOTIFICATIONS);
-  const kept = Object.entries(notFound)
-    .filter(([, at]) => now - at < KEEP_MS)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_NOT_FOUND);
-  notFound = Object.fromEntries(kept);
 }
 
 function persist() {
   void AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications)).catch(() => undefined);
-  void AsyncStorage.setItem(LINK_NOT_FOUND_KEY, JSON.stringify(notFound)).catch(() => undefined);
 }
 
 function parseNotifications(raw: string | null): AppNotification[] {
@@ -105,31 +93,15 @@ function parseNotifications(raw: string | null): AppNotification[] {
   }
 }
 
-function parseNotFound(raw: string | null): Record<string, number> {
-  if (!raw) return {};
-  try {
-    const obj = JSON.parse(raw) as unknown;
-    if (!obj || typeof obj !== 'object') return {};
-    return Object.fromEntries(Object.entries(obj).filter(([, at]) => typeof at === 'number')) as Record<string, number>;
-  } catch {
-    return {};
-  }
-}
-
 /** 기기에 둔 알림을 읽어 메모리에 둔다(앱 시작 1회 — 쓰기 전에도 자동으로 기다린다). 실패는 빈 목록. */
 export function hydrateNotifications(): Promise<void> {
   if (!hydrating) {
     hydrating = (async () => {
       try {
-        const [rawN, rawF] = await Promise.all([
-          AsyncStorage.getItem(NOTIFICATIONS_KEY),
-          AsyncStorage.getItem(LINK_NOT_FOUND_KEY),
-        ]);
+        const loaded = parseNotifications(await AsyncStorage.getItem(NOTIFICATIONS_KEY));
         // 읽는 사이 쓴 값(앱 시작 직후 붙임 등)은 살린다.
-        const loaded = parseNotifications(rawN);
         const ids = new Set(notifications.map((n) => n.id));
         notifications = [...notifications, ...loaded.filter((n) => !ids.has(n.id))];
-        notFound = { ...parseNotFound(rawF), ...notFound };
       } catch {
         /* 읽기 실패는 빈 목록으로 */
       }
@@ -148,14 +120,13 @@ async function mutate(change: () => boolean) {
   emit();
 }
 
-/** 저장 뒤 링크를 붙였다는 알림(안 읽음). 그 위시의 '못 찾음' 기록은 지운다. */
+/** 저장 뒤 링크를 붙였다는 알림(안 읽음). */
 export function addLinkAttachedNotification(input: { itemId: string; productName: string }): Promise<void> {
   return mutate(() => {
     notifications = [
       { id: uuid.v4(), type: 'link_attached', itemId: input.itemId, productName: input.productName, createdAt: Date.now(), read: false },
       ...notifications,
     ];
-    delete notFound[input.itemId];
     return true;
   });
 }
@@ -186,46 +157,25 @@ export function clearLinkPending(itemId: string) {
   emit();
 }
 
-/** 자동 찾기가 링크를 못 찾은 위시로 기록(편집 화면 자리표시). */
-export function markLinkNotFound(itemId: string): Promise<void> {
-  return mutate(() => {
-    notFound = { ...notFound, [itemId]: Date.now() };
-    return true;
-  });
-}
-
-/** 그 위시에 링크가 저장됐으면 '못 찾음' 기록을 지운다. */
-export function clearLinkNotFound(itemId: string): Promise<void> {
-  return mutate(() => {
-    if (!(itemId in notFound)) return false;
-    const next = { ...notFound };
-    delete next[itemId];
-    notFound = next;
-    return true;
-  });
-}
-
-/** 위시를 지웠을 때 그 위시의 알림·기록을 함께 지운다. */
+/** 위시를 지웠을 때 그 위시의 알림·찾는 중 표시를 함께 지운다. */
 export function removeNotificationItems(itemIds: string[]): Promise<void> {
   const ids = new Set(itemIds);
   let pendingChanged = false;
   for (const id of ids) pendingChanged = pending.delete(id) || pendingChanged;
   if (pendingChanged) emit();
   return mutate(() => {
-    const before = notifications.length + Object.keys(notFound).length;
+    const before = notifications.length;
     notifications = notifications.filter((n) => !ids.has(n.itemId));
-    notFound = Object.fromEntries(Object.entries(notFound).filter(([id]) => !ids.has(id)));
-    return before !== notifications.length + Object.keys(notFound).length;
+    return before !== notifications.length;
   });
 }
 
-/** 이미 없는 위시(다른 경로로 지워짐 등)의 알림·기록을 정리한다 — 알림 목록이 위시 목록을 읽은 뒤 부른다. */
+/** 이미 없는 위시(다른 경로로 지워짐 등)의 알림을 정리한다 — 알림 목록이 위시 목록을 읽은 뒤 부른다. */
 export function pruneMissingItems(existingItemIds: ReadonlySet<string>): Promise<void> {
   return mutate(() => {
-    const before = notifications.length + Object.keys(notFound).length;
+    const before = notifications.length;
     notifications = notifications.filter((n) => existingItemIds.has(n.itemId));
-    notFound = Object.fromEntries(Object.entries(notFound).filter(([id]) => existingItemIds.has(id)));
-    return before !== notifications.length + Object.keys(notFound).length;
+    return before !== notifications.length;
   });
 }
 

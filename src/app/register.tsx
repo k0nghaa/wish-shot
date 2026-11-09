@@ -33,14 +33,7 @@ import { attachLinkAfterSave, usePurchaseLinkSearch, type LinkSearch, type Saved
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import { normalizeName } from '@/lib/normalize';
-import {
-  addLinkAttachedNotification,
-  clearLinkNotFound,
-  clearLinkPending,
-  markLinkNotFound,
-  markLinkPending,
-  NOTIFICATION_TITLE,
-} from '@/lib/notifications';
+import { addLinkAttachedNotification, clearLinkPending, markLinkPending, NOTIFICATION_TITLE } from '@/lib/notifications';
 import { showSnackbar } from '@/lib/snackbar';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
@@ -95,14 +88,13 @@ async function notifyLinkAttached(item: SavedItemRef) {
 }
 
 /**
- * 저장 뒤 링크 이어 찾기: 찾는 동안 타일을 흐리게 하고, 붙으면 알리고, 못 찾으면 '못 찾은 위시'로 기록한다
- * (편집 화면 링크 칸 자리표시). 앱이 켜져 있는 동안만 이어진다.
+ * 저장 뒤 링크 이어 찾기: 찾는 동안 타일을 흐리게 하고, 붙으면 알린다(못 찾으면 흐림만 사라진다).
+ * 앱이 켜져 있는 동안만 이어진다.
  */
 function followLinkAfterSave(search: LinkSearch, item: SavedItemRef) {
   markLinkPending(item.itemId);
   attachLinkAfterSave(search, item, {
     onAttached: notifyLinkAttached,
-    onNotFound: ({ itemId }) => void markLinkNotFound(itemId),
     onSettled: ({ itemId }) => clearLinkPending(itemId),
   });
 }
@@ -316,7 +308,7 @@ export default function RegisterScreen() {
 
   // 저장 직전에 부른다: 링크 칸이 비어 있고 손대지 않았는데 링크를 찾는 중이면, 저장 뒤 이어 받을 찾기를 잡아 둔다.
   // (markSubmitted 로 화면 상태가 바뀌기 전에 잡아야 한다.)
-  // 찾기가 이미 끝나 링크가 없으면 넘겨받지 않는다(저장할 때 '못 찾은 위시'로 바로 기록 — 타일이 잠깐 흐려지지 않게).
+  // 찾기가 이미 끝나 링크가 없으면 넘겨받지 않는다(이어 찾을 것이 없다 — 타일이 잠깐 흐려지지 않게).
   function takeLinkHandOff() {
     return sourceLinkEdit === null && sourceLink === '' && linkMatchesForm && !purchase.notFound
       ? purchase.takeForHandOff()
@@ -529,8 +521,6 @@ export default function RegisterScreen() {
       throw e;
     }
     recordAnalysisLog(id);
-    // 저장 전에 찾기가 끝났는데 링크가 없었으면 '못 찾은 위시'로 기록한다(편집 화면 링크 칸 자리표시).
-    if (!linkHandOff && linkNotFound) void markLinkNotFound(id);
     markSubmitted();
     captureItemSaved();
     setSaving(false);
@@ -575,9 +565,6 @@ export default function RegisterScreen() {
         tags: tags.length ? tags : null,
       });
       recordAnalysisLog(existing.id);
-      // '못 찾은 위시' 기록: 링크가 저장됐으면 지우고, 찾기가 끝났는데 링크 없이 저장했으면 남긴다.
-      if (keepExistingLink || emptyToNull(sourceLink)) void clearLinkNotFound(existing.id);
-      else if (!linkHandOff && linkNotFound) void markLinkNotFound(existing.id);
       markSubmitted();
       captureItemSaved();
       setDupVisible(false);

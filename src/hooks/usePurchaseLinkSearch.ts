@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { detectPurchaseChannel } from '@/lib/purchaseChannel';
-import { findPurchaseLink, getItem, setSourceLinkIfEmpty, type PurchaseLink } from '@/lib/queries';
+import { findPurchaseLink, setSourceLinkIfEmpty, type PurchaseLink } from '@/lib/queries';
 
 /** 진행 중(또는 끝난) 링크 찾기 한 건. promise 는 throw 하지 않는다(실패 = null). */
 export interface LinkSearch {
@@ -87,8 +87,7 @@ export interface SavedItemRef {
  * 링크 외 필드는 바꾸지 않는다(제품명·브랜드는 중복 판정에 쓰여 저장 뒤 바꾸면 충돌할 수 있다).
  *
  * - onAttached: 붙였을 때(끝날 때까지 기다린 뒤 onSettled — 타일이 흐림 → 점으로 바로 이어지게).
- * - onNotFound: 결과 없음·실패·한도·시간 초과·3분 지나 도착·붙이다 실패 — 위시에 링크가 없는 채로 끝남.
- *   그사이 링크가 이미 들어가 있었거나(사용자가 넣음) 위시가 지워졌으면 어느 쪽도 부르지 않는다.
+ *   결과 없음·실패·한도·시간 초과·3분 지나 도착·그사이 링크가 이미 들어감이면 부르지 않는다.
  * - onSettled: 어떻게 끝나든 마지막에 한 번(찾는 중 표시 끄기).
  */
 export function attachLinkAfterSave(
@@ -96,32 +95,19 @@ export function attachLinkAfterSave(
   item: SavedItemRef,
   handlers: {
     onAttached: (item: SavedItemRef) => void | Promise<void>;
-    onNotFound?: (item: SavedItemRef) => void;
     onSettled?: (item: SavedItemRef) => void;
   },
 ): void {
   const savedAt = Date.now();
-  // 못 찾음은 위시가 아직 있고 링크가 비어 있을 때만 알린다(읽기 실패 = 위시 없음으로 보고 알리지 않는다).
-  const notFound = async () => {
-    if (!handlers.onNotFound) return;
-    const stillEmpty = await getItem(item.itemId)
-      .then((it) => !it.source_link)
-      .catch(() => false);
-    if (stillEmpty) handlers.onNotFound(item);
-  };
   void (async () => {
     try {
       const link = await search.promise;
-      if (!link || Date.now() - savedAt > ATTACH_WINDOW_MS) {
-        await notFound();
-        return;
-      }
+      if (!link || Date.now() - savedAt > ATTACH_WINDOW_MS) return;
       let attached = false;
       try {
         attached = await setSourceLinkIfEmpty(item.itemId, link.url);
       } catch (e) {
         if (__DEV__) console.warn('[WishShot/purchaseLink] 저장 뒤 붙이기 실패', e);
-        await notFound();
         return;
       }
       if (attached) await handlers.onAttached(item);
