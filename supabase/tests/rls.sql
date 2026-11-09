@@ -48,9 +48,10 @@ from unnest(array['categories', 'items', 'analysis_logs']) as tbl;
 
 -- -----------------------------------------------------------------------------
 -- 테스트 3 (교차 검증 — 실제 두 계정으로 확인, 선택)
--- 두 계정으로 로그인해 각자 아이템을 1개 이상 만든 뒤,
--- 아래 <UID_A>/<UID_B> 를 실제 auth.users.id 로 바꿔 실행한다.
--- (auth.users.id 확인: 대시보드 Authentication → Users, 또는 select id, email from auth.users;)
+-- 아이템이 1개 이상인 두 계정의 uid 로 아래 <UID_A>/<UID_B> 를 바꿔 실행한다.
+-- 개발자 본인 계정 둘(예: 스토어 앱·개발용 앱)을 쓴다. uid 는 SQL Editor 에서만 쓰고 파일·채팅에 남기지 않는다.
+-- (후보 확인: select user_id, note, (select count(*) from public.items i where i.user_id = iu.user_id) as items
+--            from ops.internal_users iu;)
 -- -----------------------------------------------------------------------------
 -- 사용자 A 컨텍스트: A 본인 아이템만 보여야 함(>0), B 것은 절대 안 보임(0).
 begin;
@@ -61,8 +62,10 @@ begin;
   );
   set local role authenticated;
 
-  select 'A sees own items' as check, count(*) from public.items;                            -- 기대: >0
-  select 'A sees B items'   as check, count(*) from public.items where user_id = '<UID_B>';  -- 기대: 0
+  -- SQL Editor 는 마지막 결과만 보여 주므로 두 검사를 한 표로 묶는다.
+  select 'A sees own items' as check, count(*) from public.items                             -- 기대: >0
+  union all
+  select 'A sees B items',            count(*) from public.items where user_id = '<UID_B>';  -- 기대: 0
 rollback;
 
 -- 사용자 B 컨텍스트: 반대로 확인.
@@ -74,8 +77,9 @@ begin;
   );
   set local role authenticated;
 
-  select 'B sees own items' as check, count(*) from public.items;                            -- 기대: >0
-  select 'B sees A items'   as check, count(*) from public.items where user_id = '<UID_A>';  -- 기대: 0
+  select 'B sees own items' as check, count(*) from public.items                             -- 기대: >0
+  union all
+  select 'B sees A items',            count(*) from public.items where user_id = '<UID_A>';  -- 기대: 0
 rollback;
 
 -- -----------------------------------------------------------------------------
@@ -95,9 +99,12 @@ begin
     -- 준비: 다른 사용자 B 의 객체 1개(postgres 롤로 넣는다)
     insert into storage.objects (bucket_id, name) values ('item-images', ub || '/b.jpg');
 
-    -- 사용자 A 로 위장
+    -- 사용자 A 로 위장. Storage API 가 요청마다 켜는 것과 같게 storage.allow_delete_query 도
+    -- 켠다(이 설정이 없으면 Storage 의 보호 트리거가 SQL 삭제를 모두 막아 정책을 시험할 수 없다).
+    -- 세 설정 모두 트랜잭션 안에서만 유효하고 블록 끝의 롤백으로 사라진다.
     perform set_config('request.jwt.claims',
       json_build_object('sub', ua, 'role', 'authenticated')::text, true);
+    perform set_config('storage.allow_delete_query', 'true', true);
     set local role authenticated;
 
     -- 4-1 본인 폴더에는 쓸 수 있다(대조군)
@@ -136,33 +143,38 @@ begin
      where bucket_id = 'item-images' and name = ub || '/b.jpg';
     get diagnostics n = row_count;
     assert n = 0, format('4-6: 다른 사용자 객체 이름 바꾸기는 0행이어야 한다(실제 %s)', n);
+
+    -- 4-7 본인 객체는 지울 수 있다(삭제 대조군 — 4-5 의 0행이 정책 때문임을 보인다)
+    delete from storage.objects where bucket_id = 'item-images' and name = ua || '/a.jpg';
+    get diagnostics n = row_count;
+    assert n = 1, format('4-7: 본인 객체 삭제는 1행이어야 한다(실제 %s)', n);
     reset role;
 
     -- 비로그인(anon)
     perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
     set local role anon;
 
-    -- 4-7 anon 은 item-images 객체를 하나도 보지 못한다
+    -- 4-8 anon 은 item-images 객체를 하나도 보지 못한다
     select count(*) into n from storage.objects where bucket_id = 'item-images';
-    assert n = 0, format('4-7: anon 에게 객체가 보이면 안 된다(실제 %s)', n);
+    assert n = 0, format('4-8: anon 에게 객체가 보이면 안 된다(실제 %s)', n);
 
-    -- 4-8 anon 은 업로드할 수 없다
+    -- 4-9 anon 은 업로드할 수 없다
     failed := false;
     begin
       insert into storage.objects (bucket_id, name) values ('item-images', ua || '/anon.jpg');
     exception when insufficient_privilege then
       failed := true;
     end;
-    assert failed, '4-8: anon 업로드가 거부돼야 한다';
+    assert failed, '4-9: anon 업로드가 거부돼야 한다';
 
-    -- 4-9 anon 은 public 테이블을 읽을 수 없다(권한 없음)
+    -- 4-10 anon 은 public 테이블을 읽을 수 없다(권한 없음)
     failed := false;
     begin
       select count(*) into n from public.items;
     exception when insufficient_privilege then
       failed := true;
     end;
-    assert failed, '4-9: anon 의 public.items 조회가 거부돼야 한다';
+    assert failed, '4-10: anon 의 public.items 조회가 거부돼야 한다';
     reset role;
 
     raise exception using message = 'rls_test4_passed';
