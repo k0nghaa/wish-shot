@@ -234,6 +234,23 @@ export function webRiskVerdict(body: unknown): 'safe' | 'unsafe' | 'unknown' {
   return 'safe';
 }
 
+// Google API 오류 응답에서 원인 종류만 뽑는다(로그용 — 메시지 본문은 남기지 않는다).
+// 형식: { error: { status: "PERMISSION_DENIED", details: [{ reason: "BILLING_DISABLED", ... }] } }
+// 반환 예: "PERMISSION_DENIED/BILLING_DISABLED". 형식을 모르면 "unknown".
+export function googleErrorKind(body: unknown): string {
+  const err = (body as { error?: unknown } | null)?.error;
+  if (!err || typeof err !== 'object') return 'unknown';
+  const status = (err as { status?: unknown }).status;
+  const details = (err as { details?: unknown }).details;
+  const reasons = Array.isArray(details)
+    ? details
+        .map((d) => (d && typeof d === 'object' ? (d as { reason?: unknown }).reason : undefined))
+        .filter((r): r is string => typeof r === 'string' && /^[A-Z0-9_]{1,64}$/.test(r))
+    : [];
+  const s = typeof status === 'string' && /^[A-Z_]{1,64}$/.test(status) ? status : 'unknown';
+  return reasons.length ? `${s}/${reasons.join(',')}` : s;
+}
+
 // 한국 날짜(YYYY-MM-DD) — 검색 프롬프트에 넣는다.
 export function kstDate(now: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' })

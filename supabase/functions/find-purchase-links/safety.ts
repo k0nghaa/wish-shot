@@ -7,7 +7,7 @@
 //   - 한계: 이미 신고된 사이트만 잡는다. 막 생긴 사칭 사이트는 목록에 없을 수 있다.
 //   - 접속 확인(verify.ts)보다 먼저 한다 — 악성일 수 있는 사이트에 먼저 접속하지 않기 위해.
 
-import { webRiskVerdict } from './logic.ts';
+import { googleErrorKind, webRiskVerdict } from './logic.ts';
 
 const ENDPOINT = 'https://webrisk.googleapis.com/v1/uris:search';
 const THREAT_TYPES = ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE'] as const;
@@ -26,8 +26,9 @@ export async function checkWebRisk(url: string, apiKey: string | undefined, time
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
-      await res.body?.cancel().catch(() => {});
-      console.log(`purchase: web_risk_error status=${res.status}`);
+      // 원인 종류만 남긴다(예: PERMISSION_DENIED/BILLING_DISABLED — 결제 계정·API 사용 설정·키 제한 구분용)
+      const kind = await res.json().then(googleErrorKind, () => 'unreadable');
+      console.log(`purchase: web_risk_error status=${res.status} kind=${kind}`);
       return 'unavailable';
     }
     const verdict = webRiskVerdict(await res.json());

@@ -16,6 +16,7 @@ import {
   searchScope,
   siteBase,
   statusVerdict,
+  googleErrorKind,
   webRiskVerdict,
 } from '../functions/find-purchase-links/logic.ts';
 import { buildSearchTool } from '../functions/find-purchase-links/prompt.ts';
@@ -252,6 +253,24 @@ Deno.test('webRiskVerdict: 빈 응답은 안전, 목록에 오르면 악성, 모
   eq(webRiskVerdict(null), 'unknown');
   eq(webRiskVerdict([]), 'unknown');
   eq(webRiskVerdict({ threat: 'x' }), 'unknown');
+});
+
+Deno.test('googleErrorKind: 원인 종류만 뽑음(메시지 본문 제외)', () => {
+  eq(
+    googleErrorKind({
+      error: {
+        code: 403,
+        message: 'This API method requires billing to be enabled. project 123',
+        status: 'PERMISSION_DENIED',
+        details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'BILLING_DISABLED', domain: 'googleapis.com' }],
+      },
+    }),
+    'PERMISSION_DENIED/BILLING_DISABLED',
+  );
+  eq(googleErrorKind({ error: { status: 'PERMISSION_DENIED' } }), 'PERMISSION_DENIED');
+  eq(googleErrorKind({ error: { status: 'bad value; drop table' } }), 'unknown', '형식 밖 값은 남기지 않음');
+  eq(googleErrorKind(null), 'unknown');
+  eq(googleErrorKind({}), 'unknown');
 });
 
 Deno.test('checkWebRisk: 키가 없으면 조회하지 않고 no_key(호출부가 링크를 비움)', async () => {

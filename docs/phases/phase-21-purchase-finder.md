@@ -102,7 +102,7 @@
 | 몰 | 식별 문구(OCR, 초안) | 검색 도메인 |
 |---|---|---|
 | 네이버(스마트스토어·브랜드스토어) | 스마트스토어 | smartstore.naver.com, brand.naver.com |
-| 쿠팡 | 쿠팡, 로켓배송, 로켓와우 | coupang.com |
+| 쿠팡 | 쿠팡, 로켓배송, 로켓와우, 판매자로켓, 로켓프레시, 로켓직구, 로켓설치, 로켓그로스 | coupang.com |
 | 무신사 | 무신사, MUSINSA | musinsa.com |
 | 29CM | (없음 — 치수 표기 '29cm'와 겹쳐 주소로만 판별) | 29cm.co.kr |
 | W컨셉 | W컨셉, W CONCEPT | wconcept.co.kr |

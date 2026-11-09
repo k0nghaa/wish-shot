@@ -36,7 +36,8 @@ export type PurchaseChannel = { domain: string } | { mall: MallId } | null;
 //   '오늘의 집밥'이 '오늘의집'으로 읽히지 않게).
 const MALL_PHRASES: Partial<Record<MallId, readonly string[]>> = {
   naver: ['스마트스토어'],
-  coupang: ['쿠팡', '로켓배송', '로켓와우', 'coupang'],
+  // 쿠팡 앱 상품 화면엔 '쿠팡' 글자 없이 배송 표기만 보이는 경우가 많다(예: '판매자로켓')
+  coupang: ['쿠팡', 'coupang', '로켓배송', '로켓와우', '판매자로켓', '로켓프레시', '로켓직구', '로켓설치', '로켓그로스'],
   musinsa: ['무신사', 'musinsa'],
   wconcept: ['w컨셉', 'wconcept', 'w concept'],
   oliveyoung: ['올리브영', 'oliveyoung', 'olive young', '오늘드림'],

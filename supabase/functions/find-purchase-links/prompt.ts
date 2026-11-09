@@ -67,7 +67,9 @@ export function buildPickSystem(channel: Channel): string {
   return [
     'You check numbered web search results for one product that a user saved from a shopping screenshot.',
     'Choose the single result that is the product DETAIL page of exactly this product: same brand and same model/name.',
-    'Color or size variants of the same product are acceptable.',
+    'If several results are the same product in different colors or options, choose the one whose color/option matches',
+    'the product name (for example a color word such as 그레이 or Light Blue in it). Only if none matches, a different',
+    'color/option of the same product is acceptable.',
     'Do NOT choose category or listing pages, search-result pages, brand home pages, blog posts, reviews, news,',
     'or a different product (for example a different model in the same line).',
     'If no result clearly matches, return index null — an empty answer is better than a wrong link.',
