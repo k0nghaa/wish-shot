@@ -791,15 +791,9 @@ export default function RegisterScreen() {
             </FormRow>
           </FormCard>
 
-          {/* 링크를 찾는 동안만 보인다: 저장해도 계속 찾는다(저장 뒤 3분 안·앱이 켜져 있을 때 — attachLinkAfterSave).
-              평소엔 투명하게 자리만 차지해, 문구가 나타나고 사라질 때 아래 메모 칸이 움직이지 않게 한다(추천 문구와 같은 방식). */}
-          <Text
-            style={[styles.linkGuide, !linkSearching && styles.linkGuideHidden]}
-            accessible={linkSearching}
-            accessibilityLiveRegion="polite"
-          >
-            지금 저장해도 링크를 계속 찾습니다. 앱은 켜 두세요.
-          </Text>
+          {/* 링크 칸 아래 오른쪽 고정 안내: 링크를 찾는 중에 저장해도 계속 찾는다(저장 뒤 3분 안·앱이 켜져 있을 때 —
+              attachLinkAfterSave). 찾는 동안만 보이면 한도 초과처럼 바로 끝날 때 깜빡여 오히려 헷갈리므로 늘 보인다. */}
+          <Text style={styles.linkGuide}>저장 후에도 링크를 계속 찾습니다. 앱을 닫으면 중단됩니다.</Text>
 
           {/* 그룹 카드 3: 메모 */}
           <FormCard>
@@ -927,8 +921,7 @@ const styles = StyleSheet.create({
   // 링크 칸: '찾는 중' 스피너 + 한 줄 입력(남은 폭)
   linkValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.one },
   // 링크 찾는 중 안내(카테고리·링크 카드 바로 아래, 위 간격 축소)
-  linkGuide: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one },
-  linkGuideHidden: { opacity: 0 },
+  linkGuide: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one, textAlign: 'right' },
   statusText: { fontSize: 13, fontWeight: '500' },
   errorBox: {
     gap: spacing.two,
