@@ -747,7 +747,9 @@ export default function RegisterScreen() {
           {/* 상품 페이지를 못 찾아 몰 검색 결과 링크를 넣은 경우 — 상품 링크와 구분해 알린다 */}
           {aiFilled.link && purchase.link?.kind === 'search' ? (
             <Text style={styles.linkHint}>
-              상품 페이지를 찾지 못해 {mallLabel(purchase.link.mall)} 검색 결과로 연결합니다.
+              상품 페이지를 찾지 못해{' '}
+              {purchase.link.mall ? mallLabel(purchase.link.mall) : purchase.link.domain.replace(/^www\./, '')} 검색
+              결과로 연결합니다.
             </Text>
           ) : null}
 

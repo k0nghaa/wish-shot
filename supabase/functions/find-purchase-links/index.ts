@@ -47,15 +47,22 @@ import {
   type Link,
   MAX_BRAND_LEN,
   MAX_PRODUCT_NAME_LEN,
+  cafe24SearchPage,
+  cafe24SearchUrl,
   debugCandidates,
+  extractCafe24Products,
   harvestCandidates,
   hasRealToolError,
   kstDate,
+  looksLikeCafe24,
   mallSearchLink,
   pickSummary,
   pickToLink,
   resolveChannel,
+  safeHttpsUrl,
   searchScope,
+  siteBase,
+  siteQueries,
 } from './logic.ts';
 import {
   ANTHROPIC_VERSION,
@@ -74,6 +81,7 @@ import {
   buildSearchUserMessage,
 } from './prompt.ts';
 import { checkWebRisk } from './safety.ts';
+import { fetchSitePage } from './site.ts';
 import { verifyLink } from './verify.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
@@ -94,6 +102,12 @@ const MIN_CONTINUE_MS = 10_000;
 const VERIFY_TIMEOUT_MS = 6_000;
 // Google Web Risk 대조 시간 제한(ms).
 const WEB_RISK_TIMEOUT_MS = 4_000;
+// 사이트 안 검색(카페24) 단계 전체 시간(ms) — 웹 검색 예산(SEARCH_BUDGET_MS) 안에서 쓴다(전체 최악 소요는 그대로).
+// 페이지 하나 읽기 시간 제한, 두 번째 검색어를 시도할 최소 남은 시간, 읽을 최대 크기(바이트).
+const SITE_BUDGET_MS = 8_000;
+const SITE_FETCH_TIMEOUT_MS = 5_000;
+const SITE_MIN_FETCH_MS = 2_000;
+const SITE_MAX_BYTES = 600_000;
 // 카운터·기록 DB 호출 시간 제한(ms).
 const DB_TIMEOUT_MS = 3_000;
 
@@ -389,7 +403,7 @@ Deno.serve(async (req) => {
   }
   if (quota.status === 'unavailable') return fail(user.id, 'quota_unavailable', 503);
 
-  // 4) 1차 호출 — 웹 검색. 후보 URL 은 결과 블록에서 서버가 직접 모은다.
+  // 웹 검색 준비. 후보 URL 은 결과 블록에서 서버가 직접 모은다.
   const scope = searchScope(channel, brand);
   const maxUses = channel.via === 'none' ? MAX_USES_OPEN : MAX_USES_SCOPED;
   const tools = [buildSearchTool(scope, maxUses)];
@@ -405,7 +419,51 @@ Deno.serve(async (req) => {
   // Anthropic 호출 실패(검색 첫 호출·고르기). 몰 검색 링크로도 채우지 못하면 이 실패로 응답한다.
   let llmFailure: { reason: LlmFailure; status?: number } | null = null;
 
-  for (let turn = 0; turn <= MAX_CONTINUATIONS; turn++) {
+  // 4-0) 사이트 안 검색(카페24) — 캡처에 주소가 보이는 쇼핑몰(몰 사전에 없는 곳)이면 웹 검색 전에 그 사이트의
+  //      검색 페이지를 읽어 상품 링크를 후보로 모은다. 찾으면 웹 검색을 건너뛴다(빠르고 검색 요금이 없다).
+  //      접속 전에 검색 페이지 주소(검색어 없이)를 Web Risk 로 대조하고(악성일 수 있는 사이트에 먼저 접속하지 않음),
+  //      실패하면 웹 검색으로 넘어간다. 이 단계는 SITE_BUDGET_MS 안에서 끝내고 웹 검색 예산에서 쓴다.
+  let site = '-'; // 로그용: cafe24_N(찾은 상품 수) / cafe24_none / not_cafe24 / risk_* / site_budget / 접속 실패 사유
+  let siteSearchUrl: string | null = null; // 상품이 검색된 검색어의 결과 페이지(고른 링크가 없거나 확인을 못 통과하면 이 링크로)
+  if (channel.via === 'domain' && !channel.mall) {
+    const domain = channel.domains[0];
+    const siteDeadline = Date.now() + SITE_BUDGET_MS;
+    const probe = cafe24SearchPage(domain);
+    const risk = probe ? await checkWebRisk(probe, Deno.env.get('WEB_RISK_API_KEY'), WEB_RISK_TIMEOUT_MS) : null;
+    if (risk !== 'safe') {
+      site = risk ? `risk_${risk}` : 'bad_domain';
+    } else {
+      for (const q of siteQueries(productName)) {
+        const url = cafe24SearchUrl(domain, q);
+        if (!url) break;
+        const left = siteDeadline - Date.now();
+        if (left < SITE_MIN_FETCH_MS) {
+          site = 'site_budget';
+          break;
+        }
+        const page = await fetchSitePage(url, Math.min(SITE_FETCH_TIMEOUT_MS, left), SITE_MAX_BYTES);
+        if (!page.ok) {
+          site = page.reason;
+          break;
+        }
+        if (!looksLikeCafe24(page.html)) {
+          site = 'not_cafe24';
+          break;
+        }
+        const found = extractCafe24Products(page.html, page.finalUrl, siteBase(domain));
+        site = found.length > 0 ? `cafe24_${found.length}` : 'cafe24_none';
+        if (found.length > 0) {
+          harvest.candidates.push(...found);
+          siteSearchUrl = url;
+          stop.search = 'site';
+          break;
+        }
+      }
+    }
+  }
+
+  // 4) 1차 호출 — 웹 검색(사이트 안 검색으로 후보를 찾았으면 건너뛴다).
+  for (let turn = 0; turn <= MAX_CONTINUATIONS && stop.search !== 'site'; turn++) {
     const remaining = deadline - Date.now();
     if (turn > 0 && remaining < MIN_CONTINUE_MS) {
       paused = true; // 시간이 모자라 이어 보내지 않음 — 모은 후보로 진행
@@ -534,7 +592,13 @@ Deno.serve(async (req) => {
     const fallback = mallSearchLink(channel, productName, brand);
     if (fallback) link = await ensureSafe(fallback, 'search_');
   }
+  //    캡처에 주소가 보인 카페24 쇼핑몰이면 그 사이트 검색 결과 링크(사람 결정 — 쿠팡과 같은 방식).
+  if (!link && siteSearchUrl) {
+    const host = safeHttpsUrl(siteSearchUrl)?.host;
+    if (host) link = await ensureSafe({ url: siteSearchUrl, domain: host, kind: 'search' }, 'site_search_');
+  }
 
+  console.log(`purchase: site=${site}`);
   logResult(channel, harvest, link, usage, verifyStop);
   if (!link && llmFailure) {
     // Anthropic 호출이 실패했고 몰 검색 링크로도 채우지 못함 — 실패 응답(기록은 이미 남김)

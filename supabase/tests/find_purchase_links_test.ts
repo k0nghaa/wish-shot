@@ -3,7 +3,12 @@
 import {
   type Channel,
   type Harvest,
+  cafe24SearchPage,
+  cafe24SearchUrl,
   checkRedirect,
+  extractCafe24Products,
+  looksLikeCafe24,
+  siteQueries,
   debugCandidates,
   harvestCandidates,
   hasRealToolError,
@@ -308,6 +313,59 @@ Deno.test('mallSearchLink: 확인된 몰만, 도메인 고정·검색어 인코�
   eq(mallSearchLink({ via: 'none' }, '청바지', null), null);
   eq(mallSearchLink({ via: 'domain', domains: ['markedly.co.kr'] }, '자켓', null), null);
   eq(mallSearchLink(coupang, '   ', null), null);
+});
+
+Deno.test('카페24 사이트 안 검색: 주소·검색어·상품 추출', () => {
+  eq(cafe24SearchUrl('fix-it.kr', '제로 룸데오도란트'), 'https://fix-it.kr/product/search.html?keyword=%EC%A0%9C%EB%A1%9C+%EB%A3%B8%EB%8D%B0%EC%98%A4%EB%8F%84%EB%9E%80%ED%8A%B8');
+  eq(new URL(cafe24SearchUrl('fix-it.kr', 'a&b=/../x')!).pathname, '/product/search.html', '검색어가 경로를 바꾸지 못함');
+  eq(cafe24SearchUrl('fix-it.kr', '  '), null);
+  eq(siteQueries('제로 룸데오도란트 2EA'), ['제로 룸데오도란트 2EA', '제로 룸데오도란트']);
+  eq(siteQueries('룸데오도란트'), ['룸데오도란트']);
+  eq(looksLikeCafe24('<img src="//img.echosting.cafe24.com/a.png">'), true);
+  eq(looksLikeCafe24('<html>shopify</html>'), false);
+  eq(cafe24SearchPage('fix-it.kr'), 'https://fix-it.kr/product/search.html', 'Web Risk 대조용 — 검색어 없음');
+
+  // 카페24 검색 결과 형태: 검색 결과 영역 밖(머리말 추천 상품)·같은 상품의 사진 링크와 이름 링크·
+  // 목록 링크·다른 사이트·http·번호 아님·영역 뒤(페이지 번호 다음) 링크가 섞임
+  const html = `
+    <style>.xans-search-result .name { color: #000 }</style>
+    <div class="xans-element- xans-layout xans-layout-header"><a href="/product/detail.html?product_no=1">머리말 추천 상품</a></div>
+    <div class="xans-element- xans-search xans-search-result">
+    <a href="/product/list.html?cate_no=56">목록</a>
+    <a href="/product/detail.html?product_no=29&amp;cate_no=55&amp;display_group=1" class="noborder"><img src="x.png" alt="사진 대체 글자"/></a>
+    <a href="/product/detail.html?product_no=29&amp;cate_no=55" class="icon">관심상품 등록하기 버튼 글자가 긴 링크</a>
+    <div class="name"><a href="/product/detail.html?product_no=29&amp;cate_no=55&amp;display_group=1"><span>제로 룸데오도란트 230g</span></a></div>
+    <strong class="name"><a href="//fix-it.kr/product/%ED%9E%88%EB%85%B8%EB%81%BC/50/category/1/display/2/"><span class="title displaynone"><span>상품명</span> :</span> <span>히노끼 &#47; 룸데오도란트 &#xAC00;</span></a></strong>
+    <a href="/product/detail.html?product_no=51"><img src="y.png" alt="사진만 있는 상품"></a>
+    <a href="https://evil.example.com/product/detail.html?product_no=1">다른 사이트</a>
+    <a href="http://fix-it.kr/product/detail.html?product_no=7">http 링크</a>
+    <a href="/product/detail.html?product_no=abc">번호 아님</a>
+    </div>
+    <div class="xans-element- xans-search xans-search-paging"><a href="/product/detail.html?product_no=99">영역 밖</a></div>`;
+  eq(extractCafe24Products(html, 'https://fix-it.kr/product/search.html?keyword=x', 'fix-it.kr'), [
+    { url: 'https://fix-it.kr/product/detail.html?product_no=29', title: '제로 룸데오도란트 230g', domain: 'fix-it.kr' },
+    { url: 'https://fix-it.kr/product/detail.html?product_no=50', title: '히노끼 / 룸데오도란트 가', domain: 'fix-it.kr' },
+    { url: 'https://fix-it.kr/product/detail.html?product_no=51', title: '사진만 있는 상품', domain: 'fix-it.kr' },
+  ]);
+  // 검색 결과 영역이 없으면 상품을 읽지 않는다
+  eq(extractCafe24Products('<a href="/product/detail.html?product_no=1">상품</a>', 'https://fix-it.kr/', 'fix-it.kr'), []);
+});
+
+Deno.test('카페24 상품 추출: 상대 사이트의 악의적 HTML 에도 정규식이 오래 돌지 않는다', () => {
+  const area = '<div class="xans-search-result">';
+  const cases = [
+    area + '<a href="/product/detail.html?product_no=1">' + 'x'.repeat(1_500_000), // 닫는 </a> 없음
+    area + '<a href="/product/detail.html?product_no=1">x'.repeat(30_000), // 닫히지 않는 링크 반복(이전 정규식은 제곱 시간)
+    area + '<a '.repeat(500_000), // 끝나지 않는 여는 태그 반복
+    area + ('<a href="/product/detail.html?product_no=1">' + '<'.repeat(2_000)).repeat(300),
+    area + '<a ' + 'h'.repeat(1_500_000),
+  ];
+  for (const html of cases) {
+    const t0 = performance.now();
+    extractCafe24Products(html, 'https://fix-it.kr/', 'fix-it.kr');
+    const ms = performance.now() - t0;
+    if (ms > 1_000) throw new Error(`정규식 처리 ${Math.round(ms)}ms — 너무 오래 걸림`);
+  }
 });
 
 Deno.test('pickSummary·debugCandidates: 로그용 요약', () => {

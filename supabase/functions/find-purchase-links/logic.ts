@@ -260,6 +260,130 @@ export function mallSearchLink(channel: Channel, productName: string, brand: str
   return { url: ok.href, domain: ok.host, kind: 'search', mall: channel.mall };
 }
 
+// ---------------------------------------------------------------------------
+// 카페24 사이트 안 검색(사람 결정 2026-11-09) — 캡처에 주소가 보이는 쇼핑몰(몰 사전에 없는 곳)은
+// 웹 검색 색인에 상품 페이지가 없는 경우가 많아, 그 사이트의 카페24 공통 검색 페이지를 읽어 상품 링크를 모은다.
+// 링크 주소는 그 사이트가 검색 결과로 직접 준 실제 상품 주소다(모델이 쓰지 않음).
+// ---------------------------------------------------------------------------
+
+// 카페24 공통 사이트 검색 페이지(검색어 없음). 접속 전 Web Risk 대조에 쓴다(검색어를 Google 로 보내지 않음).
+export function cafe24SearchPage(domain: string): string | null {
+  return safeHttpsUrl(`https://${domain}/product/search.html`)?.href ?? null;
+}
+
+// 카페24 공통 사이트 검색 주소. 도메인은 정리된 호스트명, 검색어만 인코딩한다.
+export function cafe24SearchUrl(domain: string, query: string): string | null {
+  const q = query.trim();
+  const page = q ? cafe24SearchPage(domain) : null;
+  if (!page) return null;
+  const u = new URL(page);
+  u.searchParams.set('keyword', q);
+  return safeHttpsUrl(u.href)?.href ?? null;
+}
+
+// 사이트 검색어: 상품명 그대로, 그다음 앞 두 단어(수량·용량·옵션 표기가 붙어 검색이 안 될 때 — 예: '제로 룸데오도란트 2EA').
+export function siteQueries(productName: string): string[] {
+  const name = productName.trim().replace(/\s+/g, ' ');
+  if (!name) return [];
+  const words = name.split(' ');
+  return words.length >= 3 ? [name, words.slice(0, 2).join(' ')] : [name];
+}
+
+// 카페24 페이지인지(카페24 호스팅 자원 주소가 들어 있음)
+export function looksLikeCafe24(html: string): boolean {
+  return /echosting\.cafe24\.com/i.test(html);
+}
+
+const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+function decodeEntities(s: string): string {
+  return s.replace(
+    /&(?:#(\d{1,7})|#x([0-9a-f]{1,6})|(amp|lt|gt|quot|apos|nbsp));/gi,
+    (all, dec: string | undefined, hex: string | undefined, name: string | undefined) => {
+      if (name) return NAMED_ENTITIES[name.toLowerCase()] ?? all;
+      const cp = dec ? Number(dec) : parseInt(hex ?? '', 16);
+      // 유효한 유니코드 문자만(NUL·서로게이트·범위 밖은 그대로 둔다)
+      return cp > 0 && cp <= 0x10ffff && (cp < 0xd800 || cp > 0xdfff) ? String.fromCodePoint(cp) : all;
+    },
+  );
+}
+
+// 아래 정규식은 모두 반복 길이에 상한을 둔다 — 상대 사이트의 HTML 은 믿을 수 없는 입력이라,
+// 닫는 태그가 없는 큰 페이지 등으로 정규식이 오래 도는 것(CPU 고갈)을 막는다.
+const MAX_TEXT_SCAN = 3_000;
+function stripTags(s: string): string {
+  return decodeEntities(s.slice(0, MAX_TEXT_SCAN).replace(/<[^<>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+// 검색 결과 영역(카페24 공통 모듈 xans-search-result ~ 페이지 번호 xans-search-paging). 머리말·추천 상품 등
+// 검색 결과가 아닌 상품 링크는 읽지 않는다. 영역이 없으면 null(검색 결과 없음으로 본다).
+const MAX_AREA_CHARS = 300_000;
+export function cafe24ResultArea(html: string): string | null {
+  // class 속성 안에서만 찾는다(머리말 CSS·JS 에 같은 이름이 있어도 영역이 앞당겨지지 않게)
+  const start = html.search(/class\s*=\s*"[^"<>]{0,200}\bxans-search-result(?![\w-])/);
+  if (start < 0) return null;
+  const rest = html.slice(start, start + MAX_AREA_CHARS);
+  const end = rest.search(/xans-search-paging(?![\w-])/);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+// <a href="…">내용</a> — 태그 안 1,000자·주소 2,048자·내용 3,000자까지, 내용에 다른 <a> 가 끼면 그 앞에서 끊는다.
+const ANCHOR_RE = /<a\b[^<>]{0,1000}?\shref\s*=\s*"([^"<>]{1,2048})"[^<>]{0,1000}>((?:[^<]|<(?!\/?a\b)){0,3000}?)<\/a>/gi;
+// 링크 바로 앞이 상품 이름 칸(class 에 name 이 든 요소)인지 — 카페24 스킨은 이름 링크를 <div|strong class="name"> 안에 둔다.
+const NAME_AREA_RE = /class\s*=\s*"[^"<>]{0,100}\bname\b[^"<>]{0,100}"[^<>]{0,300}>\s*$/i;
+const NAME_AREA_LOOKBACK = 400;
+// 사진 링크의 대체 글자(이름 링크가 없을 때 이름으로)
+const IMG_ALT_RE = /<img\b[^<>]{0,2000}?\salt\s*=\s*"([^"<>]{1,300})"/i;
+const MAX_TITLE = 120;
+
+// 카페24 상품 상세 주소: /product/detail.html?product_no=N 또는 /product/{이름}/{N}/… (검색 노출용 주소)
+function cafe24ProductNo(u: URL): string | null {
+  if (u.pathname === '/product/detail.html') {
+    const no = u.searchParams.get('product_no') ?? '';
+    return /^\d+$/.test(no) ? no : null;
+  }
+  const m = u.pathname.match(/^\/product\/[^/]+\/(\d+)(?:\/|$)/);
+  return m ? m[1] : null;
+}
+
+// 카페24 검색 결과 HTML 의 검색 결과 영역에서 상품 후보(주소·이름)를 모은다.
+//   - 주소는 그 사이트(base 와 하위 도메인) 안의 안전한 https 링크에서 상품 번호만 읽어
+//     정규 상세 주소(/product/detail.html?product_no=N)로 다시 만든다(링크에 붙은 다른 경로·쿼리는 버림).
+//   - 같은 상품(번호)의 사진 링크·이름 링크는 하나로 묶고, 이름은 이름 칸 링크 글자 > 사진 대체 글자 > 그 밖 링크 글자 순.
+export function extractCafe24Products(html: string, pageUrl: string, base: string): Candidate[] {
+  const area = cafe24ResultArea(html);
+  if (!area) return [];
+  const byNo = new Map<string, Candidate & { rank: number }>();
+  for (const m of area.matchAll(ANCHOR_RE)) {
+    let abs: URL;
+    try {
+      abs = new URL(decodeEntities(m[1]), pageUrl);
+    } catch {
+      continue;
+    }
+    const no = cafe24ProductNo(abs);
+    if (!no) continue;
+    const linked = safeHttpsUrl(abs.href);
+    if (!linked || !hostMatches(linked.host, base)) continue;
+    const ok = safeHttpsUrl(`https://${linked.host}/product/detail.html?product_no=${no}`);
+    if (!ok) continue;
+    const at = m.index ?? 0;
+    const inName = NAME_AREA_RE.test(area.slice(Math.max(0, at - NAME_AREA_LOOKBACK), at));
+    // 스킨에 따라 이름 앞에 붙는 '상품명 :' 표기는 뗀다
+    const text = stripTags(m[2]).replace(/^(?:상품명|product\s*name)\s*:\s*/i, '');
+    const alt = text ? '' : stripTags(m[2].match(IMG_ALT_RE)?.[1] ?? '');
+    const title = (text || alt).slice(0, MAX_TITLE);
+    const rank = text ? (inName ? 3 : 1) : alt ? 2 : 0;
+    const prev = byNo.get(no);
+    if (!prev) {
+      if (byNo.size >= MAX_CANDIDATES) continue;
+      byNo.set(no, { url: ok.href, title, domain: ok.host, rank });
+    } else if (rank > prev.rank || (rank === prev.rank && title.length > prev.title.length)) {
+      byNo.set(no, { ...prev, title, rank });
+    }
+  }
+  return [...byNo.values()].map(({ url, title, domain }) => ({ url, title, domain }));
+}
+
 // 고르기 결과 요약(로그용 — 번호와 공식 여부만): "3/official" · "3/site" · "null" · "invalid"
 export function pickSummary(parsed: unknown): string {
   if (!parsed || typeof parsed !== 'object') return 'invalid';
