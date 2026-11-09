@@ -193,7 +193,7 @@ npx supabase secrets set PARSE_LIMIT_USER_HOURLY=30 PARSE_LIMIT_USER_DAILY=100 P
 2. **카페24 사이트 안 검색**: 도메인 채널이고 몰 사전에 없는 곳이면 그 사이트의 `/product/search.html?keyword=`를 읽어 검색 결과 영역의 상품 번호로 상세 주소를 만듭니다.
 3. **웹 검색**: 못 찾았으면 Claude Haiku 5.5 웹 검색으로 그 사이트(채널이 없으면 몰을 뺀 공식 홈페이지) 안의 같은 상품 페이지를 찾고, 구조화 출력으로 **후보 번호만** 고릅니다(주소는 서버가 모은 후보에서만 꺼냄).
 4. **링크 확인**: Google Web Risk 대조 + 접속 확인(https·인증서·같은 사이트 안 리다이렉트·응답 코드). 통과한 것만 넣습니다.
-5. 상품 페이지가 없으면 확인된 몰 검색 주소(지금은 쿠팡)나 상품이 검색된 카페24 사이트의 검색 결과 링크를 넣습니다. 사용자에게는 같은 '연결된 링크'라 폼에서 상품 링크와 따로 안내하지 않습니다. 링크를 못 찾으면 링크 칸에 "링크를 직접 입력하세요"를 보입니다.
+5. 상품 페이지가 없으면 확인된 몰 검색 주소(지금은 쿠팡·무신사·29CM·오늘의집)나 상품이 검색된 카페24 사이트의 검색 결과 링크를 넣습니다. 사용자에게는 같은 '연결된 링크'라 폼에서 상품 링크와 따로 안내하지 않습니다. 링크를 못 찾으면 링크 칸에 "링크를 직접 입력하세요"를 보입니다.
 6. 결과가 오기 전에 저장하면, 저장 뒤 3분 안에 도착한 링크를 **링크가 비어 있을 때만** 붙이고 흐름을 끊지 않게 알립니다 — 3초 스낵바([보기]), 알림 탭 배지·기록, 타일 좌상단 와인색 점(기기 안에만 저장). 찾는 동안 그 위시 타일은 약간 흐리고, 못 찾으면 흐림만 사라집니다.
 
 **배포** (`0007`을 먼저 적용 — 한도 없이 배포하지 않습니다. 키는 함수 시크릿에만):
@@ -205,7 +205,7 @@ npx supabase functions deploy find-purchase-links      # 함수 이름을 꼭 �
 npx supabase secrets set PURCHASE_LIMIT_USER_HOURLY=10 PURCHASE_LIMIT_USER_DAILY=30 PURCHASE_LIMIT_GLOBAL_DAILY=100
 ```
 
-- 단위 시험(네트워크·키 없음): `deno test --no-lock supabase/tests/find_purchase_links_test.ts`
+- 단위 시험(네트워크·키 없음): `deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts`(앱 입구 채널 판별 포함)
 - 한도 권한·동작 검증 SQL: `supabase/tests/purchase_link_quota.sql`(SQL Editor, rollback)
 - 실패 원인은 `ops.purchase_link_failures`에 남습니다(사용자·한국 날짜·사유·횟수 — 내용 없음).
 - 네이버 검색 API는 약관(AI 입력·처리 금지) 때문에 쓰지 않습니다.
