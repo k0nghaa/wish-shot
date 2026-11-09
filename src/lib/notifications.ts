@@ -23,9 +23,16 @@ export type AppNotification = {
   read: boolean;
 };
 
-/** 알림 종류별 문구(한 곳에서 정한다 — 새 종류는 type 과 여기 문구만 더한다). */
+/**
+ * 알림 종류별 문구(한 곳에서 정한다 — 새 종류는 type 과 여기 문구만 더한다).
+ * - title: 스낵바 제목(제품명은 아래 줄에 따로).
+ * - suffix: 알림 목록 한 줄 "{제품명}{suffix}" — 제품명은 굵게, 길면 제품명만 말줄임으로 잘린다.
+ */
 export const NOTIFICATION_TITLE: Record<NotificationType, string> = {
   link_attached: '링크를 붙였습니다',
+};
+export const NOTIFICATION_SUFFIX: Record<NotificationType, string> = {
+  link_attached: '에 링크를 붙였습니다',
 };
 
 const NOTIFICATIONS_KEY = 'wishshot.notifications';

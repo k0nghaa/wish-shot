@@ -13,7 +13,7 @@ import { capture } from '@/lib/analytics';
 import { formatRelativeTime } from '@/lib/formatDate';
 import {
   getNotificationsSnapshot,
-  NOTIFICATION_TITLE,
+  NOTIFICATION_SUFFIX,
   pruneMissingItems,
   subscribeNotifications,
   type AppNotification,
@@ -26,7 +26,8 @@ const THUMB = 48;
 
 /**
  * 알림 탭: 저장 뒤 링크를 붙이는 등 사용자가 보지 못한 변화(기기 안 기록, 최근 20개·14일).
- * 행 = 썸네일 · 종류 문구 · 제품명(지금 위시 이름, 없으면 기록한 이름) · 상대 시각. 안 읽은 행은 썸네일 좌상단 점 + 굵은 제목.
+ * 행 = 썸네일 · 한 줄 "{제품명}에 링크를 붙였습니다"(제품명 굵게 — 지금 위시 이름, 없으면 기록한 이름, 길면 제품명만 말줄임) · 상대 시각.
+ * 안 읽은 행은 썸네일 좌상단 점 + 검정 글씨, 읽은 행은 연하게(사진 반투명·글자 회색).
  * 누르면 위시 상세로 가고, 상세가 그 위시를 화면에 보이면 읽음 처리한다. 이미 없는 위시의 알림은 목록을 읽을 때 정리한다.
  */
 export default function NotificationsScreen() {
@@ -108,14 +109,14 @@ export default function NotificationsScreen() {
           renderItem={({ item: n }) => {
             const it = items?.get(n.itemId);
             const name = it?.product_name ?? n.productName;
-            const title = NOTIFICATION_TITLE[n.type];
+            const suffix = NOTIFICATION_SUFFIX[n.type];
             const time = formatRelativeTime(n.createdAt, now);
             return (
               <TouchableOpacity
                 style={styles.row}
                 onPress={() => open(n)}
                 accessibilityRole="button"
-                accessibilityLabel={`${title}, ${name}, ${time}${n.read ? '' : ', 읽지 않음'}`}
+                accessibilityLabel={`${name}${suffix}, ${time}${n.read ? '' : ', 읽지 않음'}`}
               >
                 <View style={styles.thumbWrap}>
                   <Thumbnail
@@ -125,15 +126,16 @@ export default function NotificationsScreen() {
                   />
                   {n.read ? null : <NewDot style={styles.dotPos} />}
                 </View>
-                <View style={styles.texts}>
-                  <Text style={[styles.rowTitle, n.read ? styles.rowTitleRead : styles.rowTitleUnread]} numberOfLines={1}>
-                    {title}
-                  </Text>
-                  <Text style={[styles.rowName, n.read && styles.rowNameRead]} numberOfLines={1}>
+                {/* 한 줄: 제품명만 말줄임으로 잘리고 "에 링크를 붙였습니다"는 늘 보인다. */}
+                <View style={styles.messageLine}>
+                  <Text style={[styles.message, styles.messageName, n.read && styles.messageRead]} numberOfLines={1}>
                     {name}
                   </Text>
+                  <Text style={[styles.message, styles.messageRest, n.read && styles.messageRead]} numberOfLines={1}>
+                    {suffix}
+                  </Text>
                 </View>
-                <Text style={[styles.time, n.read && styles.rowNameRead]}>{time}</Text>
+                <Text style={[styles.time, n.read && styles.timeRead]}>{time}</Text>
               </TouchableOpacity>
             );
           }}
@@ -161,17 +163,17 @@ const styles = StyleSheet.create({
   },
   thumbWrap: { width: THUMB, height: THUMB, borderRadius: radius.sm, overflow: 'hidden' },
   thumb: { width: THUMB, height: THUMB },
-  // 읽은 알림은 연하게(사진 반투명·글자 회색) — 안 읽은 알림(점·굵은 검정 제목)과 한눈에 구분.
+  // 읽은 알림은 연하게(사진 반투명·글자 회색) — 안 읽은 알림(점·검정 글씨)과 한눈에 구분.
   thumbRead: { opacity: 0.45 },
   // 타일과 같은 새 링크 점(NewDot)의 위치.
   dotPos: { top: 3, left: 3 },
-  texts: { flex: 1, gap: 2 },
-  rowTitle: { ...type.subhead, color: colors.textMain },
-  rowTitleUnread: { fontWeight: '600' },
-  rowTitleRead: { color: colors.textSub },
-  rowName: { ...type.footnote, color: colors.textSub },
-  rowNameRead: { color: colors.textDisabled },
+  messageLine: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  message: { ...type.subhead, color: colors.textMain },
+  messageRead: { color: colors.textSub },
+  messageName: { flexShrink: 1, fontWeight: '700' },
+  messageRest: { flexShrink: 0 },
   time: { ...type.footnote, color: colors.textSub },
+  timeRead: { color: colors.textDisabled },
   sep: {
     height: hairlineWidth,
     backgroundColor: colors.silver,
