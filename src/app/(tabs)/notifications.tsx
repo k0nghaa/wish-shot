@@ -4,7 +4,7 @@ import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
-import { NEW_DOT_SIZE } from '@/components/PhotoTile';
+import { NewDot } from '@/components/PhotoTile';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { Thumbnail } from '@/components/Thumbnail';
 import { colors, hairlineWidth, radius, spacing, type } from '@/constants/theme';
@@ -123,7 +123,7 @@ export default function NotificationsScreen() {
                     fallbackUrl={it ? (fallbackUrls[it.image_key] ?? null) : null}
                     style={[styles.thumb, n.read && styles.thumbRead]}
                   />
-                  {n.read ? null : <View style={styles.dot} />}
+                  {n.read ? null : <NewDot style={styles.dotPos} />}
                 </View>
                 <View style={styles.texts}>
                   <Text style={[styles.rowTitle, n.read ? styles.rowTitleRead : styles.rowTitleUnread]} numberOfLines={1}>
@@ -163,16 +163,8 @@ const styles = StyleSheet.create({
   thumb: { width: THUMB, height: THUMB },
   // 읽은 알림은 연하게(사진 반투명·글자 회색) — 안 읽은 알림(점·굵은 검정 제목)과 한눈에 구분.
   thumbRead: { opacity: 0.45 },
-  // 타일과 같은 새 링크 점(좌상단 6pt 와인색, 외곽선 없음).
-  dot: {
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    width: NEW_DOT_SIZE,
-    height: NEW_DOT_SIZE,
-    borderRadius: NEW_DOT_SIZE / 2,
-    backgroundColor: colors.accent,
-  },
+  // 타일과 같은 새 링크 점(NewDot)의 위치.
+  dotPos: { top: 3, left: 3 },
   texts: { flex: 1, gap: 2 },
   rowTitle: { ...type.subhead, color: colors.textMain },
   rowTitleUnread: { fontWeight: '600' },

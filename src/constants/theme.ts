@@ -122,6 +122,11 @@ export const shadow = {
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
+  // 사진 위 작은 표시(새 링크 점 등) — 정본 color_tokens 규칙 4(검정 20%, y 1pt, blur 2pt) + 스프레드 1pt(작은 점이라
+  // 조금 넓게 펼침, 실기기 확인 뒤 사람 결정). 스프레드는 boxShadow 에만 있다(RN New Architecture — iOS shadow* 속성엔 없음).
+  onPhoto: {
+    boxShadow: '0px 1px 2px 1px rgba(0, 0, 0, 0.2)',
+  },
 } as const;
 
 export const fonts = Platform.select({
