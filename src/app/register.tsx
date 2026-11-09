@@ -33,6 +33,7 @@ import { attachLinkAfterSave, usePurchaseLinkSearch } from '@/hooks/usePurchaseL
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import { normalizeName } from '@/lib/normalize';
+import { mallLabel } from '@/lib/purchaseChannel';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
@@ -743,6 +744,13 @@ export default function RegisterScreen() {
             </FormRow>
           </FormCard>
 
+          {/* 상품 페이지를 못 찾아 몰 검색 결과 링크를 넣은 경우 — 상품 링크와 구분해 알린다 */}
+          {aiFilled.link && purchase.link?.kind === 'search' ? (
+            <Text style={styles.linkHint}>
+              상품 페이지를 찾지 못해 {mallLabel(purchase.link.mall)} 검색 결과로 연결합니다.
+            </Text>
+          ) : null}
+
           {/* 추천 문구는 항상 렌더하고 추천이 없을 땐 투명 처리 — 폴더 섹션 위치를 고정(점프 방지). */}
           <Text
             style={[styles.suggestHint, !categoryIsSuggested && styles.suggestHintHidden]}
@@ -878,6 +886,8 @@ const styles = StyleSheet.create({
   statusSpinner: { transform: [{ scale: 0.9 }] },
   // 링크 칸: '찾는 중' 스피너 + 입력(값은 우측 정렬)
   linkValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.one },
+  // 몰 검색 결과 링크 안내(카드 바로 아래, 위 간격 축소)
+  linkHint: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one },
   statusText: { fontSize: 13, fontWeight: '500' },
   errorBox: {
     gap: spacing.two,

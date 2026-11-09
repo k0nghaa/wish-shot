@@ -6,11 +6,22 @@
 //   검색 범위에 남기기 위한 브랜드 표기. 정규화(소문자·문자/숫자만)한 브랜드와 "정확히" 같을 때만
 //   해당한다 — 앞부분만 같은 다른 브랜드(예: 컬리수·SSGOOD)는 몰을 그대로 뺀다.
 
-export type Mall = { domains: readonly string[]; ownBrands: readonly string[] };
+// search: 상품 페이지를 못 찾았을 때 넣는 '그 몰 검색 결과' 주소 형식(사람 결정 2026-11-09).
+//   base 에 param=검색어 를 붙인다. **실제 몰에서 확인된 형식만** 넣는다(지어내지 않는다) — 없는 몰은 빈칸.
+//   쿠팡: 2026-11-09 웹 검색 결과에 나온 쿠팡 검색 주소(/np/search?q=…)로 확인.
+export type Mall = {
+  domains: readonly string[];
+  ownBrands: readonly string[];
+  search?: { base: string; param: string };
+};
 
 export const MALLS = {
   naver: { domains: ['smartstore.naver.com', 'brand.naver.com'], ownBrands: ['네이버', 'naver'] },
-  coupang: { domains: ['coupang.com'], ownBrands: ['쿠팡', 'coupang'] },
+  coupang: {
+    domains: ['coupang.com'],
+    ownBrands: ['쿠팡', 'coupang'],
+    search: { base: 'https://www.coupang.com/np/search', param: 'q' },
+  },
   musinsa: { domains: ['musinsa.com'], ownBrands: ['무신사', 'musinsa', '무신사스탠다드', 'musinsastandard'] },
   '29cm': { domains: ['29cm.co.kr'], ownBrands: ['29cm'] },
   wconcept: { domains: ['wconcept.co.kr'], ownBrands: ['w컨셉', 'wconcept', '더블유컨셉'] },

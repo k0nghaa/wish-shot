@@ -10,6 +10,7 @@ import {
   inScope,
   isTrustedMallHost,
   kstDate,
+  mallSearchLink,
   normalizeDomain,
   pickSummary,
   pickToLink,
@@ -63,17 +64,17 @@ Deno.test('resolveChannel: 도메인·몰·없음', () => {
   eq(resolveChannel('www.nike.com', undefined), { ok: true, channel: { via: 'domain', domains: ['nike.com'] } });
   eq(
     resolveChannel('brand.naver.com', null),
-    { ok: true, channel: { via: 'domain', domains: ['smartstore.naver.com', 'brand.naver.com'] } },
+    { ok: true, channel: { via: 'domain', domains: ['smartstore.naver.com', 'brand.naver.com'], mall: 'naver' } },
     '사전의 몰 도메인이면 그 몰의 검색 도메인 전체',
   );
   eq(
     resolveChannel('m.smartstore.naver.com', null),
-    { ok: true, channel: { via: 'domain', domains: ['smartstore.naver.com', 'brand.naver.com'] } },
+    { ok: true, channel: { via: 'domain', domains: ['smartstore.naver.com', 'brand.naver.com'], mall: 'naver' } },
     '몰 판별이 비판매 플랫폼(naver.com)보다 먼저',
   );
-  eq(resolveChannel(undefined, 'coupang'), { ok: true, channel: { via: 'mall', domains: ['coupang.com'] } });
-  eq(resolveChannel(undefined, 'zigzag'), { ok: true, channel: { via: 'mall', domains: ['zigzag.kr'] } });
-  eq(resolveChannel('m.a-bly.com', undefined), { ok: true, channel: { via: 'domain', domains: ['a-bly.com'] } });
+  eq(resolveChannel(undefined, 'coupang'), { ok: true, channel: { via: 'mall', domains: ['coupang.com'], mall: 'coupang' } });
+  eq(resolveChannel(undefined, 'zigzag'), { ok: true, channel: { via: 'mall', domains: ['zigzag.kr'], mall: 'zigzag' } });
+  eq(resolveChannel('m.a-bly.com', undefined), { ok: true, channel: { via: 'domain', domains: ['a-bly.com'], mall: 'ably' } });
   eq(resolveChannel(undefined, undefined), { ok: true, channel: { via: 'none' } });
   eq(resolveChannel('', ''), { ok: true, channel: { via: 'none' } }, '빈 문자열은 없음');
   eq(resolveChannel('nike.com', 'coupang'), { ok: false, error: 'invalid_input' }, '둘 다 오면 거절');
@@ -280,6 +281,33 @@ Deno.test('googleErrorKind: 원인 종류만 뽑음(메시지 본문 제외)', (
 Deno.test('checkWebRisk: 키가 없으면 조회하지 않고 no_key(호출부가 링크를 비움)', async () => {
   eq(await checkWebRisk('https://www.nike.com/', undefined, 1000), 'no_key');
   eq(await checkWebRisk('https://www.nike.com/', '', 1000), 'no_key');
+});
+
+Deno.test('mallSearchLink: 확인된 몰만, 도메인 고정·검색어 인코딩', () => {
+  const coupang: Channel = { via: 'mall', domains: ['coupang.com'], mall: 'coupang' };
+  eq(mallSearchLink(coupang, '산양유 비누 플러스', '샤워메이트'), {
+    url: 'https://www.coupang.com/np/search?q=%EC%83%A4%EC%9B%8C%EB%A9%94%EC%9D%B4%ED%8A%B8+%EC%82%B0%EC%96%91%EC%9C%A0+%EB%B9%84%EB%88%84+%ED%94%8C%EB%9F%AC%EC%8A%A4',
+    domain: 'www.coupang.com',
+    kind: 'search',
+    mall: 'coupang',
+  });
+  // 상품명이 이미 브랜드로 시작하면 브랜드를 다시 붙이지 않는다
+  eq(
+    new URL(mallSearchLink(coupang, '샤워메이트 산양유 비누', '샤워메이트')!.url).searchParams.get('q'),
+    '샤워메이트 산양유 비누',
+  );
+  // 검색어에 주소처럼 보이는 글자가 있어도 호스트·경로는 바뀌지 않는다(인코딩)
+  const tricky = mallSearchLink(coupang, 'x&q=evil#frag /../admin', null)!;
+  eq(new URL(tricky.url).hostname, 'www.coupang.com');
+  eq(new URL(tricky.url).pathname, '/np/search');
+  eq(new URL(tricky.url).searchParams.get('q'), 'x&q=evil#frag /../admin');
+  // 도메인으로 들어온 쿠팡 채널도 같다
+  eq(mallSearchLink({ via: 'domain', domains: ['coupang.com'], mall: 'coupang' }, '비누', null)?.kind, 'search');
+  // 검색 주소 형식이 확인되지 않은 몰·채널 없음·몰 아님은 null
+  eq(mallSearchLink({ via: 'mall', domains: ['musinsa.com'], mall: 'musinsa' }, '청바지', '리바이스'), null);
+  eq(mallSearchLink({ via: 'none' }, '청바지', null), null);
+  eq(mallSearchLink({ via: 'domain', domains: ['markedly.co.kr'] }, '자켓', null), null);
+  eq(mallSearchLink(coupang, '   ', null), null);
 });
 
 Deno.test('pickSummary·debugCandidates: 로그용 요약', () => {

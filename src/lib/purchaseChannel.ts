@@ -33,6 +33,27 @@ export type MallId =
 
 export type PurchaseChannel = { domain: string } | { mall: MallId } | null;
 
+/** 몰 표시 이름(몰 검색 결과 링크 안내 문구용). */
+export const MALL_LABELS: Record<MallId, string> = {
+  naver: '네이버',
+  coupang: '쿠팡',
+  musinsa: '무신사',
+  '29cm': '29CM',
+  wconcept: 'W컨셉',
+  oliveyoung: '올리브영',
+  ssg: 'SSG',
+  lotteon: '롯데ON',
+  ohou: '오늘의집',
+  ikea: '이케아',
+  kurly: '컬리',
+  zigzag: '지그재그',
+  ably: '에이블리',
+};
+
+export function mallLabel(mall: string | undefined): string {
+  return mall && Object.prototype.hasOwnProperty.call(MALL_LABELS, mall) ? MALL_LABELS[mall as MallId] : '몰';
+}
+
 // 몰 고유 문구. 다른 맥락에도 흔한 글자는 넣지 않는다(지시서 '입구 채널 사전'):
 //   결제 수단 '네이버페이'·일반 표현 '브랜드스토어'·치수와 겹치는 '29cm'·'IKEA 호환' 같은 'IKEA'·'컬리수' 같은 '컬리'.
 //   29CM·이케아는 주소(29cm.co.kr·ikea.com)로만 판별한다.

@@ -2,13 +2,15 @@ import type { PurchaseChannel } from '@/lib/purchaseChannel';
 import { supabase } from '@/lib/supabase';
 
 /**
- * find-purchase-links Edge Function 이 찾은 판매 페이지 링크.
- * url 은 웹 검색 결과에 실제로 나온 주소이고, 함수가 악성 사이트 목록 대조와 접속 확인을 마친 것이다.
+ * find-purchase-links Edge Function 이 찾은 판매 링크. 함수가 악성 사이트 목록 대조와 접속 확인을 마친 것이다.
+ * - official·site: 웹 검색 결과에 실제로 나온 상품 페이지(브랜드 공식몰 / 그 사이트·몰)
+ * - search: 상품 페이지를 못 찾아 넣은 그 몰 검색 결과 링크(mall = 몰 id)
  */
 export interface PurchaseLink {
   url: string;
   domain: string;
-  kind: 'official' | 'site';
+  kind: 'official' | 'site' | 'search';
+  mall?: string;
 }
 
 /** 앱 쪽 호출 시간 제한(ms). 함수의 최악 소요(검색·고르기·링크 확인)가 약 70초라 넉넉히 둔다. */

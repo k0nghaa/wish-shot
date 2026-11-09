@@ -11,8 +11,10 @@
 //                    예약 이름은 400. 포털·블로그·SNS 주소(malls.ts NON_SELLER_DOMAINS)는 채널 없음으로 본다.
 //     - mall:        몰 앱 캡처로 판별한 몰 id(malls.ts). domain 과 둘 중 하나만
 //     - domain·mall 이 없으면 입구 채널을 모르는 것 → 브랜드 공식 홈페이지만 찾는다.
-//   출력:  { "link": { "url": string, "domain": string, "kind": "official" | "site" } | null }
-//     - 후보가 없음·같은 상품이 확실하지 않음·거절(refusal) → { link: null } (200)
+//   출력:  { "link": { "url", "domain", "kind": "official" | "site" | "search", "mall"? } | null }
+//     - 상품 페이지(검색 결과에서 고른 것)를 먼저 넣는다. 못 찾았거나 확인을 통과하지 못했고 채널이
+//       사전의 몰(검색 주소 형식이 확인된 몰)이면 그 몰 검색 결과 링크(kind "search")를 넣는다.
+//     - 그것도 없으면 { link: null } (200). 거절(refusal)이면 몰 검색 링크도 넣지 않는다.
 //     - 검색 도구 오류·pause_turn 이어 보내기 상한이 있어도 모은 후보가 있으면 고르기로 진행한다.
 //   오류:  400 입력(invalid_json·invalid_input·input_too_long·invalid_domain·invalid_mall),
 //          401 미로그인, 429 요청 한도(+Retry-After), 503 카운터 사용 불가,
@@ -49,6 +51,7 @@ import {
   harvestCandidates,
   hasRealToolError,
   kstDate,
+  mallSearchLink,
   pickSummary,
   pickToLink,
   resolveChannel,
@@ -399,6 +402,8 @@ Deno.serve(async (req) => {
   const stop: StopInfo = { search: '-', pick: '-' };
   const deadline = Date.now() + SEARCH_BUDGET_MS;
   let paused = false;
+  // Anthropic 호출 실패(검색 첫 호출·고르기). 몰 검색 링크로도 채우지 못하면 이 실패로 응답한다.
+  let llmFailure: { reason: LlmFailure; status?: number } | null = null;
 
   for (let turn = 0; turn <= MAX_CONTINUATIONS; turn++) {
     const remaining = deadline - Date.now();
@@ -411,12 +416,12 @@ Deno.serve(async (req) => {
       remaining,
     );
     if (!r.ok) {
-      // 첫 호출 실패는 실패 응답. 이어 보내기 실패는 기록만 하고 모은 후보로 진행한다.
-      if (turn === 0) {
-        logResult(channel, harvest, null, usage, { ...stop, search: r.reason });
-        return fail(user.id, r.reason, llmFailStatus(r.reason), { llmStatus: r.status });
-      }
+      // 기록하고 모은 후보로 진행한다(첫 호출 실패면 후보 없음 → 몰 검색 링크로만 채울 수 있다).
       await recordFailure(user.id, r.reason, { llmStatus: r.status });
+      if (turn === 0) {
+        llmFailure = { reason: r.reason, status: r.status };
+        stop.search = r.reason;
+      }
       break;
     }
     addUsage(usage, r.data);
@@ -441,88 +446,99 @@ Deno.serve(async (req) => {
     console.log(`purchase_debug: candidates=${JSON.stringify(debugCandidates(harvest.candidates))}`);
   }
 
-  // 거절은 모은 후보가 있어도 링크를 만들지 않는다.
+  // 거절은 모은 후보가 있어도 링크를 만들지 않는다(몰 검색 링크로도 채우지 않는다).
   if (stop.search === 'refusal') {
     await recordFailure(user.id, 'llm_refusal');
     logResult(channel, harvest, null, usage, stop);
     return json({ link: null });
   }
+
+  let link: Link | null = null;
   if (harvest.candidates.length === 0) {
     // 결과 없음은 정상 결과. 도구 오류·이어 보내기 상한·토큰 상한으로 비었으면 원인을 남긴다.
     if (hasRealToolError(harvest.errorCodes)) await recordFailure(user.id, 'search_error');
     else if (paused) await recordFailure(user.id, 'search_paused');
     else if (stop.search === 'max_tokens') await recordFailure(user.id, 'llm_max_tokens');
-    logResult(channel, harvest, null, usage, stop);
-    return json({ link: null });
-  }
-
-  // 5) 2차 호출 — 고르기(구조화 출력, 도구 없음). 모델은 후보 번호만 고른다.
-  const pick = await callAnthropic(
-    {
-      model: MODEL,
-      max_tokens: PICK_MAX_TOKENS,
-      system: buildPickSystem(channel),
-      output_config: { effort: PICK_EFFORT, format: { type: 'json_schema', schema: PICK_SCHEMA } },
-      messages: [{ role: 'user', content: buildPickUserMessage(productName, brand, harvest.candidates) }],
-    },
-    PICK_TIMEOUT_MS,
-  );
-  if (!pick.ok) {
-    logResult(channel, harvest, null, usage, { ...stop, pick: pick.reason });
-    return fail(user.id, pick.reason, llmFailStatus(pick.reason), { llmStatus: pick.status });
-  }
-  addUsage(usage, pick.data);
-  stop.pick = pick.data.stop_reason ?? 'unknown';
-
-  let link: Link | null = null;
-  if (pick.data.stop_reason === 'refusal') {
-    await recordFailure(user.id, 'llm_refusal');
-  } else if (pick.data.stop_reason === 'max_tokens') {
-    // 잘린 JSON 은 믿지 않는다
-    await recordFailure(user.id, 'llm_max_tokens');
   } else {
-    const textBlock = Array.isArray(pick.data.content)
-      ? (pick.data.content as { type?: unknown; text?: unknown }[]).find((b) => b?.type === 'text')
-      : undefined;
-    if (typeof textBlock?.text !== 'string' || !textBlock.text) {
-      await recordFailure(user.id, 'llm_empty');
+    // 5) 2차 호출 — 고르기(구조화 출력, 도구 없음). 모델은 후보 번호만 고른다.
+    const pick = await callAnthropic(
+      {
+        model: MODEL,
+        max_tokens: PICK_MAX_TOKENS,
+        system: buildPickSystem(channel),
+        output_config: { effort: PICK_EFFORT, format: { type: 'json_schema', schema: PICK_SCHEMA } },
+        messages: [{ role: 'user', content: buildPickUserMessage(productName, brand, harvest.candidates) }],
+      },
+      PICK_TIMEOUT_MS,
+    );
+    if (!pick.ok) {
+      await recordFailure(user.id, pick.reason, { llmStatus: pick.status });
+      llmFailure = { reason: pick.reason, status: pick.status };
+      stop.pick = pick.reason;
     } else {
-      let parsed: unknown = null;
-      try {
-        parsed = JSON.parse(textBlock.text);
-      } catch {
-        await recordFailure(user.id, 'llm_bad_json');
-      }
-      // URL 은 후보 목록에서 꺼낸다(번호 범위·채널 조건은 pickToLink 가 검사)
-      if (parsed !== null) {
-        stop.pickResult = pickSummary(parsed);
-        link = pickToLink(parsed, harvest.candidates, channel);
+      addUsage(usage, pick.data);
+      stop.pick = pick.data.stop_reason ?? 'unknown';
+      if (pick.data.stop_reason === 'refusal') {
+        await recordFailure(user.id, 'llm_refusal');
+      } else if (pick.data.stop_reason === 'max_tokens') {
+        // 잘린 JSON 은 믿지 않는다
+        await recordFailure(user.id, 'llm_max_tokens');
+      } else {
+        const textBlock = Array.isArray(pick.data.content)
+          ? (pick.data.content as { type?: unknown; text?: unknown }[]).find((b) => b?.type === 'text')
+          : undefined;
+        if (typeof textBlock?.text !== 'string' || !textBlock.text) {
+          await recordFailure(user.id, 'llm_empty');
+        } else {
+          let parsed: unknown = null;
+          try {
+            parsed = JSON.parse(textBlock.text);
+          } catch {
+            await recordFailure(user.id, 'llm_bad_json');
+          }
+          // URL 은 후보 목록에서 꺼낸다(번호 범위·채널 조건은 pickToLink 가 검사)
+          if (parsed !== null) {
+            stop.pickResult = pickSummary(parsed);
+            link = pickToLink(parsed, harvest.candidates, channel);
+          }
+        }
       }
     }
   }
 
   // 6) 링크 안전 확인 — 통과하지 못하면 버린다.
-  //   6-1) 알려진 악성 사이트 목록(Google Web Risk) 대조. 악성일 수 있는 사이트에 접속하기 전에 한다.
-  //        키가 없거나 조회에 실패하면 버린다(fail-closed).
-  //   6-2) 실제로 열리는 안전한 https 페이지인지 직접 접속해 확인(인증서·리다이렉트·응답 코드).
+  //   ① 알려진 악성 사이트 목록(Google Web Risk) 대조. 악성일 수 있는 사이트에 접속하기 전에 한다.
+  //      키가 없거나 조회에 실패하면 버린다(fail-closed).
+  //   ② 실제로 열리는 안전한 https 페이지인지 직접 접속해 확인(인증서·리다이렉트·응답 코드).
   const verifyStop: StopInfo = { ...stop };
-  if (link) {
-    const risk = await checkWebRisk(link.url, Deno.env.get('WEB_RISK_API_KEY'), WEB_RISK_TIMEOUT_MS);
+  const ensureSafe = async (candidate: Link, tag: string): Promise<Link | null> => {
+    const risk = await checkWebRisk(candidate.url, Deno.env.get('WEB_RISK_API_KEY'), WEB_RISK_TIMEOUT_MS);
     if (risk !== 'safe') {
-      verifyStop.verify = `web_risk_${risk}`;
+      verifyStop.verify = `${tag}web_risk_${risk}`;
       await recordFailure(user.id, risk === 'unsafe' ? 'link_unsafe' : 'link_check_unavailable');
-      link = null;
+      return null;
     }
-  }
-  if (link) {
-    const v = await verifyLink(link.url, VERIFY_TIMEOUT_MS);
-    verifyStop.verify = v.ok ? `ok_${v.status}` : v.reason;
+    const v = await verifyLink(candidate.url, VERIFY_TIMEOUT_MS);
+    verifyStop.verify = `${tag}${v.ok ? `ok_${v.status}` : v.reason}`;
     if (!v.ok) {
       await recordFailure(user.id, 'link_unverified');
-      link = null;
+      return null;
     }
+    return candidate;
+  };
+  if (link) link = await ensureSafe(link, '');
+
+  // 7) 상품 페이지를 못 찾았거나 확인을 통과하지 못했으면, 채널이 사전의 몰이고 검색 주소 형식이 확인된
+  //    몰일 때 그 몰 검색 결과 링크를 넣는다(사람 결정 — 링크가 들어가는 게 더 중요). 같은 안전 확인을 거친다.
+  if (!link) {
+    const fallback = mallSearchLink(channel, productName, brand);
+    if (fallback) link = await ensureSafe(fallback, 'search_');
   }
 
   logResult(channel, harvest, link, usage, verifyStop);
+  if (!link && llmFailure) {
+    // Anthropic 호출이 실패했고 몰 검색 링크로도 채우지 못함 — 실패 응답(기록은 이미 남김)
+    return json({ error: llmFailure.reason }, llmFailStatus(llmFailure.reason));
+  }
   return json({ link });
 });
