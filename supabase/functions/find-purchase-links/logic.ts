@@ -234,6 +234,30 @@ export function webRiskVerdict(body: unknown): 'safe' | 'unsafe' | 'unknown' {
   return 'safe';
 }
 
+// 고르기 결과 요약(로그용 — 번호와 공식 여부만): "3/official" · "3/site" · "null" · "invalid"
+export function pickSummary(parsed: unknown): string {
+  if (!parsed || typeof parsed !== 'object') return 'invalid';
+  const { index, isOfficial } = parsed as { index?: unknown; isOfficial?: unknown };
+  if (index === null) return 'null';
+  if (typeof index !== 'number' || !Number.isInteger(index)) return 'invalid';
+  return `${index}/${isOfficial === true ? 'official' : 'site'}`;
+}
+
+// 시험용 상세 로그(PURCHASE_DEBUG_LOG=1 일 때만): 후보의 번호·도메인·주소 경로·제목 앞부분.
+// 제목에 상품명이 들어가므로 평소엔 남기지 않는다.
+export function debugCandidates(candidates: Candidate[]): { i: number; d: string; p: string; t: string }[] {
+  return candidates.map((c, idx) => {
+    let p = '';
+    try {
+      const u = new URL(c.url);
+      p = (u.pathname + u.search).slice(0, 100);
+    } catch {
+      /* 형식 오류는 경로 없이 */
+    }
+    return { i: idx + 1, d: c.domain, p, t: c.title.slice(0, 80) };
+  });
+}
+
 // Google API 오류 응답에서 원인 종류만 뽑는다(로그용 — 메시지 본문은 남기지 않는다).
 // 형식: { error: { status: "PERMISSION_DENIED", details: [{ reason: "BILLING_DISABLED", ... }] } }
 // 반환 예: "PERMISSION_DENIED/BILLING_DISABLED". 형식을 모르면 "unknown".

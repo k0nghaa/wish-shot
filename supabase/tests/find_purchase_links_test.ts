@@ -4,12 +4,14 @@ import {
   type Channel,
   type Harvest,
   checkRedirect,
+  debugCandidates,
   harvestCandidates,
   hasRealToolError,
   inScope,
   isTrustedMallHost,
   kstDate,
   normalizeDomain,
+  pickSummary,
   pickToLink,
   resolveChannel,
   safeHttpsUrl,
@@ -278,6 +280,18 @@ Deno.test('googleErrorKind: 원인 종류만 뽑음(메시지 본문 제외)', (
 Deno.test('checkWebRisk: 키가 없으면 조회하지 않고 no_key(호출부가 링크를 비움)', async () => {
   eq(await checkWebRisk('https://www.nike.com/', undefined, 1000), 'no_key');
   eq(await checkWebRisk('https://www.nike.com/', '', 1000), 'no_key');
+});
+
+Deno.test('pickSummary·debugCandidates: 로그용 요약', () => {
+  eq(pickSummary({ index: 3, isOfficial: false }), '3/site');
+  eq(pickSummary({ index: 1, isOfficial: true }), '1/official');
+  eq(pickSummary({ index: null, isOfficial: false }), 'null');
+  eq(pickSummary({ index: '2' }), 'invalid');
+  eq(pickSummary(null), 'invalid');
+  eq(
+    debugCandidates([{ url: 'https://www.coupang.com/vp/products/123?itemId=9', title: '샤워메이트 산양유 비누', domain: 'www.coupang.com' }]),
+    [{ i: 1, d: 'www.coupang.com', p: '/vp/products/123?itemId=9', t: '샤워메이트 산양유 비누' }],
+  );
 });
 
 Deno.test('kstDate: 한국 날짜', () => {

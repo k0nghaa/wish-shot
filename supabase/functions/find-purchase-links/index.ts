@@ -45,9 +45,11 @@ import {
   type Link,
   MAX_BRAND_LEN,
   MAX_PRODUCT_NAME_LEN,
+  debugCandidates,
   harvestCandidates,
   hasRealToolError,
   kstDate,
+  pickSummary,
   pickToLink,
   resolveChannel,
   searchScope,
@@ -308,17 +310,14 @@ function addUsage(u: Usage, data: AnthropicMessage): void {
   u.outTokens += data.usage?.output_tokens ?? 0;
 }
 
-// stop: 검색·고르기 호출의 마지막 stop_reason, verify: 링크 접속 확인 결과(모두 enum — 내용 노출 없음)
-function logResult(
-  channel: Channel,
-  harvest: Harvest,
-  link: Link | null,
-  u: Usage,
-  stop: { search: string; pick: string; verify?: string },
-): void {
+// stop: 검색·고르기 호출의 마지막 stop_reason, pickResult: 고른 번호(pickSummary), verify: 링크 확인 결과
+// (모두 enum·숫자 — 내용 노출 없음)
+type StopInfo = { search: string; pick: string; pickResult?: string; verify?: string };
+
+function logResult(channel: Channel, harvest: Harvest, link: Link | null, u: Usage, stop: StopInfo): void {
   console.log(
     `purchase: via=${channel.via} candidates=${harvest.candidates.length} filled=${!!link} kind=${link?.kind ?? '-'}` +
-      ` searches=${u.searches} in=${u.inTokens} out=${u.outTokens}` +
+      ` pick=${stop.pickResult ?? '-'} searches=${u.searches} in=${u.inTokens} out=${u.outTokens}` +
       ` searchStop=${stop.search} pickStop=${stop.pick} verify=${stop.verify ?? '-'}` +
       ` toolErrors=${harvest.errorCodes.join(',') || '-'}`,
   );
@@ -397,7 +396,7 @@ Deno.serve(async (req) => {
   ];
   const harvest: Harvest = { candidates: [], errorCodes: [] };
   const usage: Usage = { searches: 0, inTokens: 0, outTokens: 0 };
-  const stop = { search: '-', pick: '-' };
+  const stop: StopInfo = { search: '-', pick: '-' };
   const deadline = Date.now() + SEARCH_BUDGET_MS;
   let paused = false;
 
@@ -434,6 +433,12 @@ Deno.serve(async (req) => {
       continue;
     }
     break;
+  }
+
+  // 시험용 상세 로그 — 시크릿 PURCHASE_DEBUG_LOG=1 일 때만(제목에 상품명이 들어간다. 시험 뒤 끈다).
+  // 요청마다 읽으므로 재배포 없이 켜고 끈다.
+  if (Deno.env.get('PURCHASE_DEBUG_LOG') === '1') {
+    console.log(`purchase_debug: candidates=${JSON.stringify(debugCandidates(harvest.candidates))}`);
   }
 
   // 거절은 모은 후보가 있어도 링크를 만들지 않는다.
@@ -489,7 +494,10 @@ Deno.serve(async (req) => {
         await recordFailure(user.id, 'llm_bad_json');
       }
       // URL 은 후보 목록에서 꺼낸다(번호 범위·채널 조건은 pickToLink 가 검사)
-      if (parsed !== null) link = pickToLink(parsed, harvest.candidates, channel);
+      if (parsed !== null) {
+        stop.pickResult = pickSummary(parsed);
+        link = pickToLink(parsed, harvest.candidates, channel);
+      }
     }
   }
 
@@ -497,7 +505,7 @@ Deno.serve(async (req) => {
   //   6-1) 알려진 악성 사이트 목록(Google Web Risk) 대조. 악성일 수 있는 사이트에 접속하기 전에 한다.
   //        키가 없거나 조회에 실패하면 버린다(fail-closed).
   //   6-2) 실제로 열리는 안전한 https 페이지인지 직접 접속해 확인(인증서·리다이렉트·응답 코드).
-  const verifyStop: { search: string; pick: string; verify?: string } = { ...stop };
+  const verifyStop: StopInfo = { ...stop };
   if (link) {
     const risk = await checkWebRisk(link.url, Deno.env.get('WEB_RISK_API_KEY'), WEB_RISK_TIMEOUT_MS);
     if (risk !== 'safe') {
