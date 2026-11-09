@@ -66,10 +66,11 @@ export const PICK_SCHEMA = {
 export function buildPickSystem(channel: Channel): string {
   return [
     'You check numbered web search results for one product that a user saved from a shopping screenshot.',
-    'Choose the single result that is the product DETAIL page of exactly this product: same brand and same model/name.',
-    'If several results are the same product in different colors or options, choose the one whose color/option matches',
-    'the product name (for example a color word such as 그레이 or Light Blue in it). Only if none matches, a different',
-    'color/option of the same product is acceptable.',
+    'Choose the single result that is the product DETAIL page of this product: same brand and same model/name.',
+    'A different bundle count, quantity, pack size, volume/weight, size, or color of the same product counts as the SAME',
+    'product (e.g. "90g, 12개입" vs "90g, 4개입", or 그레이 vs 화이트) — the user can switch options on that page.',
+    'If several results are the same product, prefer the one whose option matches the product name (a color word, count,',
+    'or size in it); otherwise pick any of them rather than returning null.',
     'Do NOT choose category or listing pages, search-result pages, brand home pages, blog posts, reviews, news,',
     'or a different product (for example a different model in the same line).',
     'If no result clearly matches, return index null — an empty answer is better than a wrong link.',
