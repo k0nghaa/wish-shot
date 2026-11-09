@@ -12,6 +12,7 @@
 - **공유 시트**: `expo-share-intent` (iOS Share Extension)
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
 - **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**. 요청 한도(사용자·전체)·입력 크기 상한으로 API 비용 제한
+- **구매처 링크 찾기(Phase 21)**: Supabase Edge Function `find-purchase-links` (Deno) + Claude Haiku 5.5 웹 검색. 등록 폼에서 제품명이 채워지고 링크 칸이 비면 **제품명·브랜드·입구 채널(캡처에 보인 도메인 또는 몰)만** 보내 판매처 상품 페이지 링크를 채웁니다. 주소가 보인 카페24 쇼핑몰은 그 사이트의 검색 페이지를 먼저 읽고, 링크는 Google Web Risk 대조와 접속 확인을 거친 것만 넣습니다. 전용 요청 한도(`0007`)
 - **빌드**: EAS 클라우드 빌드 → TestFlight (Windows PC + Mac 없이 iOS 개발·배포)
 - **계측(Phase 10)**: PostHog (`posthog-react-native`). 커스텀 이벤트 + 자동 라이프사이클 수집, 전부 `src/lib/analytics.ts` 경유. **키 미설정 시 no-op**, `__DEV__` 기본 옵트아웃. 속성은 enum·수치만 — 사진·텍스트 등 콘텐츠 미수집, IP로 추정한 위치 미수집. 1.0.2부터 앱 버전·언어·시간대 자동 수집(`expo-application`·`expo-localization`). 정본: [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - **오류·크래시 수집(Phase 14, 1.0.2)**: Sentry (`@sentry/react-native` 7.11). 오류·크래시만(성능 추적·리플레이·스크린샷 끔), 전부 `src/lib/monitoring.ts` 경유, 사용자 내용·IP·위치 제외. **DSN 미설정 시 no-op**, `__DEV__` 기본 비활성. 소스맵은 EAS Build가 자동 업로드
@@ -61,7 +62,8 @@ $env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wi
 `0004_internal_users.sql`은 지표 집계에서 뺄 개발자 uid 목록 테이블(`ops.internal_users`, API 비노출)입니다 —
 uid는 git에 두지 않고 SQL Editor에서 직접 insert하며, `supabase/tests/metrics.sql`이 이를 참조합니다.
 `0005_parse_quota.sql`은 AI 정제 함수의 요청 한도 카운터와 실패 기록입니다(`ops` 스키마, 함수는 service_role 전용 —
-아래 "요청 한도·입력 상한·실패 기록"). 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/`에 함께 둡니다.
+아래 "요청 한도·입력 상한·실패 기록"). `0007_purchase_link_quota.sql`은 구매처 링크 찾기 함수의 전용 요청 한도 카운터와
+실패 기록입니다(같은 구조 — 아래 "구매처 링크 찾기 Edge Function"). 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/`에 함께 둡니다.
 
 **마이그레이션 적용** (둘 중 하나):
 
@@ -179,6 +181,32 @@ npx supabase secrets set PARSE_LIMIT_USER_HOURLY=30 PARSE_LIMIT_USER_DAILY=100 P
 씁니다 — iOS 전용이라 ML Kit iOS 이슈를 피하고 Expo SDK 57/New Architecture 호환 문제도 없습니다.
 이 모듈은 **네이티브라 추가·변경 시 EAS 재빌드**가 필요합니다.
 
+## 구매처 링크 찾기 Edge Function (`find-purchase-links`, Phase 21)
+
+등록 폼에서 AI 정제가 제품명을 채우고 링크 칸이 비어 있으면, 앱이 **제품명·브랜드·입구 채널**만 보내 판매처 링크를 찾습니다.
+입구 채널은 기기에서 OCR 원문으로 판별합니다(`src/lib/purchaseChannel.ts` — 캡처에 보인 판매처 도메인 또는 몰 이름·고유 문구). 원문·이미지는 보내지 않습니다.
+
+1. **요청 한도**: 전용 카운터(`0007`)로 사용자 시간당 10 · 하루 30 + 전체 하루 100. 카운터를 쓸 수 없으면 거절합니다(`503`, fail-closed — 웹 검색 비용이 커서 정제 함수와 다릅니다).
+2. **카페24 사이트 안 검색**: 도메인 채널이고 몰 사전에 없는 곳이면 그 사이트의 `/product/search.html?keyword=`를 읽어 검색 결과 영역의 상품 번호로 상세 주소를 만듭니다.
+3. **웹 검색**: 못 찾았으면 Claude Haiku 5.5 웹 검색으로 그 사이트(채널이 없으면 몰을 뺀 공식 홈페이지) 안의 같은 상품 페이지를 찾고, 구조화 출력으로 **후보 번호만** 고릅니다(주소는 서버가 모은 후보에서만 꺼냄).
+4. **링크 확인**: Google Web Risk 대조 + 접속 확인(https·인증서·같은 사이트 안 리다이렉트·응답 코드). 통과한 것만 넣습니다.
+5. 상품 페이지가 없으면 확인된 몰 검색 주소(지금은 쿠팡)나 상품이 검색된 카페24 사이트의 검색 결과 링크를 넣고, 폼에서 상품 링크와 구분해 안내합니다.
+6. 결과가 오기 전에 저장하면, 저장 뒤 3분 안에 도착한 링크를 **링크가 비어 있을 때만** 붙이고 안내합니다.
+
+**배포** (`0007`을 먼저 적용 — 한도 없이 배포하지 않습니다. 키는 함수 시크릿에만):
+
+```bash
+npx supabase secrets set WEB_RISK_API_KEY=...          # Google Cloud Web Risk API 키(없으면 링크를 항상 비움)
+npx supabase functions deploy find-purchase-links      # 함수 이름을 꼭 붙인다(앱 재빌드와 무관)
+# (선택) 한도 조정 — 요청마다 읽어 재배포 없이 반영
+npx supabase secrets set PURCHASE_LIMIT_USER_HOURLY=10 PURCHASE_LIMIT_USER_DAILY=30 PURCHASE_LIMIT_GLOBAL_DAILY=100
+```
+
+- 단위 시험(네트워크·키 없음): `deno test --no-lock supabase/tests/find_purchase_links_test.ts`
+- 한도 권한·동작 검증 SQL: `supabase/tests/purchase_link_quota.sql`(SQL Editor, rollback)
+- 실패 원인은 `ops.purchase_link_failures`에 남습니다(사용자·한국 날짜·사유·횟수 — 내용 없음).
+- 네이버 검색 API는 약관(AI 입력·처리 금지) 때문에 쓰지 않습니다.
+
 ## 문서
 
 - 아키텍처·플랫폼 결정: 노션 「WishShot v2 — 플랫폼·아키텍처 결정 문서 (Expo + Supabase)」
@@ -190,6 +218,7 @@ npx supabase secrets set PARSE_LIMIT_USER_HOURLY=30 PARSE_LIMIT_USER_DAILY=100 P
 - Phase 11 작업 지시(익명 계정 수명주기 — 빈 계정·고아 파일 정리): [`docs/phases/phase-11-anon-account-lifecycle.md`](docs/phases/phase-11-anon-account-lifecycle.md)
 - Phase 14 작업 지시·결과(Sentry 오류·크래시 수집 · App Store 메타데이터 · 개발용 앱 분리): [`docs/phases/phase-14-sentry-and-store-metadata.md`](docs/phases/phase-14-sentry-and-store-metadata.md)
 - Phase 17 작업 지시·결과(가격 정확도 — 중고거래 가격 규칙 · 좋아요 수 오추출 재현): [`docs/phases/phase-17-price-accuracy.md`](docs/phases/phase-17-price-accuracy.md)
+- Phase 21 작업 지시·결과(구매처 찾기 — 등록 폼 링크 자동 채움·저장 뒤 붙이기 · 입구 채널 판별 · 카페24 사이트 안 검색): [`docs/phases/phase-21-purchase-finder.md`](docs/phases/phase-21-purchase-finder.md)
 - 트래킹 플랜(이벤트 택소노미 정본): [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - 개인정보처리방침 원문(TestFlight 외부 공개용): [`docs/legal/privacy.html`](docs/legal/privacy.html)
 - 저장소 작업 규칙: [`CLAUDE.md`](CLAUDE.md)

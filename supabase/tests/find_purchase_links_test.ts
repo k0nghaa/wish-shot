@@ -1,0 +1,386 @@
+// find-purchase-links 순수 로직 단위 검증(네트워크·키 없음).
+// 실행: deno test supabase/tests/find_purchase_links_test.ts
+import {
+  type Channel,
+  type Harvest,
+  cafe24SearchPage,
+  cafe24SearchUrl,
+  checkRedirect,
+  extractCafe24Products,
+  looksLikeCafe24,
+  siteQueries,
+  debugCandidates,
+  harvestCandidates,
+  hasRealToolError,
+  inScope,
+  isTrustedMallHost,
+  kstDate,
+  mallSearchLink,
+  normalizeDomain,
+  pickSummary,
+  pickToLink,
+  resolveChannel,
+  safeHttpsUrl,
+  searchScope,
+  siteBase,
+  statusVerdict,
+  googleErrorKind,
+  webRiskVerdict,
+} from '../functions/find-purchase-links/logic.ts';
+import { buildSearchTool } from '../functions/find-purchase-links/prompt.ts';
+import { checkWebRisk } from '../functions/find-purchase-links/safety.ts';
+import { verifyLink } from '../functions/find-purchase-links/verify.ts';
+
+function eq(actual: unknown, expected: unknown, msg = ''): void {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) throw new Error(`${msg}\n  expected: ${e}\n  actual:   ${a}`);
+}
+
+Deno.test('normalizeDomain: 접두어·스킴·경로 정리와 형식 검사', () => {
+  eq(normalizeDomain('www.musinsa.com'), 'musinsa.com');
+  eq(normalizeDomain('m.smartstore.naver.com'), 'smartstore.naver.com');
+  eq(normalizeDomain(' NIKE.com. '), 'nike.com');
+  eq(normalizeDomain('https://m.musinsa.com/products/123?x=1'), 'musinsa.com');
+  eq(normalizeDomain('brand.co.kr:443'), 'brand.co.kr');
+  eq(normalizeDomain('m.com'), 'm.com', '떼면 점이 없어지는 경우는 그대로');
+  eq(normalizeDomain('ohou.se'), 'ohou.se');
+  eq(normalizeDomain('localhost'), null, '점 없는 이름');
+  eq(normalizeDomain('аmazon.com'), null, '유니코드(키릴 а) 거부');
+  eq(normalizeDomain('exa mple.com'), null);
+  eq(normalizeDomain('-bad.com'), null);
+  eq(normalizeDomain('1.2.3.4'), null, 'IP 거부(최상위 라벨은 영문 시작)');
+  eq(normalizeDomain(''), null);
+});
+
+Deno.test('normalizeDomain: 공용 접미사만 남는 이름·예약 이름 거부', () => {
+  eq(normalizeDomain('co.kr'), null, '주소창이 잘려 접미사만 읽힌 경우');
+  eq(normalizeDomain('www.co.kr'), null);
+  eq(normalizeDomain('m.co.kr'), null);
+  eq(normalizeDomain('go.kr'), null);
+  eq(normalizeDomain('co.uk'), null);
+  eq(normalizeDomain('foo.local'), null);
+  eq(normalizeDomain('foo.internal'), null);
+  eq(normalizeDomain('foo.localhost'), null);
+  eq(normalizeDomain('shop.co.kr'), 'shop.co.kr', '접미사 아래 이름은 통과');
+});
+
+Deno.test('resolveChannel: 도메인·몰·없음', () => {
+  eq(resolveChannel('www.nike.com', undefined), { ok: true, channel: { via: 'domain', domains: ['nike.com'] } });
+  eq(
+    resolveChannel('brand.naver.com', null),
+    { ok: true, channel: { via: 'domain', domains: ['smartstore.naver.com', 'brand.naver.com'], mall: 'naver' } },
+    '사전의 몰 도메인이면 그 몰의 검색 도메인 전체',
+  );
+  eq(
+    resolveChannel('m.smartstore.naver.com', null),
+    { ok: true, channel: { via: 'domain', domains: ['smartstore.naver.com', 'brand.naver.com'], mall: 'naver' } },
+    '몰 판별이 비판매 플랫폼(naver.com)보다 먼저',
+  );
+  eq(resolveChannel(undefined, 'coupang'), { ok: true, channel: { via: 'mall', domains: ['coupang.com'], mall: 'coupang' } });
+  eq(resolveChannel(undefined, 'zigzag'), { ok: true, channel: { via: 'mall', domains: ['zigzag.kr'], mall: 'zigzag' } });
+  eq(resolveChannel('m.a-bly.com', undefined), { ok: true, channel: { via: 'domain', domains: ['a-bly.com'], mall: 'ably' } });
+  eq(resolveChannel(undefined, undefined), { ok: true, channel: { via: 'none' } });
+  eq(resolveChannel('', ''), { ok: true, channel: { via: 'none' } }, '빈 문자열은 없음');
+  eq(resolveChannel('nike.com', 'coupang'), { ok: false, error: 'invalid_input' }, '둘 다 오면 거절');
+  eq(resolveChannel('not a domain', undefined), { ok: false, error: 'invalid_domain' });
+  eq(resolveChannel('co.kr', undefined), { ok: false, error: 'invalid_domain' });
+  eq(resolveChannel(123, undefined), { ok: false, error: 'invalid_domain' });
+  eq(resolveChannel(undefined, 'amazon'), { ok: false, error: 'invalid_mall' });
+  eq(resolveChannel(undefined, 'toString'), { ok: false, error: 'invalid_mall' }, '프로토타입 이름 거부');
+});
+
+Deno.test('resolveChannel: 포털·블로그·SNS 주소는 채널 없음', () => {
+  for (const d of ['m.naver.com', 'm.blog.naver.com', 'shopping.naver.com', 'www.instagram.com', 'youtube.com', 'x.com']) {
+    eq(resolveChannel(d, undefined), { ok: true, channel: { via: 'none' } }, d);
+  }
+});
+
+Deno.test('searchScope: 채널 있으면 그 사이트만, 없으면 몰 제외(브랜드 자체 몰만 남김)', () => {
+  eq(searchScope({ via: 'mall', domains: ['musinsa.com'] }, '나이키'), { mode: 'allowed', domains: ['musinsa.com'] });
+
+  const open = searchScope({ via: 'none' }, '나이키');
+  if (open.mode !== 'blocked') throw new Error('blocked 여야 한다');
+  for (const d of ['coupang.com', 'musinsa.com', 'ikea.com', 'smartstore.naver.com', 'kurly.com', 'zigzag.kr', 'a-bly.com']) {
+    if (!open.domains.includes(d)) throw new Error(`${d} 는 막혀야 한다`);
+  }
+
+  const keep = (brand: string, domain: string) => {
+    if (searchScope({ via: 'none' }, brand).domains.includes(domain)) throw new Error(`${brand}: ${domain} 는 남겨야 한다`);
+  };
+  const block = (brand: string, domain: string) => {
+    if (!searchScope({ via: 'none' }, brand).domains.includes(domain)) throw new Error(`${brand}: ${domain} 는 막아야 한다`);
+  };
+  keep('IKEA', 'ikea.com');
+  keep('이케아', 'ikea.com');
+  keep('무신사 스탠다드', 'musinsa.com');
+  block('IKEA', 'coupang.com');
+  block('컬리수', 'kurly.com'); // 앞부분만 같은 다른 브랜드
+  block('SSGOOD', 'ssg.com');
+  block('Glossgen', 'ssg.com');
+  block('네이버후드', 'smartstore.naver.com');
+  if (!searchScope({ via: 'none' }, null).domains.includes('ikea.com')) throw new Error('브랜드가 없으면 전부 막는다');
+});
+
+Deno.test('buildSearchTool: allowed/blocked 중 하나만', () => {
+  const a = buildSearchTool({ mode: 'allowed', domains: ['musinsa.com'] }, 2) as Record<string, unknown>;
+  eq(a.allowed_domains, ['musinsa.com']);
+  eq('blocked_domains' in a, false);
+  eq(a.type, 'web_search_20250305');
+  eq(a.max_uses, 2);
+  const b = buildSearchTool({ mode: 'blocked', domains: ['coupang.com'] }, 3) as Record<string, unknown>;
+  eq(b.blocked_domains, ['coupang.com']);
+  eq('allowed_domains' in b, false);
+});
+
+Deno.test('inScope: 범위·스킴 검사, 정리된 href 반환', () => {
+  const allowed = { mode: 'allowed', domains: ['musinsa.com'] } as const;
+  eq(inScope('https://www.musinsa.com/products/1', allowed), { href: 'https://www.musinsa.com/products/1', host: 'www.musinsa.com' });
+  eq(inScope('https://musinsa.com.evil.com/x', allowed), null, '접미어 위장 거부');
+  eq(inScope('https://notmusinsa.com/x', allowed), null);
+  eq(inScope('javascript:alert(1)', allowed), null);
+  eq(inScope('not a url', allowed), null);
+  eq(
+    inScope('https://www.musinsa.com/products/1\n', allowed),
+    { href: 'https://www.musinsa.com/products/1', host: 'www.musinsa.com' },
+    '줄바꿈 등은 파서가 정리한 형태로',
+  );
+  eq(inScope('http://www.musinsa.com/products/1', allowed), null, 'http 는 받지 않는다');
+  const blocked = { mode: 'blocked', domains: ['coupang.com'] } as const;
+  eq(inScope('https://www.coupang.com/vp/products/1', blocked), null);
+  eq(inScope('https://www.coupang.com./vp/1', blocked), null, '끝에 점이 붙어도 막는다');
+  eq(inScope('https://www.nike.com/kr/t/1', blocked), { href: 'https://www.nike.com/kr/t/1', host: 'www.nike.com' });
+});
+
+Deno.test('harvestCandidates: 결과 블록에서만, 범위 밖·중복 제외, 오류 코드 수집', () => {
+  const scope = { mode: 'allowed', domains: ['musinsa.com'] } as const;
+  const content = [
+    { type: 'text', text: '검색합니다 https://www.musinsa.com/products/999' }, // 모델이 쓴 URL — 무시
+    { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'q' } },
+    {
+      type: 'web_search_tool_result',
+      tool_use_id: 's1',
+      content: [
+        { type: 'web_search_result', url: 'https://www.musinsa.com/products/1', title: 'A 상품', page_age: null },
+        { type: 'web_search_result', url: 'https://www.musinsa.com/products/1', title: 'A 중복' },
+        { type: 'web_search_result', url: 'https://blog.example.com/a', title: '블로그' },
+        { type: 'web_search_result', url: 'https://www.musinsa.com/products/2' },
+      ],
+    },
+    { type: 'web_search_tool_result', tool_use_id: 's2', content: { type: 'web_search_tool_result_error', error_code: 'max_uses_exceeded' } },
+  ];
+  const h: Harvest = { candidates: [], errorCodes: [] };
+  harvestCandidates(content, scope, h);
+  eq(h.candidates, [
+    { url: 'https://www.musinsa.com/products/1', title: 'A 상품', domain: 'www.musinsa.com' },
+    { url: 'https://www.musinsa.com/products/2', title: '', domain: 'www.musinsa.com' },
+  ]);
+  eq(h.errorCodes, ['max_uses_exceeded']);
+
+  // 이어 보내기 응답에서 같은 URL 이 다시 와도 중복 없이 누적
+  harvestCandidates(
+    [{ type: 'web_search_tool_result', content: [{ type: 'web_search_result', url: 'https://www.musinsa.com/products/2', title: 'B' }] }],
+    scope,
+    h,
+  );
+  eq(h.candidates.length, 2);
+  eq(harvestCandidates(undefined, scope, { candidates: [], errorCodes: [] }), { candidates: [], errorCodes: [] });
+});
+
+Deno.test('hasRealToolError: 허용 횟수 소진은 실패로 보지 않음', () => {
+  eq(hasRealToolError([]), false);
+  eq(hasRealToolError(['max_uses_exceeded']), false);
+  eq(hasRealToolError(['max_uses_exceeded', 'unavailable']), true);
+  eq(hasRealToolError(['too_many_requests']), true);
+});
+
+Deno.test('pickToLink: 번호 범위·형식·채널 조건', () => {
+  const cands = [
+    { url: 'https://www.nike.com/kr/t/1', title: '에어맥스', domain: 'www.nike.com' },
+    { url: 'https://www.abc-mart.co.kr/p/2', title: '에어맥스', domain: 'www.abc-mart.co.kr' },
+  ];
+  const none: Channel = { via: 'none' };
+  const site: Channel = { via: 'domain', domains: ['abc-mart.co.kr'] };
+  eq(pickToLink({ index: 1, isOfficial: true }, cands, none), { url: cands[0].url, domain: 'www.nike.com', kind: 'official' });
+  eq(pickToLink({ index: 2, isOfficial: false }, cands, none), null, '채널 없으면 공식만');
+  eq(pickToLink({ index: 2, isOfficial: false }, cands, site), { url: cands[1].url, domain: 'www.abc-mart.co.kr', kind: 'site' });
+  eq(pickToLink({ index: null, isOfficial: false }, cands, site), null);
+  eq(pickToLink({ index: 0, isOfficial: true }, cands, none), null, '번호는 1부터');
+  eq(pickToLink({ index: 3, isOfficial: true }, cands, none), null, '범위 밖');
+  eq(pickToLink({ index: 1.5, isOfficial: true }, cands, none), null);
+  eq(pickToLink({ index: '1', isOfficial: true }, cands, none), null);
+  eq(pickToLink(null, cands, none), null);
+  eq(pickToLink({ index: 1, isOfficial: 'true' }, cands, none), null, 'isOfficial 은 true 만 공식');
+});
+
+Deno.test('safeHttpsUrl: https·기본 포트·도메인 이름만', () => {
+  eq(safeHttpsUrl('https://www.nike.com/kr/t/1'), { href: 'https://www.nike.com/kr/t/1', host: 'www.nike.com' });
+  eq(safeHttpsUrl('http://www.nike.com/kr/t/1'), null, 'http');
+  eq(safeHttpsUrl('https://www.nike.com:8443/x'), null, '기본 포트가 아님');
+  eq(safeHttpsUrl('https://www.nike.com:443/x'), { href: 'https://www.nike.com/x', host: 'www.nike.com' }, '443 은 기본 포트');
+  eq(safeHttpsUrl('https://1.2.3.4/x'), null, 'IP 주소');
+  eq(safeHttpsUrl('https://[::1]/x'), null, 'IPv6 주소');
+  eq(safeHttpsUrl('https://user:pw@www.nike.com/x'), null, '아이디·비밀번호 포함');
+  eq(safeHttpsUrl('https://xn--80ak6aa92e.com/'), { href: 'https://xn--80ak6aa92e.com/', host: 'xn--80ak6aa92e.com' }, '퓨니코드 도메인은 형식상 통과');
+});
+
+Deno.test('링크 접속 확인 판정: 리다이렉트·응답 코드', () => {
+  eq(siteBase('www.nike.com'), 'nike.com');
+  eq(siteBase('m.smartstore.naver.com'), 'smartstore.naver.com');
+  eq(siteBase('nike.com'), 'nike.com');
+
+  const cur = 'https://www.nike.com/kr/t/1';
+  eq(checkRedirect('/kr/t/1-new', cur, 'nike.com'), 'https://www.nike.com/kr/t/1-new', '상대 경로');
+  eq(checkRedirect('https://nike.com/kr/x', cur, 'nike.com'), 'https://nike.com/kr/x', '같은 사이트');
+  eq(checkRedirect('https://evil.com/phish', cur, 'nike.com'), null, '다른 사이트로 넘김');
+  eq(checkRedirect('https://nike.com.evil.com/x', cur, 'nike.com'), null, '접미어 위장');
+  eq(checkRedirect('http://www.nike.com/kr/x', cur, 'nike.com'), null, 'http 로 내림');
+  eq(checkRedirect('javascript:alert(1)', cur, 'nike.com'), null);
+
+  eq(statusVerdict(200, false), 'ok');
+  eq(statusVerdict(301, false), 'redirect');
+  eq(statusVerdict(404, false), 'reject');
+  eq(statusVerdict(410, true), 'reject');
+  eq(statusVerdict(500, true), 'reject');
+  eq(statusVerdict(403, false), 'reject', '일반 사이트의 403 은 확인 실패');
+  eq(statusVerdict(403, true), 'ok', '대형 몰의 봇 차단 403 은 사이트가 살아 있는 것으로');
+
+  eq(isTrustedMallHost('www.coupang.com'), true);
+  eq(isTrustedMallHost('smartstore.naver.com'), true);
+  eq(isTrustedMallHost('blog.naver.com'), false);
+  eq(isTrustedMallHost('www.nike.com'), false);
+});
+
+Deno.test('verifyLink: https 가 아니면 접속하지 않고 거절', async () => {
+  eq(await verifyLink('http://www.nike.com/', 1000), { ok: false, reason: 'not_https' });
+  eq(await verifyLink('https://1.2.3.4/', 1000), { ok: false, reason: 'not_https' });
+});
+
+Deno.test('webRiskVerdict: 빈 응답은 안전, 목록에 오르면 악성, 모르는 형식은 판정 불가', () => {
+  eq(webRiskVerdict({}), 'safe');
+  eq(webRiskVerdict({ threat: { threatTypes: ['SOCIAL_ENGINEERING'], expireTime: '2026-11-10T00:00:00Z' } }), 'unsafe');
+  eq(webRiskVerdict({ threat: { threatTypes: [] } }), 'safe');
+  eq(webRiskVerdict(null), 'unknown');
+  eq(webRiskVerdict([]), 'unknown');
+  eq(webRiskVerdict({ threat: 'x' }), 'unknown');
+});
+
+Deno.test('googleErrorKind: 원인 종류만 뽑음(메시지 본문 제외)', () => {
+  eq(
+    googleErrorKind({
+      error: {
+        code: 403,
+        message: 'This API method requires billing to be enabled. project 123',
+        status: 'PERMISSION_DENIED',
+        details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'BILLING_DISABLED', domain: 'googleapis.com' }],
+      },
+    }),
+    'PERMISSION_DENIED/BILLING_DISABLED',
+  );
+  eq(googleErrorKind({ error: { status: 'PERMISSION_DENIED' } }), 'PERMISSION_DENIED');
+  eq(googleErrorKind({ error: { status: 'bad value; drop table' } }), 'unknown', '형식 밖 값은 남기지 않음');
+  eq(googleErrorKind(null), 'unknown');
+  eq(googleErrorKind({}), 'unknown');
+});
+
+Deno.test('checkWebRisk: 키가 없으면 조회하지 않고 no_key(호출부가 링크를 비움)', async () => {
+  eq(await checkWebRisk('https://www.nike.com/', undefined, 1000), 'no_key');
+  eq(await checkWebRisk('https://www.nike.com/', '', 1000), 'no_key');
+});
+
+Deno.test('mallSearchLink: 확인된 몰만, 도메인 고정·검색어 인코딩', () => {
+  const coupang: Channel = { via: 'mall', domains: ['coupang.com'], mall: 'coupang' };
+  eq(mallSearchLink(coupang, '산양유 비누 플러스', '샤워메이트'), {
+    url: 'https://www.coupang.com/np/search?q=%EC%83%A4%EC%9B%8C%EB%A9%94%EC%9D%B4%ED%8A%B8+%EC%82%B0%EC%96%91%EC%9C%A0+%EB%B9%84%EB%88%84+%ED%94%8C%EB%9F%AC%EC%8A%A4',
+    domain: 'www.coupang.com',
+    kind: 'search',
+    mall: 'coupang',
+  });
+  // 상품명이 이미 브랜드로 시작하면 브랜드를 다시 붙이지 않는다
+  eq(
+    new URL(mallSearchLink(coupang, '샤워메이트 산양유 비누', '샤워메이트')!.url).searchParams.get('q'),
+    '샤워메이트 산양유 비누',
+  );
+  // 검색어에 주소처럼 보이는 글자가 있어도 호스트·경로는 바뀌지 않는다(인코딩)
+  const tricky = mallSearchLink(coupang, 'x&q=evil#frag /../admin', null)!;
+  eq(new URL(tricky.url).hostname, 'www.coupang.com');
+  eq(new URL(tricky.url).pathname, '/np/search');
+  eq(new URL(tricky.url).searchParams.get('q'), 'x&q=evil#frag /../admin');
+  // 도메인으로 들어온 쿠팡 채널도 같다
+  eq(mallSearchLink({ via: 'domain', domains: ['coupang.com'], mall: 'coupang' }, '비누', null)?.kind, 'search');
+  // 검색 주소 형식이 확인되지 않은 몰·채널 없음·몰 아님은 null
+  eq(mallSearchLink({ via: 'mall', domains: ['musinsa.com'], mall: 'musinsa' }, '청바지', '리바이스'), null);
+  eq(mallSearchLink({ via: 'none' }, '청바지', null), null);
+  eq(mallSearchLink({ via: 'domain', domains: ['markedly.co.kr'] }, '자켓', null), null);
+  eq(mallSearchLink(coupang, '   ', null), null);
+});
+
+Deno.test('카페24 사이트 안 검색: 주소·검색어·상품 추출', () => {
+  eq(cafe24SearchUrl('fix-it.kr', '제로 룸데오도란트'), 'https://fix-it.kr/product/search.html?keyword=%EC%A0%9C%EB%A1%9C+%EB%A3%B8%EB%8D%B0%EC%98%A4%EB%8F%84%EB%9E%80%ED%8A%B8');
+  eq(new URL(cafe24SearchUrl('fix-it.kr', 'a&b=/../x')!).pathname, '/product/search.html', '검색어가 경로를 바꾸지 못함');
+  eq(cafe24SearchUrl('fix-it.kr', '  '), null);
+  eq(siteQueries('제로 룸데오도란트 2EA'), ['제로 룸데오도란트 2EA', '제로 룸데오도란트']);
+  eq(siteQueries('룸데오도란트'), ['룸데오도란트']);
+  eq(looksLikeCafe24('<img src="//img.echosting.cafe24.com/a.png">'), true);
+  eq(looksLikeCafe24('<html>shopify</html>'), false);
+  eq(cafe24SearchPage('fix-it.kr'), 'https://fix-it.kr/product/search.html', 'Web Risk 대조용 — 검색어 없음');
+
+  // 카페24 검색 결과 형태: 검색 결과 영역 밖(머리말 추천 상품)·같은 상품의 사진 링크와 이름 링크·
+  // 목록 링크·다른 사이트·http·번호 아님·영역 뒤(페이지 번호 다음) 링크가 섞임
+  const html = `
+    <style>.xans-search-result .name { color: #000 }</style>
+    <div class="xans-element- xans-layout xans-layout-header"><a href="/product/detail.html?product_no=1">머리말 추천 상품</a></div>
+    <div class="xans-element- xans-search xans-search-result">
+    <a href="/product/list.html?cate_no=56">목록</a>
+    <a href="/product/detail.html?product_no=29&amp;cate_no=55&amp;display_group=1" class="noborder"><img src="x.png" alt="사진 대체 글자"/></a>
+    <a href="/product/detail.html?product_no=29&amp;cate_no=55" class="icon">관심상품 등록하기 버튼 글자가 긴 링크</a>
+    <div class="name"><a href="/product/detail.html?product_no=29&amp;cate_no=55&amp;display_group=1"><span>제로 룸데오도란트 230g</span></a></div>
+    <strong class="name"><a href="//fix-it.kr/product/%ED%9E%88%EB%85%B8%EB%81%BC/50/category/1/display/2/"><span class="title displaynone"><span>상품명</span> :</span> <span>히노끼 &#47; 룸데오도란트 &#xAC00;</span></a></strong>
+    <a href="/product/detail.html?product_no=51"><img src="y.png" alt="사진만 있는 상품"></a>
+    <a href="https://evil.example.com/product/detail.html?product_no=1">다른 사이트</a>
+    <a href="http://fix-it.kr/product/detail.html?product_no=7">http 링크</a>
+    <a href="/product/detail.html?product_no=abc">번호 아님</a>
+    </div>
+    <div class="xans-element- xans-search xans-search-paging"><a href="/product/detail.html?product_no=99">영역 밖</a></div>`;
+  eq(extractCafe24Products(html, 'https://fix-it.kr/product/search.html?keyword=x', 'fix-it.kr'), [
+    { url: 'https://fix-it.kr/product/detail.html?product_no=29', title: '제로 룸데오도란트 230g', domain: 'fix-it.kr' },
+    { url: 'https://fix-it.kr/product/detail.html?product_no=50', title: '히노끼 / 룸데오도란트 가', domain: 'fix-it.kr' },
+    { url: 'https://fix-it.kr/product/detail.html?product_no=51', title: '사진만 있는 상품', domain: 'fix-it.kr' },
+  ]);
+  // 검색 결과 영역이 없으면 상품을 읽지 않는다
+  eq(extractCafe24Products('<a href="/product/detail.html?product_no=1">상품</a>', 'https://fix-it.kr/', 'fix-it.kr'), []);
+});
+
+Deno.test('카페24 상품 추출: 상대 사이트의 악의적 HTML 에도 정규식이 오래 돌지 않는다', () => {
+  const area = '<div class="xans-search-result">';
+  const cases = [
+    area + '<a href="/product/detail.html?product_no=1">' + 'x'.repeat(1_500_000), // 닫는 </a> 없음
+    area + '<a href="/product/detail.html?product_no=1">x'.repeat(30_000), // 닫히지 않는 링크 반복(이전 정규식은 제곱 시간)
+    area + '<a '.repeat(500_000), // 끝나지 않는 여는 태그 반복
+    area + ('<a href="/product/detail.html?product_no=1">' + '<'.repeat(2_000)).repeat(300),
+    area + '<a ' + 'h'.repeat(1_500_000),
+  ];
+  for (const html of cases) {
+    const t0 = performance.now();
+    extractCafe24Products(html, 'https://fix-it.kr/', 'fix-it.kr');
+    const ms = performance.now() - t0;
+    if (ms > 1_000) throw new Error(`정규식 처리 ${Math.round(ms)}ms — 너무 오래 걸림`);
+  }
+});
+
+Deno.test('pickSummary·debugCandidates: 로그용 요약', () => {
+  eq(pickSummary({ index: 3, isOfficial: false }), '3/site');
+  eq(pickSummary({ index: 1, isOfficial: true }), '1/official');
+  eq(pickSummary({ index: null, isOfficial: false }), 'null');
+  eq(pickSummary({ index: '2' }), 'invalid');
+  eq(pickSummary(null), 'invalid');
+  eq(
+    debugCandidates([{ url: 'https://www.coupang.com/vp/products/123?itemId=9', title: '샤워메이트 산양유 비누', domain: 'www.coupang.com' }]),
+    [{ i: 1, d: 'www.coupang.com', p: '/vp/products/123?itemId=9', t: '샤워메이트 산양유 비누' }],
+  );
+});
+
+Deno.test('kstDate: 한국 날짜', () => {
+  eq(kstDate(new Date('2026-11-09T14:59:59Z')), '2026-11-09');
+  eq(kstDate(new Date('2026-11-09T15:00:00Z')), '2026-11-10', 'UTC 15시 = 한국 0시');
+});

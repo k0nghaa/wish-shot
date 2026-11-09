@@ -131,7 +131,12 @@ export default function SettingsScreen() {
         <Text style={styles.sectionLabel}>개인정보 안내</Text>
         <View style={styles.card}>
           <Text style={styles.noticeTitle}>{PRIVACY_NOTICE.title}</Text>
-          <Text style={styles.noticeBody}>{PRIVACY_NOTICE.body}</Text>
+          {PRIVACY_NOTICE.sections.map((s) => (
+            <View key={s.heading} style={styles.noticeSection}>
+              <Text style={styles.noticeHeading}>{s.heading}</Text>
+              <Text style={styles.noticeBody}>{s.body}</Text>
+            </View>
+          ))}
         </View>
 
         <Text style={styles.sectionLabel}>지원</Text>
@@ -242,6 +247,8 @@ const styles = StyleSheet.create({
     gap: spacing.two,
   },
   noticeTitle: { fontSize: 15, fontWeight: '600', color: colors.textMain },
+  noticeSection: { gap: spacing.one },
+  noticeHeading: { fontSize: 14, fontWeight: '600', color: colors.textMain },
   noticeBody: { fontSize: 14, color: colors.textSub, lineHeight: 21 },
   devSection: {
     marginTop: spacing.four,
