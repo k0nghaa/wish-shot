@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -23,6 +23,8 @@ import { CategoryPicker } from '@/components/CategoryPicker';
 import { colors, colorsDark, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
 import { formatPriceKRW } from '@/lib/formatPrice';
+import { useNotifications } from '@/hooks/useNotifications';
+import { markItemSeen, removeNotificationItems } from '@/lib/notifications';
 import {
   createCategory,
   deleteItem,
@@ -59,6 +61,13 @@ export default function ItemDetailScreen() {
   const insets = useSafeAreaInsets();
 
   const current = items && items.length > 0 ? (items[index] ?? items[0]) : null;
+  const currentId = current?.id;
+  // 화면에 나온 위시의 '새 링크' 알림을 읽음으로(좌우로 넘겨 볼 때 포함, 보는 중에 링크가 붙어도) — 타일 점·탭 배지가 사라진다.
+  const { unseenItemIds } = useNotifications();
+  const currentUnseen = currentId ? unseenItemIds.has(currentId) : false;
+  useEffect(() => {
+    if (currentId && currentUnseen) void markItemSeen(currentId);
+  }, [currentId, currentUnseen]);
 
   function goHome() {
     if (router.canDismiss()) router.dismissAll();
@@ -118,6 +127,7 @@ export default function ItemDetailScreen() {
     const fromName = categories.find((c) => c.id === from)?.name;
     try {
       await deleteItem(current.id);
+      void removeNotificationItems([current.id]); // 그 위시의 알림·기록도 지운다(기기 안)
       await deleteItemImage(current.image_key).catch(() => undefined);
       const { wasEmpty } = await promptDeleteIfCategoryEmpty(from, fromName);
       if (wasEmpty) goHome();

@@ -39,7 +39,7 @@ export default function SettingsScreen() {
 
   // 개발용 세션 리셋: 현재 세션을 버리고 새 익명 세션으로 시작한다. 익명 경로를 재설치 없이
   // 즉시 테스트하기 위한 것 — __DEV__ 에서만 노출된다.
-  // 재익명 로그인까지 await 한 뒤 홈으로 이동해, 홈이 새 세션으로 재로드되게 한다(레이스 방지).
+  // 재익명 로그인까지 await 한 뒤 전체 탭(/)으로 이동해, 새 세션으로 재로드되게 한다(레이스 방지).
   async function handleDevReset() {
     try {
       await signOut();

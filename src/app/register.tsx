@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
-import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
+import { DisclosureRow, FormBlock, FormCard, FormLineInput, FormRow, formInput } from '@/components/FormField';
 import { RegisterCoachmarkTour } from '@/components/Onboarding/RegisterCoachmarkTour';
 import { useOnboardingTarget, type Measurable } from '@/components/Onboarding/onboardingTarget';
 import { ImageZoomModal } from '@/components/ImageZoomModal';
@@ -29,11 +29,12 @@ import { PRIVACY_NOTICE } from '@/constants/privacy';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { capture } from '@/lib/analytics';
 import { useAnalysis, type AnalysisState } from '@/hooks/useAnalysis';
-import { attachLinkAfterSave, usePurchaseLinkSearch } from '@/hooks/usePurchaseLinkSearch';
+import { attachLinkAfterSave, usePurchaseLinkSearch, type LinkSearch, type SavedItemRef } from '@/hooks/usePurchaseLinkSearch';
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import { normalizeName } from '@/lib/normalize';
-import { mallLabel } from '@/lib/purchaseChannel';
+import { addLinkAttachedNotification, clearLinkPending, markLinkPending, NOTIFICATION_SUFFIX } from '@/lib/notifications';
+import { showSnackbar } from '@/lib/snackbar';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
@@ -68,14 +69,34 @@ function parsePrice(text: string): number | null {
 }
 
 /**
- * 저장 뒤 링크를 붙였을 때 안내(구매처 찾기). 등록 화면이 이미 닫힌 뒤라 전역 router 로 이동한다.
- * 사용자가 확인하지 못한 링크가 저장됐으므로 확인을 권한다.
+ * 저장 뒤 링크를 붙였을 때 안내(구매처 찾기) — 흐름을 끊지 않게 모달 대신 알림 기록 + 3초 스낵바.
+ * 등록 화면이 이미 닫힌 뒤라 전역 router 로 이동한다. 링크 종류(상품 페이지·검색 결과)는 나누지 않는다.
  */
-function notifyLinkAttached(itemId: string) {
-  Alert.alert('링크 추가', '저장한 위시에 판매처 링크를 붙였습니다. 확인하세요.', [
-    { text: '닫기', style: 'cancel' },
-    { text: '보기', onPress: () => appRouter.push({ pathname: '/item/[id]', params: { id: itemId } }) },
-  ]);
+async function notifyLinkAttached(item: SavedItemRef) {
+  await addLinkAttachedNotification(item); // 알림 탭 기록·배지·타일 점
+  capture('link_attached', {});
+  showSnackbar({
+    lead: item.productName, // 한 줄: "{제품명}에 링크를 붙였습니다"(제품명만 길면 잘림)
+    text: NOTIFICATION_SUFFIX.link_attached,
+    actionLabel: '보기',
+    announcement: `${item.productName}에 링크를 붙였습니다.`,
+    onAction: () => {
+      capture('notification_opened', { source: 'snackbar' });
+      appRouter.push({ pathname: '/item/[id]', params: { id: item.itemId } });
+    },
+  });
+}
+
+/**
+ * 저장 뒤 링크 이어 찾기: 찾는 동안 타일을 흐리게 하고, 붙으면 알린다(못 찾으면 흐림만 사라진다).
+ * 앱이 켜져 있는 동안만 이어진다.
+ */
+function followLinkAfterSave(search: LinkSearch, item: SavedItemRef) {
+  markLinkPending(item.itemId);
+  attachLinkAfterSave(search, item, {
+    onAttached: notifyLinkAttached,
+    onSettled: ({ itemId }) => clearLinkPending(itemId),
+  });
 }
 
 /** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
@@ -118,6 +139,15 @@ function analysisStatusInfo(
 
 export default function RegisterScreen() {
   const router = useRouter();
+  // 저장이 끝나기 전에 이 폼이 닫혔으면(예: 새 공유를 [지금 열기]) 저장 뒤 이동·앨범 삭제 제안을 하지 않는다
+  // — 새로 연 화면을 덮지 않게. 저장 자체와 링크 이어 찾기는 그대로 끝낸다.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   // sourceLink: 링크붙이기 모드(기능 1) "새로 담기"로 넘어온 공유 URL 프리필.
   // onboarding: 첫 실행 온보딩이 이 폼을 열었으면 '1' — 폼 위에 코치마크 투어를 띄운다(Phase 7 Batch D).
   const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string; onboarding?: string }>();
@@ -127,7 +157,7 @@ export default function RegisterScreen() {
   const setImageBoxRef = useCallback((n: Measurable | null) => registerTarget('register.imageBox', n), [registerTarget]);
   const setRecentRef = useCallback((n: Measurable | null) => registerTarget('register.recentPhoto', n), [registerTarget]);
 
-  // 온보딩 투어 종료: 파라미터를 내려 코치마크를 닫고 홈으로 돌아간다(폼은 온보딩이 열었던 것).
+  // 온보딩 투어 종료: 파라미터를 내려 코치마크를 닫고 아래 탭(전체)으로 돌아간다(폼은 온보딩이 열었던 것).
   const endOnboardingTour = useCallback(() => {
     router.setParams({ onboarding: '' });
     if (router.canGoBack()) router.back();
@@ -275,17 +305,23 @@ export default function RegisterScreen() {
     normalizeName(brand, productName) === normalizeName(aiResult.brand, aiResult.productName);
   const sourceLink = sourceLinkEdit ?? (linkMatchesForm ? purchase.link?.url : undefined) ?? '';
   const linkSearching = linkMatchesForm && purchase.searching && sourceLink === '';
+  // 자동 찾기가 끝났는데 링크가 없고 칸을 손대지 않았으면 직접 입력을 안내한다(자리표시).
+  const linkNotFound = sourceLinkEdit === null && linkMatchesForm && purchase.notFound;
+  const linkPlaceholder = linkSearching ? '링크 찾는 중…' : linkNotFound ? '링크를 직접 입력하세요' : 'https://';
+  // AI가 채운 값인지(사용자가 손대지 않음) — autofill_edited 계측에만 쓴다(화면 칩은 없음).
   const aiFilled = {
     productName: productNameEdit === null && !!aiResult?.productName,
     brand: brandEdit === null && !!aiResult?.brand,
     price: priceEdit === null && aiResult?.price != null,
-    link: sourceLinkEdit === null && linkMatchesForm && !!purchase.link,
   };
 
   // 저장 직전에 부른다: 링크 칸이 비어 있고 손대지 않았는데 링크를 찾는 중이면, 저장 뒤 이어 받을 찾기를 잡아 둔다.
   // (markSubmitted 로 화면 상태가 바뀌기 전에 잡아야 한다.)
+  // 찾기가 이미 끝나 링크가 없으면 넘겨받지 않는다(이어 찾을 것이 없다 — 타일이 잠깐 흐려지지 않게).
   function takeLinkHandOff() {
-    return sourceLinkEdit === null && sourceLink === '' && linkMatchesForm ? purchase.takeForHandOff() : null;
+    return sourceLinkEdit === null && sourceLink === '' && linkMatchesForm && !purchase.notFound
+      ? purchase.takeForHandOff()
+      : null;
   }
 
   // FR-8: AI가 추천한 카테고리(목록 내 이름)를 id 로 환산. 사용자가 아직 안 골랐으면 추천을 미리선택한다.
@@ -422,7 +458,7 @@ export default function RegisterScreen() {
     if (!wantsDelete) return;
     const result = await deletePhotoAsset(pickedAssetId);
     if (result === 'denied') {
-      // 닫힐 때까지 기다린다 — 이동 뒤 뜨는 '링크 추가' 안내와 겹치지 않게.
+      // 닫힐 때까지 기다린 뒤 이동한다(저장 뒤 링크 이어 찾기는 이동한 뒤 시작).
       await new Promise<void>((resolve) => {
         Alert.alert(
           '앨범 삭제 불가',
@@ -497,10 +533,10 @@ export default function RegisterScreen() {
     markSubmitted();
     captureItemSaved();
     setSaving(false);
-    await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
-    goToSavedCategory();
-    // 저장 뒤 링크 붙이기: 이동한 뒤에 결과를 받아 붙이고 안내한다(앨범 삭제 안내와 겹치지 않게).
-    if (linkHandOff) attachLinkAfterSave(linkHandOff, id, notifyLinkAttached);
+    if (mountedRef.current) await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
+    if (mountedRef.current) goToSavedCategory();
+    // 저장 뒤 링크 이어 찾기: 이동한 뒤에 결과를 받아 붙이고 알린다(타일 흐림 → 점 또는 흐림만 해제).
+    if (linkHandOff) followLinkAfterSave(linkHandOff, { itemId: id, productName: productName.trim() });
   }
 
   // 저장한 카테고리 화면으로 이동(미분류면 미분류 목록).
@@ -542,9 +578,9 @@ export default function RegisterScreen() {
       captureItemSaved();
       setDupVisible(false);
       setOverwriteBusy(false);
-      await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
-      goToSavedCategory();
-      if (linkHandOff) attachLinkAfterSave(linkHandOff, existing.id, notifyLinkAttached);
+      if (mountedRef.current) await offerAlbumDelete(); // 원본 앨범 삭제 제안(모달) → 결정 후 이동
+      if (mountedRef.current) goToSavedCategory();
+      if (linkHandOff) followLinkAfterSave(linkHandOff, { itemId: existing.id, productName: productName.trim() });
     } catch (e) {
       saveStartedRef.current = false;
       setOverwriteBusy(false);
@@ -684,12 +720,11 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
-          {/* 그룹 카드 1: 제품명·브랜드·가격·링크 */}
+          {/* 그룹 카드 1: 제품명·브랜드·가격 */}
           <FormCard>
-            <FormRow label="제품명" required ai={aiFilled.productName}>
-              <TextInput
+            <FormRow label="제품명" required>
+              <FormLineInput
                 ref={productNameRef}
-                style={formInput.rowInput}
                 placeholder="제품명"
                 placeholderTextColor={colors.textDisabled}
                 value={productName}
@@ -699,9 +734,8 @@ export default function RegisterScreen() {
                 }}
               />
             </FormRow>
-            <FormRow label="브랜드" ai={aiFilled.brand}>
-              <TextInput
-                style={formInput.rowInput}
+            <FormRow label="브랜드">
+              <FormLineInput
                 placeholder="브랜드명"
                 placeholderTextColor={colors.textDisabled}
                 value={brand}
@@ -711,9 +745,8 @@ export default function RegisterScreen() {
                 }}
               />
             </FormRow>
-            <FormRow label="가격" ai={aiFilled.price}>
-              <TextInput
-                style={formInput.rowInput}
+            <FormRow label="가격">
+              <FormLineInput
                 placeholder="₩ 0"
                 placeholderTextColor={colors.textDisabled}
                 keyboardType="number-pad"
@@ -724,14 +757,27 @@ export default function RegisterScreen() {
                 }}
               />
             </FormRow>
-            <FormRow label="링크" ai={aiFilled.link}>
+          </FormCard>
+
+          {/* 추천 문구는 항상 렌더하고 추천이 없을 땐 투명 처리 — 카테고리 카드 위치를 고정(점프 방지). */}
+          <Text
+            style={[styles.suggestHint, !categoryIsSuggested && styles.suggestHintHidden]}
+            accessible={categoryIsSuggested}
+            accessibilityLabel="AI가 추천한 카테고리"
+          >
+            AI가 추천한 카테고리입니다. 바꾸려면 눌러 선택하세요.
+          </Text>
+
+          {/* 그룹 카드 2: 카테고리·링크 — 링크는 필수 입력 묶음(카드 1)에서 뺐다 */}
+          <FormCard>
+            <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
+            <FormRow label="링크">
               <View style={styles.linkValue}>
                 {linkSearching ? (
                   <ActivityIndicator size="small" color={colors.textSub} style={styles.statusSpinner} />
                 ) : null}
-                <TextInput
-                  style={formInput.rowInput}
-                  placeholder={linkSearching ? '링크 찾는 중…' : 'https://'}
+                <FormLineInput
+                  placeholder={linkPlaceholder}
                   placeholderTextColor={colors.textDisabled}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -745,27 +791,12 @@ export default function RegisterScreen() {
             </FormRow>
           </FormCard>
 
-          {/* 상품 페이지를 못 찾아 몰 검색 결과 링크를 넣은 경우 — 상품 링크와 구분해 알린다 */}
-          {aiFilled.link && purchase.link?.kind === 'search' ? (
-            <Text style={styles.linkHint}>
-              상품 페이지를 찾지 못해{' '}
-              {purchase.link.mall ? mallLabel(purchase.link.mall) : purchase.link.domain.replace(/^www\./, '')} 검색
-              결과로 연결합니다.
-            </Text>
-          ) : null}
+          {/* 링크 칸 아래 오른쪽 고정 안내: 링크를 찾는 중에 저장해도 계속 찾는다(저장 뒤 3분 안·앱이 켜져 있을 때 —
+              attachLinkAfterSave). 찾는 동안만 보이면 한도 초과처럼 바로 끝날 때 깜빡여 오히려 헷갈리므로 늘 보인다. */}
+          <Text style={styles.linkGuide}>저장 후에도 링크를 계속 찾습니다. 앱을 닫으면 중단됩니다.</Text>
 
-          {/* 추천 문구는 항상 렌더하고 추천이 없을 땐 투명 처리 — 폴더 섹션 위치를 고정(점프 방지). */}
-          <Text
-            style={[styles.suggestHint, !categoryIsSuggested && styles.suggestHintHidden]}
-            accessible={categoryIsSuggested}
-            accessibilityLabel="AI가 추천한 카테고리"
-          >
-            AI가 추천한 카테고리입니다. 바꾸려면 눌러 선택하세요.
-          </Text>
-
-          {/* 그룹 카드 2: 폴더·메모 */}
+          {/* 그룹 카드 3: 메모 */}
           <FormCard>
-            <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
             <FormBlock label="메모">
               <TextInput
                 style={formInput.memo}
@@ -887,10 +918,10 @@ const styles = StyleSheet.create({
   },
   // 좁은 공간에 맞춰 스피너를 살짝 축소(약 -2px).
   statusSpinner: { transform: [{ scale: 0.9 }] },
-  // 링크 칸: '찾는 중' 스피너 + 입력(값은 우측 정렬)
+  // 링크 칸: '찾는 중' 스피너 + 한 줄 입력(남은 폭)
   linkValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.one },
-  // 몰 검색 결과 링크 안내(카드 바로 아래, 위 간격 축소)
-  linkHint: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one },
+  // 링크 찾는 중 안내(카테고리·링크 카드 바로 아래, 위 간격 축소)
+  linkGuide: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one, textAlign: 'right' },
   statusText: { fontSize: 13, fontWeight: '500' },
   errorBox: {
     gap: spacing.two,

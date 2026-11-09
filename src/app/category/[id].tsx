@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import { ItemSelectionControls } from '@/components/ItemSelectionControls';
 import { PhotoTile } from '@/components/PhotoTile';
 import { colors, spacing } from '@/constants/theme';
 import { useItemSelection } from '@/hooks/useItemSelection';
+import { useNotifications } from '@/hooks/useNotifications';
 import {
   getItemImageSignedUrls,
   getItemThumbSignedUrls,
@@ -21,6 +22,7 @@ const COLUMNS = 3;
 
 export default function CategoryItemsScreen() {
   const router = useRouter();
+  const linkState = useNotifications(); // 저장 뒤 링크 찾기 상태(타일 흐림·새 링크 점)
   const { width } = useWindowDimensions();
   const tileSize = width / COLUMNS; // 여백 없이 화면 폭 3등분(전체 탭과 동일)
   const params = useLocalSearchParams<{ id: string; name?: string }>();
@@ -35,10 +37,11 @@ export default function CategoryItemsScreen() {
 
   const load = useCallback(async () => {
     try {
-      // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 위시리스트 목록으로 돌아간다.
+      // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 카테고리 탭으로 돌아간다.
+      // dismissTo: 아래에 있는 탭 그룹까지 닫고 카테고리 탭으로(replace 는 탭 그룹을 하나 더 쌓는다).
       const cats = await listCategories().catch(() => [] as Category[]);
       if (!isUncat && !cats.some((c) => c.id === id)) {
-        router.replace('/');
+        router.dismissTo('/categories');
         return;
       }
       const list = await listItemsByCategory(isUncat ? null : id);
@@ -61,6 +64,8 @@ export default function CategoryItemsScreen() {
   );
 
   const selection = useItemSelection({ items, categories, setCategories, reload: load });
+  // 선택·링크 찾기 상태가 바뀔 때만 그리드를 다시 그린다(매 렌더 새 배열이면 FlatList 비교가 깨짐).
+  const gridExtra = useMemo(() => [selection.selected, linkState], [selection.selected, linkState]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -102,13 +107,15 @@ export default function CategoryItemsScreen() {
           keyExtractor={(it) => it.id}
           numColumns={COLUMNS}
           contentContainerStyle={styles.list}
-          extraData={selection.selected}
+          extraData={gridExtra}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
               fallbackUrl={fallbackUrls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
+              linkPending={linkState.pendingItemIds.has(item.id)}
+              unseen={linkState.unseenItemIds.has(item.id)}
               selectionMode={selection.selectMode}
               selected={selection.selected.has(item.id)}
               onPress={() =>

@@ -7,7 +7,7 @@ import { colors, radius, shadow, spacing } from '@/constants/theme';
 import { Thumbnail } from './Thumbnail';
 
 /**
- * 홈(폴더 탭)의 카테고리 카드: 대표 썸네일 2×2 모자이크 + 이름 라벨(좌하단 오버레이).
+ * 카테고리 탭의 카테고리 카드: 대표 썸네일 2×2 모자이크 + 이름 라벨(좌하단 오버레이).
  * thumbnailUrls 는 최대 4개(최신순). 빈 칸은 placeholder 타일로 채운다.
  * - onLongPress: 관리(이름변경/삭제) 진입 — 미분류 카드는 넘기지 않는다.
  * - deleteMode + onDelete: iOS 앨범 톤 삭제 모드. 좌상단 − 배지 노출, 탭 시 onDelete.
