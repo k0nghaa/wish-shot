@@ -33,7 +33,7 @@ import { attachLinkAfterSave, usePurchaseLinkSearch, type LinkSearch, type Saved
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import { normalizeName } from '@/lib/normalize';
-import { addLinkAttachedNotification, clearLinkPending, markLinkPending, NOTIFICATION_TITLE } from '@/lib/notifications';
+import { addLinkAttachedNotification, clearLinkPending, markLinkPending, NOTIFICATION_SUFFIX } from '@/lib/notifications';
 import { showSnackbar } from '@/lib/snackbar';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
@@ -76,8 +76,8 @@ async function notifyLinkAttached(item: SavedItemRef) {
   await addLinkAttachedNotification(item); // 알림 탭 기록·배지·타일 점
   capture('link_attached', {});
   showSnackbar({
-    title: NOTIFICATION_TITLE.link_attached,
-    subtitle: item.productName,
+    lead: item.productName, // 한 줄: "{제품명}에 링크를 붙였습니다"(제품명만 길면 잘림)
+    text: NOTIFICATION_SUFFIX.link_attached,
     actionLabel: '보기',
     announcement: `${item.productName}에 링크를 붙였습니다.`,
     onAction: () => {

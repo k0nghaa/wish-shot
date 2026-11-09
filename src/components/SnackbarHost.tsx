@@ -27,7 +27,7 @@ export function SnackbarHost() {
   const progress = useSharedValue(0);
 
   const id = current?.id;
-  const announcement = current ? (current.announcement ?? [current.title, current.subtitle].filter(Boolean).join(' ')) : '';
+  const announcement = current ? (current.announcement ?? `${current.lead ?? ''}${current.text}`) : '';
 
   // 새 스낵바: 나타나고, 정해진 시간 뒤 사라진다(사라지는 움직임이 끝난 뒤 대기열에서 뺀다).
   useEffect(() => {
@@ -75,15 +75,16 @@ export function SnackbarHost() {
           style={[styles.bar, { bottom: Math.max(insets.bottom, spacing.two) + ABOVE_TAB_BAR }, animatedStyle]}
           accessibilityRole="alert"
         >
-          <View style={styles.texts}>
-            <Text style={styles.title} numberOfLines={1}>
-              {current.title}
-            </Text>
-            {current.subtitle ? (
-              <Text style={styles.subtitle} numberOfLines={1}>
-                {current.subtitle}
+          {/* 한 줄: 앞부분(제품명 등)만 말줄임으로 잘리고 뒤 문구는 늘 보인다. */}
+          <View style={styles.line}>
+            {current.lead ? (
+              <Text style={[styles.text, styles.lead]} numberOfLines={1}>
+                {current.lead}
               </Text>
             ) : null}
+            <Text style={[styles.text, styles.rest]} numberOfLines={1}>
+              {current.text}
+            </Text>
           </View>
           {current.actionLabel && onAction ? (
             <TouchableOpacity
@@ -120,8 +121,9 @@ const styles = StyleSheet.create({
     backgroundColor: colorsDark.bgCard,
     ...shadow.floating,
   },
-  texts: { flex: 1, gap: 2 },
-  title: { fontSize: 15, fontWeight: '600', color: colorsDark.textMain },
-  subtitle: { fontSize: 13, color: colorsDark.textSub },
+  line: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  text: { fontSize: 15, color: colorsDark.textMain },
+  lead: { flexShrink: 1, fontWeight: '700' },
+  rest: { flexShrink: 0 },
   action: { fontSize: 15, fontWeight: '700', color: colorsDark.textMain },
 });

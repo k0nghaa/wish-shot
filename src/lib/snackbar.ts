@@ -6,11 +6,13 @@ import { uuid } from 'expo-modules-core';
  */
 export type SnackbarMessage = {
   id: string;
-  title: string;
-  subtitle?: string;
+  /** 한 줄 문장의 앞부분(굵게, 길면 말줄임으로 잘림 — 예: 제품명). */
+  lead?: string;
+  /** 한 줄 문장의 나머지(잘리지 않음 — 예: "에 링크를 붙였습니다"). */
+  text: string;
   actionLabel?: string;
   onAction?: () => void;
-  /** VoiceOver 가 읽을 문장(없으면 제목·부제). */
+  /** VoiceOver 가 읽을 문장(없으면 lead + text). */
   announcement?: string;
 };
 
