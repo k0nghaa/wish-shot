@@ -56,8 +56,9 @@ import type { Json } from '@/types/database';
 
 const emptyToNull = (s: string): string | null => (s.trim() ? s.trim() : null);
 
-// 개인정보 고지(NFR-3)를 최초 1회만 보여주기 위한 플래그.
-const PRIVACY_NOTICE_KEY = 'wishshot.privacyNoticeShown';
+// 개인정보 고지(NFR-3)를 최초 1회만 보여주기 위한 플래그. 고지 내용이 바뀌어 기존 사용자에게도
+// 다시 보여야 하면 이름을 바꾼다(.v2 — 링크 찾기·분석 기록 보관 고지 추가, 요약으로 축약).
+const PRIVACY_NOTICE_KEY = 'wishshot.privacyNoticeShown.v2';
 // "제품 영역 지정" 시트의 선택 영역 전송 고지를 최초 1회만 보여주기 위한 플래그.
 const REGION_NOTICE_KEY = 'wishshot.regionNoticeShown';
 
@@ -212,7 +213,7 @@ export default function RegisterScreen() {
         if (await AsyncStorage.getItem(PRIVACY_NOTICE_KEY)) return;
         await AsyncStorage.setItem(PRIVACY_NOTICE_KEY, '1');
         if (cancelled) return;
-        Alert.alert(PRIVACY_NOTICE.title, PRIVACY_NOTICE.body, [{ text: '확인' }]);
+        Alert.alert(PRIVACY_NOTICE.title, PRIVACY_NOTICE.summary, [{ text: '확인' }]);
       } catch {
         /* 고지 실패는 저장 흐름을 막지 않는다 */
       }
