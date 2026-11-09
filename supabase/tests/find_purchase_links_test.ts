@@ -70,6 +70,8 @@ Deno.test('resolveChannel: 도메인·몰·없음', () => {
     '몰 판별이 비판매 플랫폼(naver.com)보다 먼저',
   );
   eq(resolveChannel(undefined, 'coupang'), { ok: true, channel: { via: 'mall', domains: ['coupang.com'] } });
+  eq(resolveChannel(undefined, 'zigzag'), { ok: true, channel: { via: 'mall', domains: ['zigzag.kr'] } });
+  eq(resolveChannel('m.a-bly.com', undefined), { ok: true, channel: { via: 'domain', domains: ['a-bly.com'] } });
   eq(resolveChannel(undefined, undefined), { ok: true, channel: { via: 'none' } });
   eq(resolveChannel('', ''), { ok: true, channel: { via: 'none' } }, '빈 문자열은 없음');
   eq(resolveChannel('nike.com', 'coupang'), { ok: false, error: 'invalid_input' }, '둘 다 오면 거절');
@@ -91,7 +93,7 @@ Deno.test('searchScope: 채널 있으면 그 사이트만, 없으면 몰 제외(
 
   const open = searchScope({ via: 'none' }, '나이키');
   if (open.mode !== 'blocked') throw new Error('blocked 여야 한다');
-  for (const d of ['coupang.com', 'musinsa.com', 'ikea.com', 'smartstore.naver.com', 'kurly.com']) {
+  for (const d of ['coupang.com', 'musinsa.com', 'ikea.com', 'smartstore.naver.com', 'kurly.com', 'zigzag.kr', 'a-bly.com']) {
     if (!open.domains.includes(d)) throw new Error(`${d} 는 막혀야 한다`);
   }
 

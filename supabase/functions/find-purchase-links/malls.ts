@@ -20,6 +20,8 @@ export const MALLS = {
   ohou: { domains: ['ohou.se'], ownBrands: ['오늘의집', 'ohouse'] },
   ikea: { domains: ['ikea.com'], ownBrands: ['이케아', 'ikea'] },
   kurly: { domains: ['kurly.com'], ownBrands: ['컬리', 'kurly'] },
+  zigzag: { domains: ['zigzag.kr'], ownBrands: ['지그재그', 'zigzag'] },
+  ably: { domains: ['a-bly.com'], ownBrands: ['에이블리', 'ably'] },
 } as const satisfies Record<string, Mall>;
 
 // 판매처가 아닌 플랫폼(포털·블로그·SNS·영상·검색). 캡처에 이 주소가 보여도 상품을 파는 곳이

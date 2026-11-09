@@ -32,7 +32,10 @@ export function usePurchaseLinkSearch(input: {
   blockNewRef: RefObject<boolean>;
 }) {
   const { enabled, productName, brand, ocrText, blockNewRef } = input;
-  const channel = useMemo(() => detectPurchaseChannel(ocrText), [ocrText]);
+  const channel = useMemo(
+    () => detectPurchaseChannel(ocrText, [productName, brand]),
+    [ocrText, productName, brand],
+  );
   const currentKey = enabled && productName ? JSON.stringify([productName, brand ?? null, channel]) : null;
 
   // 조합(key)별 결과와 진행 중 찾기

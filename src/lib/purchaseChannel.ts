@@ -6,7 +6,9 @@
  *   1. 캡처에 판매처 주소가 보임(사파리 주소창·앱 안 브라우저 상단·찍힌 주소) → { domain }
  *      서로 다른 사이트 주소가 여럿이면 판별하지 않는다(null).
  *      포털·블로그·SNS 주소만 보이면 판매처가 아니므로 바로 null(공식 홈페이지 찾기).
- *   2. 주소는 없지만 몰 고유 문구가 보임(몰 앱 캡처) → { mall }. 여러 몰 문구가 함께 보이면 null.
+ *   2. 판매처 주소는 없지만 몰 이름·고유 문구가 보임(몰 앱 캡처, 또는 SNS 캡션의 "에이블리에서 샀어요") → { mall }.
+ *      포털·SNS 주소가 함께 보여도 몰 이름을 따른다. 여러 몰이 함께 보이면 null.
+ *      상품명·브랜드 글자는 빼고 찾는다('지그재그 패턴 니트' 같은 상품명이 몰로 읽히지 않게).
  *   3. 둘 다 아니면 null → 함수가 브랜드 공식 홈페이지를 찾는다.
  *
  * 틀리게 판별하면 검색 범위가 엉뚱한 사이트 하나로 좁혀지므로, 애매하면 판별하지 않는 쪽(null)을 택한다.
@@ -25,7 +27,9 @@ export type MallId =
   | 'lotteon'
   | 'ohou'
   | 'ikea'
-  | 'kurly';
+  | 'kurly'
+  | 'zigzag'
+  | 'ably';
 
 export type PurchaseChannel = { domain: string } | { mall: MallId } | null;
 
@@ -45,6 +49,9 @@ const MALL_PHRASES: Partial<Record<MallId, readonly string[]>> = {
   lotteon: ['롯데on', '롯데온', 'lotteon', 'lotte on'],
   ohou: ['오늘의집'],
   kurly: ['마켓컬리', 'kurly', '샛별배송'],
+  // '직진배송'은 지그재그 배송 표기. 영문 'zigzag'·'ably'는 일반 단어(지그재그 무늬, probably)와 겹쳐 넣지 않는다.
+  zigzag: ['지그재그', '직진배송', 'zigzag.kr'],
+  ably: ['에이블리', 'a-bly'],
 };
 
 // 판매처가 아닌 플랫폼(서버 NON_SELLER_DOMAINS 와 같음). 하위 도메인 포함.
@@ -146,18 +153,36 @@ export function scanDomains(ocrText: string): DomainScan {
   return { sellers: [...sellers], sawNonSeller };
 }
 
-/** OCR 원문에 고유 문구가 보이는 몰 id 들. */
-export function findMalls(ocrText: string): MallId[] {
-  const text = ocrText.toLowerCase().replace(/\s+/g, ' ');
+// 몰 문구 비교용: 소문자 + 연속 공백을 한 칸으로
+function foldText(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * OCR 원문에 고유 문구가 보이는 몰 id 들.
+ * exclude(상품명·브랜드)의 글자는 빼고 찾는다 — 상품명에 든 '지그재그'·'올리브영 콜라보' 같은 글자가 몰로 읽히지 않게.
+ */
+export function findMalls(ocrText: string, exclude: readonly (string | null | undefined)[] = []): MallId[] {
+  let text = foldText(ocrText);
+  for (const term of exclude) {
+    const t = term ? foldText(term).trim() : '';
+    if (t.length >= 2) text = text.split(t).join(' ');
+  }
   return (Object.keys(MALL_PHRASES) as MallId[]).filter((id) =>
     (MALL_PHRASES[id] ?? []).some((p) => text.includes(p)),
   );
 }
 
-/** 입구 채널 판별. 확실하지 않으면 null(공식 홈페이지 찾기). */
-export function detectPurchaseChannel(ocrText: string | null | undefined): PurchaseChannel {
+/**
+ * 입구 채널 판별. 확실하지 않으면 null(공식 홈페이지 찾기).
+ * exclude: 정제 결과의 상품명·브랜드(몰 문구를 찾을 때 그 글자는 뺀다).
+ */
+export function detectPurchaseChannel(
+  ocrText: string | null | undefined,
+  exclude: readonly (string | null | undefined)[] = [],
+): PurchaseChannel {
   if (!ocrText) return null;
-  const { sellers, sawNonSeller } = scanDomains(ocrText);
+  const { sellers } = scanDomains(ocrText);
   if (sellers.length === 1) return { domain: sellers[0] };
   if (sellers.length > 1) {
     // 같은 사이트의 다른 하위 도메인이면(shop.brand.com·brand.com) 가장 짧은 이름으로 본다
@@ -165,7 +190,7 @@ export function detectPurchaseChannel(ocrText: string | null | undefined): Purch
     if (sellers.every((d) => hostMatches(d, shortest))) return { domain: shortest };
     return null; // 서로 다른 사이트 — 판별하지 않음
   }
-  if (sawNonSeller) return null; // 포털·블로그·SNS 캡처 — 몰 문구로 넘어가지 않고 공식 홈페이지 찾기
-  const malls = findMalls(ocrText);
+  // 판매처 주소가 없으면 몰 이름·고유 문구로(포털·SNS 주소가 함께 보여도 몰 이름을 따른다)
+  const malls = findMalls(ocrText, exclude);
   return malls.length === 1 ? { mall: malls[0] } : null;
 }
