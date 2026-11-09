@@ -782,12 +782,15 @@ export default function RegisterScreen() {
             </FormRow>
           </FormCard>
 
-          {/* 링크를 찾는 동안만: 저장해도 계속 찾고, 붙으면 알린다(저장 뒤 3분 안·앱이 켜져 있을 때 — attachLinkAfterSave). */}
-          {linkSearching ? (
-            <Text style={styles.linkGuide} accessibilityLiveRegion="polite">
-              지금 저장해도 링크를 계속 찾습니다. 링크가 붙으면 알려 드립니다. 앱은 켜 두세요.
-            </Text>
-          ) : null}
+          {/* 링크를 찾는 동안만 보인다: 저장해도 계속 찾는다(저장 뒤 3분 안·앱이 켜져 있을 때 — attachLinkAfterSave).
+              평소엔 투명하게 자리만 차지해, 문구가 나타나고 사라질 때 아래 메모 칸이 움직이지 않게 한다(추천 문구와 같은 방식). */}
+          <Text
+            style={[styles.linkGuide, !linkSearching && styles.linkGuideHidden]}
+            accessible={linkSearching}
+            accessibilityLiveRegion="polite"
+          >
+            지금 저장해도 링크를 계속 찾습니다. 앱은 켜 두세요.
+          </Text>
 
           {/* 그룹 카드 3: 메모 */}
           <FormCard>
@@ -916,6 +919,7 @@ const styles = StyleSheet.create({
   linkValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.one },
   // 링크 찾는 중 안내(카테고리·링크 카드 바로 아래, 위 간격 축소)
   linkGuide: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one },
+  linkGuideHidden: { opacity: 0 },
   statusText: { fontSize: 13, fontWeight: '500' },
   errorBox: {
     gap: spacing.two,
