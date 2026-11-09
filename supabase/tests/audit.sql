@@ -13,9 +13,10 @@ with
 api_roles(role_name, ord) as (
   values ('anon', 1), ('authenticated', 2), ('service_role', 3)
 ),
+-- MAINTAIN 은 Postgres 17 권한(이 프로젝트는 17)
 table_privs(priv, ord) as (
   values ('SELECT', 1), ('INSERT', 2), ('UPDATE', 3), ('DELETE', 4),
-         ('TRUNCATE', 5), ('REFERENCES', 6), ('TRIGGER', 7)
+         ('TRUNCATE', 5), ('REFERENCES', 6), ('TRIGGER', 7), ('MAINTAIN', 8)
 ),
 -- public·ops 의 테이블·뷰
 rels as (
@@ -32,7 +33,7 @@ funcs as (
   select p.oid, n.nspname as schema_name,
          format('%I.%I(%s)', n.nspname, p.proname, pg_get_function_identity_arguments(p.oid)) as sig,
          p.prosecdef, p.proconfig, p.proacl, pg_get_userbyid(p.proowner) as owner,
-         p.prorettype = 'trigger'::regtype as is_trigger,
+         p.prorettype::regtype::text as rettype,
          (select e.extname
             from pg_depend d
             join pg_extension e on e.oid = d.refobjid
@@ -123,11 +124,11 @@ report(sort1, sort2, check_id, target, item, value) as (
                 case when f.ext is not null then ' | ext=' || f.ext else '' end)
   from funcs f
 
-  -- ── B2. 함수의 security definer·트리거 여부와 search_path 설정 ───────────────
+  -- ── B2. 함수의 security definer·반환형(trigger·event_trigger 등)과 search_path 설정 ─
   union all
   select 70, f.sig, 'B2', f.sig, 'search_path',
-         format('definer=%s trigger=%s config=%s%s',
-                f.prosecdef, f.is_trigger,
+         format('definer=%s returns=%s config=%s%s',
+                f.prosecdef, f.rettype,
                 coalesce(array_to_string(f.proconfig, ' '), '(없음)'),
                 case when f.ext is not null then ' | ext=' || f.ext else '' end)
   from funcs f
@@ -139,6 +140,14 @@ report(sort1, sort2, check_id, target, item, value) as (
   from rels r
   join pg_trigger t on t.tgrelid = r.oid
   where not t.tgisinternal
+
+  -- B2. 이벤트 트리거(DDL 에 반응 — 전체 DB)
+  union all
+  select 72, e.evtname, 'B2', 'event_trigger:' || e.evtname, 'definition',
+         format('%s → %s enabled=%s tags=%s owner=%s',
+                e.evtevent, e.evtfoid::regprocedure, e.evtenabled,
+                coalesce(array_to_string(e.evttags, ','), '(전체)'), pg_get_userbyid(e.evtowner))
+  from pg_event_trigger e
 
   -- ── C1. 스키마 USAGE — public·ops 와, API 롤이 USAGE 를 가진 스키마 ─────────
   union all
@@ -239,10 +248,11 @@ report(sort1, sort2, check_id, target, item, value) as (
          'D3', 'bucket:item-images',
          'objects:' || coalesce(o.metadata ->> 'mimetype', '(없음)')
              || case when o.name like '%\_thumb.jpg' then ' (thumb)' else ' (원본)' end,
-         format('count=%s max_bytes=%s p99_bytes=%s',
+         format('count=%s max_bytes=%s p99_bytes=%s last_upload_kst=%s',
                 count(*),
                 max((o.metadata ->> 'size')::bigint),
-                percentile_disc(0.99) within group (order by (o.metadata ->> 'size')::bigint))
+                percentile_disc(0.99) within group (order by (o.metadata ->> 'size')::bigint),
+                max((greatest(o.created_at, o.updated_at) at time zone 'Asia/Seoul')::date))
   from storage.objects o
   where o.bucket_id = 'item-images'
   group by 2, 5

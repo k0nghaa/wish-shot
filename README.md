@@ -62,7 +62,9 @@ $env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wi
 `0004_internal_users.sql`은 지표 집계에서 뺄 개발자 uid 목록 테이블(`ops.internal_users`, API 비노출)입니다 —
 uid는 git에 두지 않고 SQL Editor에서 직접 insert하며, `supabase/tests/metrics.sql`이 이를 참조합니다.
 `0005_parse_quota.sql`은 AI 정제 함수의 요청 한도 카운터와 실패 기록입니다(`ops` 스키마, 함수는 service_role 전용 —
-아래 "요청 한도·입력 상한·실패 기록"). `0007_purchase_link_quota.sql`은 구매처 링크 찾기 함수의 전용 요청 한도 카운터와
+아래 "요청 한도·입력 상한·실패 기록"). `0006_permissions_and_retention.sql`은 권한 정리(public 테이블의 CRUD 외 권한 회수,
+새 함수 기본 실행 권한 끔), `item-images` 업로드 제한(3MB·JPEG), 위시 삭제 시 분석 로그의 원문·AI 결과 비우기(개발자 계정 제외)입니다.
+`0007_purchase_link_quota.sql`은 구매처 링크 찾기 함수의 전용 요청 한도 카운터와
 실패 기록입니다(같은 구조 — 아래 "구매처 링크 찾기 Edge Function"). 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/`에 함께 둡니다.
 
 **마이그레이션 적용** (둘 중 하나):
@@ -83,7 +85,7 @@ npx tsc --noEmit
 ```
 
 - 스키마 변경은 기존 파일을 고치지 말고 **새 `000N_*.sql`** 을 추가합니다.
-- RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다.
+- RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다(테스트 4·5는 블록 단위 — 끝에 "통과"가 나오면 통과, 시험 데이터는 블록 안에서 되돌림).
 - RLS·GRANT·함수 권한·Storage 정책 점검은 `supabase/tests/audit.sql`(읽기 전용 한 문장 — 결과가 표 하나로 나옴)을 같은 방식으로 실행합니다.
 - 테스트 지표(링크 보유율·AI 정제 상태 분포·필드 수정률·추천 채택률)는 `supabase/tests/metrics.sql` 을 같은 방식으로 실행합니다(블록 상단 코호트 값 기입 후 — Phase 10).
 - 요청 한도 검증은 `supabase/tests/quota.sql`(권한 확인 + 트랜잭션 안 동작 시험 후 rollback), AI 정제 실패 원인 조회는 `supabase/tests/parse_failures.sql` 을 같은 방식으로 실행합니다.
