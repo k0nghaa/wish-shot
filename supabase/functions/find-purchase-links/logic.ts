@@ -236,17 +236,32 @@ export function webRiskVerdict(body: unknown): 'safe' | 'unsafe' | 'unknown' {
   return 'safe';
 }
 
+// 한글이 든 대괄호 표기([오늘의집 단독]·【무료배송】 — 안쪽 40자까지)를 떼고 공백을 정리한다. 다 떼서 비면 원래 이름(공백 정리만).
+// 한글이 없는 대괄호([MTJV3KH/A] 같은 모델 코드)는 남긴다.
+const BRACKET_TAG_RE = /\[([^[\]]{0,40})\]|【([^【】]{0,40})】/g;
+export function stripBracketTags(name: string): string {
+  const original = name.trim().replace(/\s+/g, ' ');
+  const stripped = original
+    .replace(BRACKET_TAG_RE, (all, a: string | undefined, b: string | undefined) => (/[가-힣]/.test(a ?? b ?? '') ? ' ' : all))
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped || original;
+}
+
 // 상품 페이지를 못 찾았을 때 넣는 그 몰 검색 결과 링크(사람 결정 2026-11-09 — "링크가 들어가는 게 더 중요").
 // 채널이 사전의 몰이고 그 몰의 검색 주소 형식이 확인돼 있을 때만. 도메인은 사전에 고정하고 검색어만
 // URL 인코딩해 넣는다(사용자 입력이 호스트·경로를 바꿀 수 없다). 검색어 = 브랜드 + 상품명(상품명이 이미
-// 브랜드로 시작하면 브랜드를 다시 붙이지 않는다).
+// 브랜드로 시작하면 브랜드를 다시 붙이지 않는다). 상품명의 한글 대괄호 표기([오늘의집 단독]·[추가쿠폰] 등)는 몰 검색에서
+// 결과를 없애는 홍보 문구라 뗀다(떼고 나서 비면 원래 이름). 브랜드가 그 몰의 행사 이름(notBrands)이면 붙이지 않는다.
 export function mallSearchLink(channel: Channel, productName: string, brand: string | null): Link | null {
   if (channel.via === 'none' || !channel.mall) return null;
   const mall = MALLS[channel.mall] as Mall;
   if (!mall.search) return null;
-  const name = productName.trim();
+  const name = stripBracketTags(productName);
   if (!name) return null;
-  const b = brand?.trim() ?? '';
+  // 정제가 몰 행사 이름을 브랜드로 뽑았으면 붙이지 않는다(검색 결과가 비지 않게)
+  const isEvent = brand != null && (mall.notBrands ?? []).some((n) => normalizeBrand(n) === normalizeBrand(brand));
+  const b = isEvent ? '' : brand?.trim() ?? '';
   const query = b && !normalizeBrand(name).startsWith(normalizeBrand(b)) ? `${b} ${name}` : name;
   let u: URL;
   try {

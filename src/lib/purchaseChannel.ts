@@ -9,6 +9,7 @@
  *   2. 판매처 주소는 없지만 몰 이름·고유 문구가 보임(몰 앱 캡처, 또는 SNS 캡션의 "에이블리에서 샀어요") → { mall }.
  *      포털·SNS 주소가 함께 보여도 몰 이름을 따른다. 여러 몰이 함께 보이면 null.
  *      상품명·브랜드 글자는 빼고 찾는다('지그재그 패턴 니트' 같은 상품명이 몰로 읽히지 않게).
+ *      단 몰 단독 표기·행사 이름·공식 SNS 계정('[오늘의집 단독]'·'이구위크'·'29cm.official' 등)은 원문 전체에서 찾는다.
  *   3. 둘 다 아니면 null → 함수가 브랜드 공식 홈페이지를 찾는다.
  *
  * 틀리게 판별하면 검색 범위가 엉뚱한 사이트 하나로 좁혀지므로, 애매하면 판별하지 않는 쪽(null)을 택한다.
@@ -56,7 +57,7 @@ export function mallLabel(mall: string | undefined): string {
 
 // 몰 고유 문구. 다른 맥락에도 흔한 글자는 넣지 않는다(지시서 '입구 채널 사전'):
 //   결제 수단 '네이버페이'·일반 표현 '브랜드스토어'·치수와 겹치는 '29cm'·'IKEA 호환' 같은 'IKEA'·'컬리수' 같은 '컬리'.
-//   29CM·이케아는 주소(29cm.co.kr·ikea.com)로만 판별한다.
+//   이케아는 주소(ikea.com)로만, 29CM 은 주소(29cm.co.kr)와 아래 MALL_STRONG_PHRASES 로만 판별한다.
 // 비교: 원문을 소문자로 바꾸고 연속 공백을 한 칸으로 줄인 뒤, 문구가 그대로 들어 있는지 본다(공백을 지우지 않는다 —
 //   '오늘의 집밥'이 '오늘의집'으로 읽히지 않게).
 const MALL_PHRASES: Partial<Record<MallId, readonly string[]>> = {
@@ -73,6 +74,19 @@ const MALL_PHRASES: Partial<Record<MallId, readonly string[]>> = {
   // '직진배송'은 지그재그 배송 표기. 영문 'zigzag'·'ably'는 일반 단어(지그재그 무늬, probably)와 겹쳐 넣지 않는다.
   zigzag: ['지그재그', '직진배송', 'zigzag.kr'],
   ably: ['에이블리', 'a-bly'],
+};
+
+// 상품명·브랜드에 들어 있어도 그 몰로 보는 문구 — 몰 단독 표기·몰 행사 이름·몰 공식 SNS 계정처럼 그 몰에서 판다는 뜻이
+// 확실한 것만(브랜드 이름은 넣지 않는다 — 예: '무신사 스탠다드'는 다른 몰 캡처에도 브랜드로 나온다). 상품명이
+// '[오늘의집 단독] 토리 서랍장'이면 위 문구는 상품명 글자를 빼고 찾느라 놓치므로 따로 둔다. 29CM 은 치수 표기('29cm')와
+// 겹쳐 위 사전에 문구가 없고 여기서만 판별한다 — 단독 표기도 '[29cm 단독'처럼 대괄호로 시작할 때만('가로 29cm 단독 설치' 제외).
+//   근거(2026-11-10): '[오늘의집 단독]' — 정답셋 오늘의집 앱 캡처. '무신사 단독'·'[29cm 단독' — 같은 몰 단독 표기 형식.
+//   '29cm.official' — 정답셋 29CM 인스타 게시물 캡처. '이구패션위크' — Phase 21 개발용 앱 시험의 29CM 앱 캡처(정제가 브랜드로
+//   뽑아 상품명·브랜드 글자를 빼고 찾는 위 사전에 넣으면 놓친다). '이구위크' — 29CM 정기 행사 이름.
+const MALL_STRONG_PHRASES: Partial<Record<MallId, readonly string[]>> = {
+  musinsa: ['무신사 단독'],
+  '29cm': ['[29cm 단독', '29cm.official', '이구위크', '이구패션위크'],
+  ohou: ['오늘의집 단독'],
 };
 
 // 판매처가 아닌 플랫폼(서버 NON_SELLER_DOMAINS 와 같음). 하위 도메인 포함.
@@ -182,15 +196,19 @@ function foldText(s: string): string {
 /**
  * OCR 원문에 고유 문구가 보이는 몰 id 들.
  * exclude(상품명·브랜드)의 글자는 빼고 찾는다 — 상품명에 든 '지그재그'·'올리브영 콜라보' 같은 글자가 몰로 읽히지 않게.
+ * 단 MALL_STRONG_PHRASES(몰 단독 표기·행사 이름 등)는 원문 전체에서 찾는다.
  */
 export function findMalls(ocrText: string, exclude: readonly (string | null | undefined)[] = []): MallId[] {
-  let text = foldText(ocrText);
+  const full = foldText(ocrText);
+  let text = full;
   for (const term of exclude) {
     const t = term ? foldText(term).trim() : '';
     if (t.length >= 2) text = text.split(t).join(' ');
   }
-  return (Object.keys(MALL_PHRASES) as MallId[]).filter((id) =>
-    (MALL_PHRASES[id] ?? []).some((p) => text.includes(p)),
+  return (Object.keys(MALL_LABELS) as MallId[]).filter(
+    (id) =>
+      (MALL_PHRASES[id] ?? []).some((p) => text.includes(p)) ||
+      (MALL_STRONG_PHRASES[id] ?? []).some((p) => full.includes(p)),
   );
 }
 

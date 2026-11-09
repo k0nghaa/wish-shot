@@ -24,6 +24,7 @@ import {
   searchScope,
   siteBase,
   statusVerdict,
+  stripBracketTags,
   googleErrorKind,
   webRiskVerdict,
 } from '../functions/find-purchase-links/logic.ts';
@@ -309,10 +310,70 @@ Deno.test('mallSearchLink: 확인된 몰만, 도메인 고정·검색어 인코�
   // 도메인으로 들어온 쿠팡 채널도 같다
   eq(mallSearchLink({ via: 'domain', domains: ['coupang.com'], mall: 'coupang' }, '비누', null)?.kind, 'search');
   // 검색 주소 형식이 확인되지 않은 몰·채널 없음·몰 아님은 null
-  eq(mallSearchLink({ via: 'mall', domains: ['musinsa.com'], mall: 'musinsa' }, '청바지', '리바이스'), null);
+  eq(mallSearchLink({ via: 'mall', domains: ['wconcept.co.kr'], mall: 'wconcept' }, '청바지', '리바이스'), null);
   eq(mallSearchLink({ via: 'none' }, '청바지', null), null);
   eq(mallSearchLink({ via: 'domain', domains: ['markedly.co.kr'] }, '자켓', null), null);
   eq(mallSearchLink(coupang, '   ', null), null);
+});
+
+Deno.test('mallSearchLink: 무신사·29CM·오늘의집 검색 주소(2026-11-10 확인)', () => {
+  const musinsa = mallSearchLink({ via: 'mall', domains: ['musinsa.com'], mall: 'musinsa' }, '청바지', '리바이스')!;
+  eq(musinsa.url, 'https://www.musinsa.com/search/goods?keyword=%EB%A6%AC%EB%B0%94%EC%9D%B4%EC%8A%A4+%EC%B2%AD%EB%B0%94%EC%A7%80');
+  eq([musinsa.domain, musinsa.kind, musinsa.mall], ['www.musinsa.com', 'search', 'musinsa']);
+
+  const c29 = mallSearchLink({ via: 'mall', domains: ['29cm.co.kr'], mall: '29cm' }, 'HAZE 아이보리', '엄브로')!;
+  eq(new URL(c29.url).origin + new URL(c29.url).pathname, 'https://www.29cm.co.kr/store/search');
+  eq(new URL(c29.url).searchParams.get('keyword'), '엄브로 HAZE 아이보리');
+  eq([c29.domain, c29.kind, c29.mall], ['www.29cm.co.kr', 'search', '29cm']);
+
+  const ohou = mallSearchLink({ via: 'mall', domains: ['ohou.se'], mall: 'ohou' }, '토리 와이드 서랍장', null)!;
+  eq(new URL(ohou.url).origin + new URL(ohou.url).pathname, 'https://ohou.se/productions/feed');
+  eq(new URL(ohou.url).searchParams.get('query'), '토리 와이드 서랍장');
+  eq([ohou.domain, ohou.kind, ohou.mall], ['ohou.se', 'search', 'ohou']);
+
+  // 캡처 주소로 들어온 채널(m.musinsa.com → 무신사)도 같다
+  const viaDomain = resolveChannel('https://m.musinsa.com/products/2009089', null);
+  eq(viaDomain.ok && mallSearchLink(viaDomain.channel, '가디건', '메종키츠네')?.domain, 'www.musinsa.com');
+
+  // 세 몰 모두 사전의 몰이라 봇 차단(403)도 접속 확인을 통과한다(오늘의집은 봇 접속에 403)
+  eq(['www.musinsa.com', 'www.29cm.co.kr', 'ohou.se'].map(isTrustedMallHost), [true, true, true]);
+  // 무신사·29CM 검색 주소의 같은 사이트 안 리다이렉트(실제 응답)는 따라간다
+  eq(
+    checkRedirect('/store/search?keyword=x&sort=RECOMMENDED', 'https://www.29cm.co.kr/store/search?keyword=x', siteBase('www.29cm.co.kr')),
+    'https://www.29cm.co.kr/store/search?keyword=x&sort=RECOMMENDED',
+  );
+  eq(
+    checkRedirect('https://www.musinsa.com/search/goods?keyword=x&gf=A', 'https://www.musinsa.com/search/goods?keyword=x', siteBase('www.musinsa.com')),
+    'https://www.musinsa.com/search/goods?keyword=x&gf=A',
+  );
+});
+
+Deno.test('mallSearchLink: 상품명의 대괄호 홍보 표기는 검색어에서 뗀다', () => {
+  const ohou: Channel = { via: 'mall', domains: ['ohou.se'], mall: 'ohou' };
+  const q = (name: string, brand: string | null = null) =>
+    new URL(mallSearchLink(ohou, name, brand)!.url).searchParams.get('query');
+  eq(q('[오늘의집 단독] 토리 와이드 3단/5단 서랍장'), '토리 와이드 3단/5단 서랍장');
+  eq(q('[추가쿠폰] 에프에프 컬렉티브 모던 패브릭 조명'), '에프에프 컬렉티브 모던 패브릭 조명');
+  eq(q('파노라마 필로우 【무료배송】 (S/SS,Q/K)'), '파노라마 필로우 (S/SS,Q/K)');
+  // 떼고 나서 브랜드로 시작하면 브랜드를 다시 붙이지 않는다
+  eq(q('[단독] 프루웨 파노라마 필로우', '프루웨'), '프루웨 파노라마 필로우');
+  // 대괄호뿐이면 원래 이름
+  eq(q('[오늘의집 단독]'), '[오늘의집 단독]');
+  eq(stripBracketTags('  가   [나]  다  '), '가 다');
+  // 한글이 없는 대괄호(모델 코드 등)는 남긴다
+  eq(stripBracketTags('에어팟 프로 [MTJV3KH/A]'), '에어팟 프로 [MTJV3KH/A]');
+  eq(stripBracketTags('[29CM 단독] 울 코트 [BK]'), '울 코트 [BK]');
+});
+
+Deno.test('mallSearchLink: 정제가 몰 행사 이름을 브랜드로 뽑았으면 검색어에 붙이지 않는다', () => {
+  const c29: Channel = { via: 'mall', domains: ['29cm.co.kr'], mall: '29cm' };
+  const kw = (name: string, brand: string | null) => new URL(mallSearchLink(c29, name, brand)!.url).searchParams.get('keyword');
+  eq(kw('HAZE 아이보리', '이구패션위크'), 'HAZE 아이보리');
+  eq(kw('HAZE 아이보리', '이구 위크'), 'HAZE 아이보리', '정규화해 비교');
+  eq(kw('HAZE 아이보리', '엄브로'), '엄브로 HAZE 아이보리');
+  // 다른 몰에는 적용되지 않는다(그 몰의 행사 이름만)
+  const musinsa: Channel = { via: 'mall', domains: ['musinsa.com'], mall: 'musinsa' };
+  eq(new URL(mallSearchLink(musinsa, '셔츠', '이구위크')!.url).searchParams.get('keyword'), '이구위크 셔츠');
 });
 
 Deno.test('카페24 사이트 안 검색: 주소·검색어·상품 추출', () => {
