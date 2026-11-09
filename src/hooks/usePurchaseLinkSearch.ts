@@ -21,6 +21,7 @@ const ATTACH_WINDOW_MS = 3 * 60_000;
  * - `blockNewRef.current` 가 true 면 새 찾기를 시작하지 않는다(저장이 시작된 뒤 — 결과를 붙일 곳이 없다).
  * - 입구 채널은 OCR 원문으로 기기에서 판별하고, 원문은 보내지 않는다(@/lib/purchaseChannel).
  * - `link`: 현재 조합으로 찾은 링크(없으면 null). `searching`: 현재 조합을 찾는 중.
+ *   `notFound`: 현재 조합을 찾아 봤는데 링크가 없음(결과 없음·실패·한도·시간 초과 — 링크 칸 자리표시용).
  * - `takeForHandOff()`: 저장 직전에 부른다 — 현재 조합의 찾기를 돌려준다(저장 뒤 이어 받기용).
  *   화면 상태가 바뀌기 전(markSubmitted 전)에 잡아 둬야 한다.
  */
@@ -63,13 +64,14 @@ export function usePurchaseLinkSearch(input: {
   // 찾기를 시작했고(맵에 있음) 아직 결과가 없으면 찾는 중. 렌더 중 ref 를 읽지 않도록 결과 유무로만 판단한다:
   // 시작은 currentKey 가 정해진 직후 effect 에서 일어나므로, 결과가 없으면 찾는 중으로 본다.
   const searching = currentKey !== null && !done;
+  const notFound = done && link === null;
 
   function takeForHandOff(): LinkSearch | null {
     const key = currentKeyRef.current;
     return key ? (searchesRef.current.get(key) ?? null) : null;
   }
 
-  return { link, searching, takeForHandOff };
+  return { link, searching, notFound, takeForHandOff };
 }
 
 /**

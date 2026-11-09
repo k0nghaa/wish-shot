@@ -22,6 +22,9 @@ export const colors = {
   // 배경
   bg: '#FFFFFF', // background — 화면 배경(흰색)
   bgCard: '#F2F2F7', // backgroundGrouped — 카드·그룹 배경
+  // bgCard 의 0% 불투명 — 카드 위 페이드 그라데이션 시작색. 'transparent'(투명 검정)로 시작하면 iOS 에서 중간이 회색으로 비친다.
+  // bgCard 값을 바꾸면 RGB 를 함께 바꾼다(colorsDark 도 같다).
+  bgCardClear: 'rgba(242,242,247,0)',
   placeholder: '#D1D1D6', // 이미지 로딩 전 타일
 
   // 그레이 뉴트럴
@@ -53,6 +56,7 @@ export const colorsDark: Record<ColorToken, string> = {
   accent: '#A83A4E', // wine (Dark)
   bg: '#000000',
   bgCard: '#1C1C1E',
+  bgCardClear: 'rgba(28,28,30,0)',
   placeholder: '#3A3A3C',
   silver: '#38383A', // separator (Dark)
   silverDark: '#636366', // inactive (Dark)

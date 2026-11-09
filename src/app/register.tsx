@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
-import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
+import { DisclosureRow, FormBlock, FormCard, FormLineInput, FormRow, formInput } from '@/components/FormField';
 import { RegisterCoachmarkTour } from '@/components/Onboarding/RegisterCoachmarkTour';
 import { useOnboardingTarget, type Measurable } from '@/components/Onboarding/onboardingTarget';
 import { ImageZoomModal } from '@/components/ImageZoomModal';
@@ -33,7 +33,6 @@ import { attachLinkAfterSave, usePurchaseLinkSearch } from '@/hooks/usePurchaseL
 import { ensureFileReady, ImageNotReadyError, logImageDiag, readImageBytes } from '@/lib/imageBytes';
 import { compressForUpload, makeThumbnail } from '@/lib/imageResize';
 import { normalizeName } from '@/lib/normalize';
-import { mallLabel } from '@/lib/purchaseChannel';
 import { canOfferAlbumDelete, deletePhotoAsset, getRecentPhotoAsset } from '@/lib/photoLibrary';
 import {
   createAnalysisLog,
@@ -275,11 +274,14 @@ export default function RegisterScreen() {
     normalizeName(brand, productName) === normalizeName(aiResult.brand, aiResult.productName);
   const sourceLink = sourceLinkEdit ?? (linkMatchesForm ? purchase.link?.url : undefined) ?? '';
   const linkSearching = linkMatchesForm && purchase.searching && sourceLink === '';
+  // 자동 찾기가 끝났는데 링크가 없고 칸을 손대지 않았으면 직접 입력을 안내한다(자리표시).
+  const linkNotFound = sourceLinkEdit === null && linkMatchesForm && purchase.notFound;
+  const linkPlaceholder = linkSearching ? '링크 찾는 중…' : linkNotFound ? '링크를 직접 입력하세요' : 'https://';
+  // AI가 채운 값인지(사용자가 손대지 않음) — autofill_edited 계측에만 쓴다(화면 칩은 없음).
   const aiFilled = {
     productName: productNameEdit === null && !!aiResult?.productName,
     brand: brandEdit === null && !!aiResult?.brand,
     price: priceEdit === null && aiResult?.price != null,
-    link: sourceLinkEdit === null && linkMatchesForm && !!purchase.link,
   };
 
   // 저장 직전에 부른다: 링크 칸이 비어 있고 손대지 않았는데 링크를 찾는 중이면, 저장 뒤 이어 받을 찾기를 잡아 둔다.
@@ -684,12 +686,11 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
-          {/* 그룹 카드 1: 제품명·브랜드·가격·링크 */}
+          {/* 그룹 카드 1: 제품명·브랜드·가격 */}
           <FormCard>
-            <FormRow label="제품명" required ai={aiFilled.productName}>
-              <TextInput
+            <FormRow label="제품명" required>
+              <FormLineInput
                 ref={productNameRef}
-                style={formInput.rowInput}
                 placeholder="제품명"
                 placeholderTextColor={colors.textDisabled}
                 value={productName}
@@ -699,9 +700,8 @@ export default function RegisterScreen() {
                 }}
               />
             </FormRow>
-            <FormRow label="브랜드" ai={aiFilled.brand}>
-              <TextInput
-                style={formInput.rowInput}
+            <FormRow label="브랜드">
+              <FormLineInput
                 placeholder="브랜드명"
                 placeholderTextColor={colors.textDisabled}
                 value={brand}
@@ -711,9 +711,8 @@ export default function RegisterScreen() {
                 }}
               />
             </FormRow>
-            <FormRow label="가격" ai={aiFilled.price}>
-              <TextInput
-                style={formInput.rowInput}
+            <FormRow label="가격">
+              <FormLineInput
                 placeholder="₩ 0"
                 placeholderTextColor={colors.textDisabled}
                 keyboardType="number-pad"
@@ -724,14 +723,27 @@ export default function RegisterScreen() {
                 }}
               />
             </FormRow>
-            <FormRow label="링크" ai={aiFilled.link}>
+          </FormCard>
+
+          {/* 추천 문구는 항상 렌더하고 추천이 없을 땐 투명 처리 — 카테고리 카드 위치를 고정(점프 방지). */}
+          <Text
+            style={[styles.suggestHint, !categoryIsSuggested && styles.suggestHintHidden]}
+            accessible={categoryIsSuggested}
+            accessibilityLabel="AI가 추천한 카테고리"
+          >
+            AI가 추천한 카테고리입니다. 바꾸려면 눌러 선택하세요.
+          </Text>
+
+          {/* 그룹 카드 2: 카테고리·링크 — 링크는 필수 입력 묶음(카드 1)에서 뺐다 */}
+          <FormCard>
+            <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
+            <FormRow label="링크">
               <View style={styles.linkValue}>
                 {linkSearching ? (
                   <ActivityIndicator size="small" color={colors.textSub} style={styles.statusSpinner} />
                 ) : null}
-                <TextInput
-                  style={formInput.rowInput}
-                  placeholder={linkSearching ? '링크 찾는 중…' : 'https://'}
+                <FormLineInput
+                  placeholder={linkPlaceholder}
                   placeholderTextColor={colors.textDisabled}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -745,27 +757,15 @@ export default function RegisterScreen() {
             </FormRow>
           </FormCard>
 
-          {/* 상품 페이지를 못 찾아 몰 검색 결과 링크를 넣은 경우 — 상품 링크와 구분해 알린다 */}
-          {aiFilled.link && purchase.link?.kind === 'search' ? (
-            <Text style={styles.linkHint}>
-              상품 페이지를 찾지 못해{' '}
-              {purchase.link.mall ? mallLabel(purchase.link.mall) : purchase.link.domain.replace(/^www\./, '')} 검색
-              결과로 연결합니다.
+          {/* 링크를 찾는 동안만: 저장해도 계속 찾고, 붙으면 알린다(저장 뒤 3분 안·앱이 켜져 있을 때 — attachLinkAfterSave). */}
+          {linkSearching ? (
+            <Text style={styles.linkGuide} accessibilityLiveRegion="polite">
+              지금 저장해도 링크를 계속 찾습니다. 링크가 붙으면 알려 드립니다. 앱은 켜 두세요.
             </Text>
           ) : null}
 
-          {/* 추천 문구는 항상 렌더하고 추천이 없을 땐 투명 처리 — 폴더 섹션 위치를 고정(점프 방지). */}
-          <Text
-            style={[styles.suggestHint, !categoryIsSuggested && styles.suggestHintHidden]}
-            accessible={categoryIsSuggested}
-            accessibilityLabel="AI가 추천한 카테고리"
-          >
-            AI가 추천한 카테고리입니다. 바꾸려면 눌러 선택하세요.
-          </Text>
-
-          {/* 그룹 카드 2: 폴더·메모 */}
+          {/* 그룹 카드 3: 메모 */}
           <FormCard>
-            <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
             <FormBlock label="메모">
               <TextInput
                 style={formInput.memo}
@@ -887,10 +887,10 @@ const styles = StyleSheet.create({
   },
   // 좁은 공간에 맞춰 스피너를 살짝 축소(약 -2px).
   statusSpinner: { transform: [{ scale: 0.9 }] },
-  // 링크 칸: '찾는 중' 스피너 + 입력(값은 우측 정렬)
+  // 링크 칸: '찾는 중' 스피너 + 한 줄 입력(남은 폭)
   linkValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.one },
-  // 몰 검색 결과 링크 안내(카드 바로 아래, 위 간격 축소)
-  linkHint: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one },
+  // 링크 찾는 중 안내(카테고리·링크 카드 바로 아래, 위 간격 축소)
+  linkGuide: { fontSize: 13, color: colors.textSub, marginTop: -spacing.two, paddingHorizontal: spacing.one },
   statusText: { fontSize: 13, fontWeight: '500' },
   errorBox: {
     gap: spacing.two,

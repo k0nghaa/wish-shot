@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { ImageZoomModal } from '@/components/ImageZoomModal';
-import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
+import { DisclosureRow, FormBlock, FormCard, FormLineInput, FormRow, formInput } from '@/components/FormField';
 import { TagInput } from '@/components/TagInput';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
@@ -239,11 +239,10 @@ export default function ItemEditScreen() {
               )}
             </TouchableOpacity>
 
-            {/* 그룹 카드 1: 제품명·브랜드·가격·링크 */}
+            {/* 그룹 카드 1: 제품명·브랜드·가격 (등록 폼과 같은 순서) */}
             <FormCard>
               <FormRow label="제품명" required>
-                <TextInput
-                  style={formInput.rowInput}
+                <FormLineInput
                   placeholder="제품명"
                   placeholderTextColor={colors.textDisabled}
                   value={productName}
@@ -251,8 +250,7 @@ export default function ItemEditScreen() {
                 />
               </FormRow>
               <FormRow label="브랜드">
-                <TextInput
-                  style={formInput.rowInput}
+                <FormLineInput
                   placeholder="브랜드명"
                   placeholderTextColor={colors.textDisabled}
                   value={brand}
@@ -260,8 +258,7 @@ export default function ItemEditScreen() {
                 />
               </FormRow>
               <FormRow label="가격">
-                <TextInput
-                  style={formInput.rowInput}
+                <FormLineInput
                   placeholder="₩ 0"
                   placeholderTextColor={colors.textDisabled}
                   keyboardType="number-pad"
@@ -269,9 +266,13 @@ export default function ItemEditScreen() {
                   onChangeText={setPrice}
                 />
               </FormRow>
+            </FormCard>
+
+            {/* 그룹 카드 2: 카테고리·링크 */}
+            <FormCard>
+              <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
               <FormRow label="링크">
-                <TextInput
-                  style={formInput.rowInput}
+                <FormLineInput
                   placeholder="https://"
                   placeholderTextColor={colors.textDisabled}
                   autoCapitalize="none"
@@ -283,9 +284,8 @@ export default function ItemEditScreen() {
               </FormRow>
             </FormCard>
 
-            {/* 그룹 카드 2: 폴더·메모 */}
+            {/* 그룹 카드 3: 메모 */}
             <FormCard>
-              <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
               <FormBlock label="메모">
                 <TextInput
                   style={formInput.memo}
