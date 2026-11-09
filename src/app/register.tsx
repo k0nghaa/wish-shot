@@ -127,7 +127,7 @@ export default function RegisterScreen() {
   const setImageBoxRef = useCallback((n: Measurable | null) => registerTarget('register.imageBox', n), [registerTarget]);
   const setRecentRef = useCallback((n: Measurable | null) => registerTarget('register.recentPhoto', n), [registerTarget]);
 
-  // 온보딩 투어 종료: 파라미터를 내려 코치마크를 닫고 홈으로 돌아간다(폼은 온보딩이 열었던 것).
+  // 온보딩 투어 종료: 파라미터를 내려 코치마크를 닫고 아래 탭(전체)으로 돌아간다(폼은 온보딩이 열었던 것).
   const endOnboardingTour = useCallback(() => {
     router.setParams({ onboarding: '' });
     if (router.canGoBack()) router.back();

@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -7,10 +7,12 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
 import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
+import { ShareIntentHandler } from '@/components/ShareIntentHandler';
 import { colors } from '@/constants/theme';
 import { identifyUser, initAnalytics, installJsErrorCapture } from '@/lib/analytics';
 import { initMonitoring, wrapRoot } from '@/lib/monitoring';
 import { hydrateSignedUrlCache, signInAnonymouslyIfNeeded } from '@/lib/queries';
+import { wasLaunchedByShare } from '@/lib/shareIntent';
 import { supabase } from '@/lib/supabase';
 
 // 오류·크래시 수집(Sentry): 모듈 최상단에서 가장 먼저 초기화한다. DSN 이 없거나 __DEV__ 면 no-op.
@@ -18,19 +20,13 @@ import { supabase } from '@/lib/supabase';
 // (PostHog app_error → Sentry → RN 기본 처리(redbox·크래시) 순).
 initMonitoring();
 
-// Phase 1: 루트 레이아웃.
-// - ShareIntentProvider: iOS 공유 시트 수신 (Step 4)
-// - AuthGate: 세션 부트스트랩 (Phase 5 Step 6 — 익명 로그인, 로그인 벽 없음)
+// 루트 레이아웃.
+// - ShareIntentProvider: iOS 공유 시트 수신. 받은 공유는 AuthGate 안의 ShareIntentHandler 가 처리한다
+//   (화면 이동도 처리기가 직접 한다 — reset 때 화면을 옮기는 onResetShareIntent 는 두지 않는다).
+// - AuthGate: 세션 부트스트랩 (익명 로그인, 로그인 벽 없음)
 function RootLayout() {
-  const router = useRouter();
   return (
-    <ShareIntentProvider
-      options={{
-        debug: false,
-        resetOnBackground: true,
-        onResetShareIntent: () => router.replace('/'),
-      }}
-    >
+    <ShareIntentProvider options={{ debug: false, resetOnBackground: true }}>
       <AuthGate />
     </ShareIntentProvider>
   );
@@ -99,7 +95,7 @@ function AuthGate() {
   }
 
   return (
-    // OnboardingTargetProvider: 코치마크 스포트라이트 대상(예: 홈의 "카테고리 추가" 알약) 등록소.
+    // OnboardingTargetProvider: 코치마크 스포트라이트 대상(예: 탭 바의 카테고리 버튼) 등록소.
     // 스택과 온보딩 오버레이를 함께 감싸, 화면이 등록한 대상을 오버레이가 측정할 수 있게 한다.
     <OnboardingTargetProvider>
       <Stack screenOptions={{ headerShown: false }}>
@@ -118,14 +114,18 @@ function AuthGate() {
           }}
         />
       </Stack>
+      {/* 공유 시트 처리(앱 전체 1개): 세션 준비 뒤에만 그려지고, 어느 탭·화면에서든 공유 화면을 연다. */}
+      <ShareIntentHandler />
       <OnboardingGate />
     </OnboardingTargetProvider>
   );
 }
 
 // 첫 실행 온보딩 게이트: 최초 마운트 1회만 판단해 오버레이를 띄운다.
-// - 공유 인텐트로 열렸으면 온보딩을 건너뛴다(인텐트 처리 우선). 플래그를 세우지 않아 다음 일반 실행에서 노출.
+// - 공유로 열렸으면 온보딩을 건너뛴다(공유 처리 우선). 플래그를 세우지 않아 다음 일반 실행에서 노출.
+//   공유 데이터는 늦게 도착하므로 첫 URL(공유 딥링크인지)로도 판단한다.
 // - 이미 본 적이 있으면 노출하지 않는다.
+// - 온보딩이 떠 있는 중에 공유가 오면 '봤음' 표시 없이 닫는다(공유 화면이 온보딩 모달에 가리지 않게).
 function OnboardingGate() {
   const { hasShareIntent } = useShareIntentContext();
   const [visible, setVisible] = useState(false);
@@ -133,7 +133,7 @@ function OnboardingGate() {
 
   useEffect(() => {
     if (decided.current) return;
-    // 인텐트로 진입한 세션이면 이번엔 스킵(다음 실행에 노출).
+    // 공유 값이 이미 와 있으면 이번엔 스킵(다음 실행에 노출).
     if (hasShareIntent) {
       decided.current = true;
       return;
@@ -141,15 +141,18 @@ function OnboardingGate() {
     let cancelled = false;
     (async () => {
       const seen = await hasSeenOnboarding();
-      // 판단 사이에 인텐트가 도착했거나 언마운트됐으면 스킵.
-      if (cancelled || decided.current || hasShareIntent) return;
+      // 판단 사이에 공유가 도착했거나(effect 정리) 언마운트됐으면 스킵.
+      if (cancelled || decided.current) return;
       decided.current = true;
-      if (!seen) setVisible(true);
+      if (!seen && !wasLaunchedByShare()) setVisible(true);
     })();
     return () => {
       cancelled = true;
     };
   }, [hasShareIntent]);
+
+  // 온보딩 중 공유 도착 → 닫기(렌더 중 상태 조정 — 이 컴포넌트 자신의 상태만 바꾼다).
+  if (visible && hasShareIntent) setVisible(false);
 
   if (!visible) return null;
   return (

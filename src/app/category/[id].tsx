@@ -35,10 +35,11 @@ export default function CategoryItemsScreen() {
 
   const load = useCallback(async () => {
     try {
-      // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 위시리스트 목록으로 돌아간다.
+      // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 카테고리 탭으로 돌아간다.
+      // dismissTo: 아래에 있는 탭 그룹까지 닫고 카테고리 탭으로(replace 는 탭 그룹을 하나 더 쌓는다).
       const cats = await listCategories().catch(() => [] as Category[]);
       if (!isUncat && !cats.some((c) => c.id === id)) {
-        router.replace('/');
+        router.dismissTo('/categories');
         return;
       }
       const list = await listItemsByCategory(isUncat ? null : id);

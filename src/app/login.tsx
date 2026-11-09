@@ -41,7 +41,7 @@ export default function LoginScreen() {
       setError('이메일 또는 비밀번호를 확인하세요.');
       return;
     }
-    // 로그인 성공 → 홈으로. AuthGate 는 /login 을 자동 이동시키지 않으므로 직접 이동한다.
+    // 로그인 성공 → 전체 탭(/)으로. AuthGate 는 /login 을 자동 이동시키지 않으므로 직접 이동한다.
     router.replace('/');
   }
 

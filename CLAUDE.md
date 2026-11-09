@@ -19,6 +19,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - Phase 14 작업 지시·결과: `docs/phases/phase-14-sentry-and-store-metadata.md` (Sentry 오류·크래시 수집 · App Store 메타데이터 · 개발용 앱 분리 · 1.0.2)
 - Phase 17 작업 지시·결과: `docs/phases/phase-17-price-accuracy.md` (가격 정확도 — 중고거래 가격 규칙 채택 · 좋아요 수 오추출 재현과 프롬프트 수정 미채택 · 프롬프트 시도 비교 부록)
 - Phase 21 작업 지시·결과: `docs/phases/phase-21-purchase-finder.md` (구매처 찾기 — 등록 폼 링크 자동 채움·저장 뒤 붙이기 · 입구 채널 판별 · 카페24 사이트 안 검색 · 몰 검색 결과 링크 · 전용 한도 `0007`)
+- Phase 24 작업 지시·결과: `docs/phases/phase-24-ux-improvements.md` (UX 개선 — 탭 순서·기본 탭 전체 · 공유 시트 처리를 루트로 · 등록·편집 폼 정리 · 알림)
 - 트래킹 플랜(이벤트 택소노미 **정본**): `docs/testing/tracking-plan.md`
 - 디자인 정본: `docs/design/phase-5-visual-spec.md`, `docs/design/color_tokens.md`
 - 개인정보처리방침 원문: `docs/legal/privacy.html` (TestFlight 외부 공개용)
@@ -28,7 +29,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 - **앱**: Expo SDK 57 (React Native 0.86, React 19) + Expo Router + TypeScript. iOS 우선.
 - **백엔드**: 별도 서버 없음. `@supabase/supabase-js`로 Supabase(Postgres + Storage + Auth)를 직접 호출하고, 행 단위 권한은 RLS로 강제. API 키가 필요한 일만 **Supabase Edge Function(Deno)** 으로 처리 — **LLM 정제 `parse-screenshot-text`**(Phase 3)·**구매처 링크 찾기 `find-purchase-links`**(Phase 21).
 - **인증**: **익명 로그인**(Phase 5). 세션이 없으면 `auth.signInAnonymouslyIfNeeded()`가 `supabase.auth.signInAnonymously()`로 기기별 익명 세션을 만든다 → **로그인 벽 없이 즉시 사용**. 세션은 `@react-native-async-storage/async-storage`에 저장 → 재시작 후 유지, RLS가 익명 세션의 `auth.uid()`로 행 격리(익명도 `authenticated` 롤이라 기존 GRANT·정책 그대로 적용). 대시보드 **Authentication → Anonymous sign-ins 토글 ON**(하단 Save)이 필요하다. 이메일 로그인 라우트(`login.tsx`)는 보존하되 정상 흐름에선 도달하지 않는다(계정 승격은 Phase 6). `signInWithPassword`/`signOut`은 `__DEV__` 왕복 버튼에서만 쓴다.
-- **공유 시트**: `expo-share-intent`(iOS Share Extension, 이미지 1개 수신).
+- **공유 시트**: `expo-share-intent`(iOS Share Extension, 이미지 1개 수신). 받은 공유는 **루트의 공유 처리기**(`ShareIntentHandler`, `_layout.tsx`가 세션 준비 뒤 1개 그림)가 처리한다 — 어느 탭·화면에서든 이미지=등록 폼, URL=전체 탭 링크 저장 모드. 등록·편집 폼이 떠 있으면 새 공유를 열지 먼저 묻는다. `+native-intent.ts`는 앱이 켜져 있을 때 온 공유 딥링크로 화면을 옮기지 않는다(`null` — 이동은 처리기만).
 - **이미지**: `expo-image-picker`(앱 내 사진 선택), `expo-file-system`(선택/공유 이미지 uri → 바이트 읽기, `File.arrayBuffer()`). 둘 다 네이티브.
 - **OCR**: 온디바이스 **Apple Vision**(iOS 내장). 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr/`가 `recognitionLanguages=["ko-KR","en-US"]`로 한국어+영어를 인식. `OcrEngine` 인터페이스(`src/lib/ocr/`) 뒤에 캡슐화해 교체 가능. **엔진 결정**: 지시서의 Google ML Kit 대신 Apple Vision 채택 — iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, 어떤 RN용 ML Kit 래퍼도 Expo SDK 57/New Architecture 호환을 확인하지 못했기 때문. OCR은 온디바이스라 이미지가 서버로 가지 않고, AI 정제엔 **텍스트만** 전송한다. **단, 텍스트가 부족하거나(시트 자동 열림) 사용자가 "제품 영역으로 분석"을 누른 경우, 사용자가 직접 선택한 제품 영역 크롭만 '분석'을 누를 때 전송한다**(NFR-3 개정, Phase 6 — 통이미지·자동 전송 없음, 크롭 미저장. 문구는 Phase 14에서 실제 동작에 맞게 정정).
 - **LLM 정제 + 카테고리 추천(FR-8)**: Edge Function `parse-screenshot-text`(Deno)가 Claude Haiku(`claude-haiku-4-5`)로 OCR 원문을 정제해 `{productName, price, brand, confidence, suggestedCategory}` 반환. 입력에 `categories?: string[]`(사용자 기존 카테고리 이름)을 받으면 그중 하나를 추천(`suggestedCategory`), 없거나 빈 배열이면 `null`(하위호환). 목록 밖 값은 서버·앱 양쪽에서 무시. 구조화 출력(json_schema) 사용. Claude 키는 함수 시크릿에만. **Phase 6**: 입력에 `image?: {base64, mediaType}`(사용자가 선택한 제품 영역 크롭)을 추가로 받는다 — OCR 텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누른 경우, 사용자가 고른 영역만 '분석' 때. 이미지가 있으면 이미지+텍스트로 정제하고 없으면 기존과 바이트 동일(하위호환). 출력 스키마 불변. 크롭 이미지는 서버에서 미저장·미로깅(길이만 기록). **요청 한도·입력 상한·실패 기록**: OCR 텍스트 2,000자·카테고리(프롬프트에 들어가는 JSON 형태) 2,000자를 넘으면 LLM 호출 없이 `400`(`text_too_long`/`categories_too_long`, 자르지 않음). 검증을 통과한 요청만 사용자 시간당 30·하루 100(한국 시간 0시)·전체 하루 300(차단기)으로 세고, 넘으면 `429 {error:'rate_limited', scope:'user'|'global'}` + `Retry-After`(앱은 다른 실패와 같은 E-2 경로). 카운터는 DB 함수 `consume_parse_quota`(`0005`, **service_role 전용** — 앱에서 직접 호출 불가). 카운터 응답이 3초를 넘기면 `503 {error:'quota_unavailable'}`(몰아치기로 한도 우회 방지), 그 밖의 카운터 오류는 호출 허용(fail-open). 로그인 확인 뒤의 실패 응답은 원인을 `ops.parse_failures`에 남긴다(`record_parse_failure` — 사용자·한국 날짜·사유·횟수, 내용 없음, FK 없이 계정이 정리돼도 남음).
@@ -42,22 +43,23 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 ```
 src/
   app/                  # Expo Router 라우트 (파일 기반)
-    _layout.tsx         # ShareIntentProvider + AuthGate(익명 부트스트랩 — 세션 없으면 signInAnonymouslyIfNeeded; 첫 세션 후엔 세션이 잠깐 null이어도 네비게이터 유지). 등록·편집=모달, 상세=세로 풀스크린 모달, info=formSheet(네이티브 반시트). OnboardingTargetProvider(코치마크 대상 등록소)로 스택+오버레이를 감싸고, OnboardingGate가 첫 실행 온보딩을 최초 마운트 1회 판단(공유 인텐트로 열렸으면 스킵=인텐트 우선, 본 뒤엔 미노출) — Phase 7 Batch D
-    (tabs)/             # 하단 알약 탭바 그룹 (Expo Router Tabs + CustomTabBar). 상세·등록·편집·설정·태그는 이 그룹 위 스택으로 push
-      _layout.tsx       # Tabs 레이아웃(기본 탭=index/폴더). tabBar=CustomTabBar(플로팅 알약, JS 전용)
-      index.tsx         # 폴더 홈: 카테고리 2×2 모자이크 카드(개수·대표 4장, 빈 카테고리도 노출)·미분류·설정 진입. 공유 인텐트 소비 → 이미지=/register, URL/웹페이지=/all(링크붙이기 모드) (Phase 7, useIsFocused+ref 재진입 가드). 롱프레스/··· = 폴더 이름변경·삭제
-      all.tsx           # 전체: 모든 위시 3열 정사각 그리드(최신순) + 업로드 FAB + 다중 선택. 링크붙이기 모드(Phase 7, attachLink 파라미터): 배너+새로담기, 타일 탭→편집(링크 프리필). 선택 모드와 상호 배타. (찜 필터·New 배지는 Phase 6)
-      search.tsx        # 검색: "검색 기능 추가 예정" 플레이스홀더 (실제 검색은 Phase 6)
+    _layout.tsx         # ShareIntentProvider + AuthGate(익명 부트스트랩 — 세션 없으면 signInAnonymouslyIfNeeded; 첫 세션 후엔 세션이 잠깐 null이어도 네비게이터 유지). 등록·편집=모달, 상세=세로 풀스크린 모달, info=formSheet(네이티브 반시트). OnboardingTargetProvider(코치마크 대상 등록소)로 스택+오버레이를 감싸고, OnboardingGate가 첫 실행 온보딩을 최초 마운트 1회 판단(공유로 열렸으면 스킵 — 공유 값 또는 첫 URL이 공유 딥링크인지로 판단, 온보딩 중 공유가 오면 '봤음' 표시 없이 닫음, 본 뒤엔 미노출) — Phase 7 Batch D. ShareIntentHandler(공유 시트 처리, 앱 전체 1개 — Phase 24)
+    (tabs)/             # 하단 알약 탭바 그룹 (Expo Router Tabs + CustomTabBar — 카테고리·전체·알림·검색). 상세·등록·편집·설정·태그는 이 그룹 위 스택으로 push
+      _layout.tsx       # Tabs 레이아웃(기본 탭=index/전체 — 앱을 열면 `/` = 전체). tabBar=CustomTabBar(플로팅 알약, JS 전용)
+      index.tsx         # 전체(기본 탭): 모든 위시 3열 정사각 그리드(최신순) + 업로드 FAB + 다중 선택 + 설정 진입. 링크붙이기 모드(Phase 7, attachLink 파라미터 — 공유 처리기가 URL 공유로 엶): 배너+새로담기, 타일 탭→편집(링크 프리필). 선택 모드와 상호 배타
+      categories.tsx    # 카테고리: 카테고리 2×2 모자이크 카드(개수·대표 4장, 빈 카테고리도 노출)·미분류·설정 진입. 롱프레스/··· = 카테고리 이름변경·삭제
+      notifications.tsx # 알림: 저장 뒤 링크를 붙인 기록 등(기기 안). 지금은 빈 화면(Phase 24 — 목록은 알림 저장소와 함께)
+      search.tsx        # 검색: 제품명·브랜드·태그·메모 클라이언트 필터(3열 그리드)
     login.tsx           # 이메일 로그인(익명 도입으로 정상 흐름 미도달; __DEV__ 왕복용). 성공 시 홈 복귀 + 취소 버튼
     register.tsx        # 등록(저장): 이미지 선택/미리보기 + OCR 자동채움("AI가 채움") + 수동 입력 + 폴더 선택·생성·**FR-8 추천 미리선택** + 메모/**태그** + 중복 덮어쓰기 + 개인정보 고지(NFR-3). Phase 7: sourceLink 프리필(링크붙이기 새로담기) + "방금 캡처한 사진 담기"(getRecentPhotoAsset, 탭 시점 권한 요청) + 저장 성공 후 "앨범에서 삭제" 옵션(Batch C, 앱 내 선택 사진(picker·최근사진)의 assetId만·전체 접근 필요·공유 시트 비노출·제한/거부 시 제안 자체 생략). Phase 21: 구매처 링크 자동 채움(링크 찾는 중 표시·몰/사이트 검색 결과 링크 안내) + 저장 뒤 링크 붙이기 안내(닫기·보기)
     settings.tsx        # 설정: 개인정보 안내(NFR-3) 열람 + 지원(의견 보내기 — 지원 메일 mailto, Phase 10 F). (익명이라 로그아웃·계정 섹션 없음.) __DEV__ 전용: 세션 리셋 · 이메일 로그인 왕복 · 온보딩 다시 보기 · 썸네일 백필 · 계측 토글 · 테스트 에러 발생(Phase 10) · 네이티브 크래시 테스트 · 렌더 오류 테스트(Phase 14, Sentry 검증용)
-    category/[id].tsx   # 카테고리(폴더)별 아이템 목록(3열 그리드, 최신순). id='uncategorized'=미분류. 삭제된 카테고리 진입 시 홈으로 리다이렉트
+    category/[id].tsx   # 카테고리(폴더)별 아이템 목록(3열 그리드, 최신순). id='uncategorized'=미분류. 삭제된 카테고리 진입 시 카테고리 탭(`/categories`)으로 리다이렉트
     tag/[name].tsx      # 태그별 모아보기(FR-15a): 그 태그가 달린 아이템만(카테고리 무관, 3열 그리드, 최신순)
     item/[id]/index.tsx # 상세 뷰어(세로 풀스크린 모달): 큰 이미지 탭 → 풀스크린 뷰어(원본 비율·핀치 줌) + 하단 액션바(정보(i)·링크·편집·삭제) + 카테고리 이동
     item/[id]/info.tsx  # 정보(i) 하프시트(M7, expo-router formSheet — 네이티브 반시트): 제품명/브랜드/가격/링크·폴더/메모/태그·담은 시각 + 편집 진입
     item/[id]/edit.tsx  # 편집(FR-14): 제품명/브랜드/가격/링크/메모/태그/폴더 + 이미지 교체. OCR·분석 없음. 중복 시 차단·안내. Phase 7: linkPrefill 파라미터(링크붙이기) — 기존 링크 없으면 프리필, 있으면 교체 확인
-    +native-intent.ts   # 공유 딥링크 → / (홈이 인텐트 처리)
-  components/           # CategoryCard(폴더 모자이크), PhotoTile(그리드 정사각 썸네일), CustomTabBar(플로팅 탭바), TabHeaderLogo(헤더 로고), EmptyState, OverwriteDialog, Thumbnail, FormField(FormCard/FormRow/DisclosureRow/FormBlock), FolderPickerSheet(폴더 선택 반시트 — 키보드 회피·슬라이드업), TagInput, Onboarding/(첫 실행 온보딩 — onboardingStorage[플래그 wishshot.onboardingShown], onboardingTarget[코치마크 대상 등록소·measureInWindow·안전 스킵], CoachmarkSpotlight[react-native-svg 둥근 마스크 스포트라이트·다단계], CardMock[3장 카드 모션 그래픽 — CaptureFlowMock(캡처→편집→공유시트→폼 연결 흐름) + AutoFillMock(AI 분석중→필드 자동 채움) + OrganizeMock(카테고리 그리드 정리)], OnboardingOverlay[카드 캐러셀 reanimated 도트 → 카테고리 코치마크 → 등록 폼 open, safe-area 인셋·reduce-motion 대응], RegisterCoachmarkTour[등록 폼 위 코치마크 2스텝(정사각/알약 구멍+테두리) — 등록 화면 안 절대배치 오버레이, 대상을 오버레이 루트 기준 상대좌표로 보정해 시트 오프셋 제거] — Phase 7 Batch D)
+    +native-intent.ts   # 공유 딥링크: 첫 실행이면 / (전체), 앱이 켜져 있을 때 온 공유면 null(이동 없음 — 공유 처리기가 이동). 그 밖 딥링크는 그대로
+  components/           # CategoryCard(폴더 모자이크), PhotoTile(그리드 정사각 썸네일), CustomTabBar(플로팅 탭바 — 카테고리·전체·알림·검색, 카테고리 버튼은 온보딩 안내 대상), ShareIntentHandler(공유 시트 처리 — 앱 스택 준비 대기·ref 잠금+resetShareIntent로 중복 방지, 같은 공유 3초 안 재수신 무시·폼 작성 중이면 확인(확인창은 1개, 마지막 공유를 엶)·위 화면 닫고 등록 폼/링크 저장 모드), TabHeaderLogo(헤더 로고), EmptyState, OverwriteDialog, Thumbnail, FormField(FormCard/FormRow/DisclosureRow/FormBlock), FolderPickerSheet(폴더 선택 반시트 — 키보드 회피·슬라이드업), TagInput, Onboarding/(첫 실행 온보딩 — onboardingStorage[플래그 wishshot.onboardingShown], onboardingTarget[코치마크 대상 등록소·measureInWindow·안전 스킵], CoachmarkSpotlight[react-native-svg 둥근 마스크 스포트라이트·다단계], CardMock[3장 카드 모션 그래픽 — CaptureFlowMock(캡처→편집→공유시트→폼 연결 흐름) + AutoFillMock(AI 분석중→필드 자동 채움) + OrganizeMock(카테고리 그리드 정리)], OnboardingOverlay[카드 캐러셀 reanimated 도트 → 탭 바 카테고리 버튼 코치마크 → 등록 폼 open, safe-area 인셋·reduce-motion 대응], RegisterCoachmarkTour[등록 폼 위 코치마크 2스텝(정사각/알약 구멍+테두리) — 등록 화면 안 절대배치 오버레이, 대상을 오버레이 루트 기준 상대좌표로 보정해 시트 오프셋 제거] — Phase 7 Batch D)
   constants/
     theme.ts            # 디자인 토큰 (Phase 5 목업 팔레트 — 흰 배경 모노톤, 이름 유지·값 교체) + colorsDark(준비만) + type/spacing/radius/shadow + overlay
     privacy.ts          # 개인정보 안내 문구 단일 소스 — summary(register 최초 고지 모달, 짧은 요약) + sections(설정 화면의 항목별 자세한 안내). 내용을 바꿔 기존 사용자에게 다시 보이려면 register 의 PRIVACY_NOTICE_KEY 를 바꾼다(지금 .v2)
@@ -70,6 +72,7 @@ src/
     monitoring.ts       # 오류·크래시 수집 캡슐화(Phase 14): Sentry 초기화(사용자 내용 거르기·네이티브 자동 기록 끔)·wrapRoot(렌더 오류 경계 + Sentry.wrap)·개발용 크래시 테스트. DSN 미설정·__DEV__(검증 플래그 제외)면 no-op
     normalize.ts        # normalizeName(brand,productName) — 중복 판정 정규화(단일 소스)
     imageBytes.ts       # uri → ArrayBuffer(File.arrayBuffer) + file:// 정규화
+    shareIntent.ts      # 공유 값 판정(순수 함수, Phase 24): isShareIntentUrl(공유 딥링크인지)·wasLaunchedByShare(첫 URL로 공유 실행 판단)·toShareTarget(URL 우선 → 링크 저장 모드, 이미지 → 등록 폼)
     photoLibrary.ts     # 앨범 접근(Phase 7, expo-media-library/legacy, 순수 JS). getRecentPhotoAsset: 최근 사진 1장의 읽을 수 있는 localUri(ph://→file://)+assetId, 적시 권한. deletePhotoAsset(Batch C): 전체 접근 요청→deleteAssetsAsync([assetId]) (OS 확인창 불가피), 반환 'deleted'|'denied'|'error'. canOfferAlbumDelete: 무프롬프트로 제안 여부 판별(미결정 or 전체 접근이면 true, 제한/거부면 false)
     purchaseChannel.ts  # 입구 채널 판별(Phase 21, 순수 함수): OCR 원문 → 판매처 도메인(주소창 줄·강한 근거만, SNS 계정명·끊긴 주소·공용 접미사 거름) 또는 몰 id(몰 고유 문구 사전, 상품명·브랜드 글자 제외). mallLabel(몰 표시 이름)
     emptyCategory.ts    # promptDeleteIfCategoryEmpty — 이동·편집·삭제로 카테고리가 0이 되면 삭제/유지 안내(응답 대기 후 반환)
@@ -160,7 +163,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 
 - **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름변경/삭제), `items`(전체·카테고리별·**태그별 listItemsByTag**/**전체 태그 listAllTags**/단건/생성/**수정 updateItem**/**카테고리 이동 moveItemCategory**/삭제/중복조회), `storage`(업로드/서명URL/배치 서명URL/삭제), `auth`(getCurrentUserId·getCurrentUserEmail·signOut), `errors`(DuplicateItemError·DuplicateCategoryError), `analysisLogs`(분석 로그 기록·item_id 연결 — 실패는 삼켜 저장을 막지 않음), `parse`(parseScreenshotText(text, image?) — Edge Function 호출. 기본은 **텍스트 + 카테고리 이름 목록만** 전송. OCR 텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 고른 **제품 영역 크롭**만 '분석' 때 함께 전송 — Phase 6. 함수가 `429`(요청 한도)·`400`(입력 상한)을 돌려줘도 앱은 다른 실패와 같은 E-2 경로), `purchaseLinks`(findPurchaseLink(productName, brand, channel) — 구매처 링크 찾기 Edge Function 호출, Phase 21. **제품명·브랜드·입구 채널만** 전송, https 링크만 받고, 실패·한도·시간 초과는 던지지 않고 null). 저장 뒤 링크 붙이기는 `items.setSourceLinkIfEmpty`(`source_link`가 비어 있을 때만 바꾸는 조건부 업데이트 — 사용자가 넣은 링크를 덮지 않음). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
 - **편집·이동의 중복 판정.** `updateItem`은 `normalizeName`을 재계산하고, 편집으로 **다른 아이템**과 정규화명이 겹치면 23505 → `DuplicateItemError`로 변환해 화면이 **차단·안내**(덮어쓰기 없음). `moveItemCategory`는 `category_id`만 바꿔(정규화명 불변) 중복 위험이 없다. 카테고리 생성/이름변경 중복은 `DuplicateCategoryError`("동일한 이름의 카테고리가 있어요")로 변환(원본 메시지는 콘솔).
-- **빈 카테고리 표시(Phase 4 UX 결정).** 홈은 개수 0인 카테고리도 노출한다(Phase 2의 "빈 카테고리 비노출" 규칙을 뒤집음 — 삭제 여부를 사용자가 인지하도록). 대신 이동·편집·삭제로 카테고리가 0이 되면 `promptDeleteIfCategoryEmpty`로 삭제/유지를 묻는다.
+- **빈 카테고리 표시(Phase 4 UX 결정).** 카테고리 탭은 개수 0인 카테고리도 노출한다(Phase 2의 "빈 카테고리 비노출" 규칙을 뒤집음 — 삭제 여부를 사용자가 인지하도록). 대신 이동·편집·삭제로 카테고리가 0이 되면 `promptDeleteIfCategoryEmpty`로 삭제/유지를 묻는다.
 - **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`(hooks)로만 다룬다. `analysis_logs`는 Phase 2에서 만든 테이블을 **쓰기만** 한다(스키마 변경 없음). `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문). **위시를 지우면** 외래 키가 `item_id`를 비울 때 트리거(`0006`, `ops.clear_analysis_log_content`)가 그 로그의 `raw_text`·`parsed`를 비우고 상태·시각과 분석 경로 표시(`parsed.source`)만 남긴다. 개발자 계정(`ops.internal_users`)은 건너뛴다(정답셋·재현 사례용) — 측정 기록이 필요하면 개발자 uid가 목록에 있는지 먼저 확인한다.
 - **RLS가 최종 방어선.** 세 테이블 모두 `user_id = (select auth.uid())`로 SELECT/INSERT/UPDATE/DELETE 강제. `anon`은 권한 없음. API 롤(anon·authenticated·service_role)엔 CRUD 외 테이블 권한(TRUNCATE·REFERENCES·TRIGGER·MAINTAIN)이 없다(`0006` — 새 public 테이블에도 자동으로 붙지 않음). 검증 쿼리는 `supabase/tests/rls.sql`, 권한·정책 전체 점검은 `supabase/tests/audit.sql`.
 - **`normalized_name`은 서버 전용 중복 판정 컬럼.** 값 = `normalizeName(brand, product_name)`(NFC·소문자·문자/숫자만). `UNIQUE(user_id, normalized_name)`로 재저장을 하드 차단. 저장·사전조회·수정이 **모두 `src/lib/normalize.ts` 한 곳**을 써야 판정이 일치한다. 화면엔 `product_name`·`brand`만 노출.
@@ -204,9 +207,9 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
        → 링크 칸 자동채움(저장 뒤 도착하면 3분 안·빈 링크에만 붙이고 안내)
 
 [iOS 공유 시트 (URL/웹페이지) — Phase 7]  ※ 스크린샷 원본 URL 자동추출은 불가, 페이지 직접 공유만
-  → 홈이 인텐트 분기 → '전체' 탭 링크붙이기 모드
+  → 루트 공유 처리기가 분기(어느 탭·화면에서든, 폼 작성 중이면 확인) → '전체' 탭 링크붙이기 모드
        ├ 기존 위시 탭 → 편집(링크 프리필) → 저장
        └ 새로 담기 → 등록(링크 프리필 + "방금 캡처한 사진" 제안) → 위 등록 흐름
 ```
 
-Phase 4까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR → 텍스트(+카테고리 이름)만 Edge Function으로 전송해 정제·**카테고리 추천(FR-8)**(**텍스트가 부족하거나 "제품 영역으로 분석"을 누르면 사용자가 고른 제품 영역 크롭만 '분석' 때 전송 — Phase 6**) → 폼 자동채움·추천 미리선택(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). 저장 후에는 **편집·카테고리 이동**, **하단 탭바(전체/폴더/검색)** 이동, **상세 풀스크린 뷰어·정보(i) 하프시트** 열람이 가능하고, **로그인 벽 없이 익명 세션**으로 바로 쓴다(설정=개인정보 열람). **기존 v1 데이터 이관은 범위에서 제외**(archive 보존만). Phase 5는 리스킨·탭바·정보 시트·익명 로그인 모두 **JS/설정 변경**이라 새 네이티브 모듈 없음(브랜딩 아이콘/스플래시 반영 + TestFlight 빌드만 EAS).
+Phase 4까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR → 텍스트(+카테고리 이름)만 Edge Function으로 전송해 정제·**카테고리 추천(FR-8)**(**텍스트가 부족하거나 "제품 영역으로 분석"을 누르면 사용자가 고른 제품 영역 크롭만 '분석' 때 전송 — Phase 6**) → 폼 자동채움·추천 미리선택(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). 저장 후에는 **편집·카테고리 이동**, **하단 탭바(카테고리/전체/알림/검색 — 앱을 열면 전체, Phase 24)** 이동, **상세 풀스크린 뷰어·정보(i) 하프시트** 열람이 가능하고, **로그인 벽 없이 익명 세션**으로 바로 쓴다(설정=개인정보 열람). **기존 v1 데이터 이관은 범위에서 제외**(archive 보존만). Phase 5는 리스킨·탭바·정보 시트·익명 로그인 모두 **JS/설정 변경**이라 새 네이티브 모듈 없음(브랜딩 아이콘/스플래시 반영 + TestFlight 빌드만 EAS).
