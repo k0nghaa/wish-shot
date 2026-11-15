@@ -157,7 +157,7 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 5. **디자인 토큰을 쓴다.** 색상은 `src/constants/theme.ts`의 시맨틱 토큰(`primary`, `accent`, `error`, `textMain`, `textSub`, `textDisabled`, `bgCard`, `silver` 등 — 세이지 그린/테라코타/실버 그레이)만 사용. 컴포넌트에 원시 hex를 직접 쓰지 않는다.
 6. **모르면 만들어내지 않는다.** 패키지 버전·Expo SDK 호환·EAS 설정 필드가 불확실하면 공식 문서를 확인하거나 사람에게 묻는다. 아이폰 설치·공유 시트 동작은 에이전트가 검증할 수 없으므로 "확인해달라"고 명시적으로 요청한다.
 7. **커밋 메시지는 기존 컨벤션**: `feat:`, `fix:`, `chore:`, `docs:`, `style:`, `refactor:`, `test:` + 한국어 요약.
-8. **문서를 현실에 맞춘다.** 구조나 명령어가 바뀌면 이 파일과 `README.md`를 같은 커밋에서 갱신한다.
+8. **문서를 현실에 맞춘다.** 구조나 명령어가 바뀌면 이 파일과 `docs/development.md`(개발 가이드)를 같은 커밋에서 갱신한다. `README.md`는 서비스 소개라 기능·구조가 크게 바뀔 때만 함께 고친다.
 9. **새 테이블엔 GRANT를 명시한다.** 이 Supabase 프로젝트는 `public` 테이블 권한을 자동 부여하지 않는다. 마이그레이션에 `grant select, insert, update, delete on public.<table> to authenticated;`를 직접 쓴다(RLS는 행 필터일 뿐, 테이블 접근은 GRANT가 먼저 통과해야 함). 로그인 전용 데이터는 `anon`에 부여하지 않는다. **함수도 같다** — `0006`부터 postgres가 만드는 새 함수는 기본으로 아무도 실행할 수 없으니, 앱·Edge Function이 부를 함수는 `grant execute on function ... to authenticated`(또는 `service_role`)를 직접 쓴다(트리거 함수는 권한 없이도 발화). `security definer` 함수는 `set search_path = ''`로 고정한다.
 10. **패키지 버전은 임의로 올리지 않는다.** 검증된 현재 버전을 유지한다. `expo`/`expo-router`/`@expo/ui`/`expo-glass-effect`는 정확히 고정하고 `package.json`의 `expo.install.exclude`로 자동 변경을 막았다. `expo-doctor`가 패치 미스매치를 지적해도 임의로 `expo install --fix` 하지 말고, 필요하면 사람에게 묻는다. 새 패키지는 `npx expo install`로 SDK 호환 버전만 추가한다.
 11. **데이터는 데이터 레이어(`src/lib/queries`)로만 접근한다.** 화면에서 `supabase.from(...)`을 직접 부르지 않는다. `user_id`는 앱에서 신뢰하지 말고 RLS가 강제하게 한다(INSERT의 `user_id`는 편의로 채울 뿐).
