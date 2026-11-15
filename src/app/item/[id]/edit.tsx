@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { ImageZoomModal } from '@/components/ImageZoomModal';
-import { DisclosureRow, FormBlock, FormCard, FormRow, formInput } from '@/components/FormField';
+import { DisclosureRow, FormBlock, FormCard, FormLineInput, FormRow, formInput } from '@/components/FormField';
 import { TagInput } from '@/components/TagInput';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
@@ -46,6 +46,14 @@ function parsePrice(text: string): number | null {
 
 export default function ItemEditScreen() {
   const router = useRouter();
+  // 저장이 끝나기 전에 이 폼이 닫혔으면(예: 새 공유를 [지금 열기]) 저장 뒤 이동·안내를 하지 않는다(새로 연 화면을 덮지 않게).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   // linkPrefill: 링크붙이기 모드(기능 1)에서 넘어온 공유 URL. 기존 링크가 없으면 채우고, 있으면 확인 후 교체.
   const { id, linkPrefill } = useLocalSearchParams<{ id: string; linkPrefill?: string }>();
 
@@ -166,6 +174,7 @@ export default function ItemEditScreen() {
         await uploadItemImage(userId, id, bytes, compressed.contentType);
         await uploadItemImageThumb(userId, id, thumbBytes);
       }
+      if (!mountedRef.current) return;
       // 편집으로 카테고리를 옮겨 원래 카테고리가 비었으면 삭제 안내. 비었으면 목록(홈)으로, 아니면 상세로.
       if (categoryId !== initialCategoryId) {
         const fromName = categories.find((c) => c.id === initialCategoryId)?.name;
@@ -239,11 +248,10 @@ export default function ItemEditScreen() {
               )}
             </TouchableOpacity>
 
-            {/* 그룹 카드 1: 제품명·브랜드·가격·링크 */}
+            {/* 그룹 카드 1: 제품명·브랜드·가격 (등록 폼과 같은 순서) */}
             <FormCard>
               <FormRow label="제품명" required>
-                <TextInput
-                  style={formInput.rowInput}
+                <FormLineInput
                   placeholder="제품명"
                   placeholderTextColor={colors.textDisabled}
                   value={productName}
@@ -251,8 +259,7 @@ export default function ItemEditScreen() {
                 />
               </FormRow>
               <FormRow label="브랜드">
-                <TextInput
-                  style={formInput.rowInput}
+                <FormLineInput
                   placeholder="브랜드명"
                   placeholderTextColor={colors.textDisabled}
                   value={brand}
@@ -260,8 +267,7 @@ export default function ItemEditScreen() {
                 />
               </FormRow>
               <FormRow label="가격">
-                <TextInput
-                  style={formInput.rowInput}
+                <FormLineInput
                   placeholder="₩ 0"
                   placeholderTextColor={colors.textDisabled}
                   keyboardType="number-pad"
@@ -269,10 +275,14 @@ export default function ItemEditScreen() {
                   onChangeText={setPrice}
                 />
               </FormRow>
+            </FormCard>
+
+            {/* 그룹 카드 2: 카테고리·링크 */}
+            <FormCard>
+              <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
               <FormRow label="링크">
-                <TextInput
-                  style={formInput.rowInput}
-                  placeholder="https://"
+                <FormLineInput
+                  placeholder="링크를 직접 입력하세요" // 편집 화면은 링크를 자동으로 찾지 않는다 — 빈 칸이면 직접 입력
                   placeholderTextColor={colors.textDisabled}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -283,9 +293,8 @@ export default function ItemEditScreen() {
               </FormRow>
             </FormCard>
 
-            {/* 그룹 카드 2: 폴더·메모 */}
+            {/* 그룹 카드 3: 메모 */}
             <FormCard>
-              <DisclosureRow label="카테고리" value={folderName} onPress={() => setFolderSheet(true)} />
               <FormBlock label="메모">
                 <TextInput
                   style={formInput.memo}

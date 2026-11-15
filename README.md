@@ -9,16 +9,17 @@
 - **앱**: Expo SDK 57 (React Native) + Expo Router + TypeScript, iOS 우선
 - **백엔드**: Supabase (Postgres + Storage + Auth), `@supabase/supabase-js`로 직접 호출 + RLS
 - **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. (이메일 가입/승격은 이후 Phase)
-- **공유 시트**: `expo-share-intent` (iOS Share Extension)
+- **공유 시트**: `expo-share-intent` (iOS Share Extension). 받은 공유는 루트 레이아웃의 공유 처리기(`ShareIntentHandler`)가 어느 탭·화면에서든 처리합니다 — 사진은 등록 폼, URL은 전체 탭 링크 저장 모드. 등록·편집 폼을 작성 중이면 [지금 열기](작성 중인 내용 버림)·[저장 후 열기](폼을 닫으면 이어서 열림) 중에서 고르게 묻습니다
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
-- **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**
+- **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**. 요청 한도(사용자·전체)·입력 크기 상한으로 API 비용 제한
+- **구매처 링크 찾기(Phase 21)**: Supabase Edge Function `find-purchase-links` (Deno) + Claude Haiku 5.5 웹 검색. 등록 폼에서 제품명이 채워지고 링크 칸이 비면 **제품명·브랜드·입구 채널(캡처에 보인 도메인 또는 몰)만** 보내 판매처 상품 페이지 링크를 채웁니다. 주소가 보인 카페24 쇼핑몰은 그 사이트의 검색 페이지를 먼저 읽고, 링크는 Google Web Risk 대조와 접속 확인을 거친 것만 넣습니다. 전용 요청 한도(`0007`)
 - **빌드**: EAS 클라우드 빌드 → TestFlight (Windows PC + Mac 없이 iOS 개발·배포)
 - **계측(Phase 10)**: PostHog (`posthog-react-native`). 커스텀 이벤트 + 자동 라이프사이클 수집, 전부 `src/lib/analytics.ts` 경유. **키 미설정 시 no-op**, `__DEV__` 기본 옵트아웃. 속성은 enum·수치만 — 사진·텍스트 등 콘텐츠 미수집, IP로 추정한 위치 미수집. 1.0.2부터 앱 버전·언어·시간대 자동 수집(`expo-application`·`expo-localization`). 정본: [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - **오류·크래시 수집(Phase 14, 1.0.2)**: Sentry (`@sentry/react-native` 7.11). 오류·크래시만(성능 추적·리플레이·스크린샷 끔), 전부 `src/lib/monitoring.ts` 경유, 사용자 내용·IP·위치 제외. **DSN 미설정 시 no-op**, `__DEV__` 기본 비활성. 소스맵은 EAS Build가 자동 업로드
 - **개발용 앱 분리(Phase 14)**: `APP_VARIANT=development`(EAS development 프로필)면 `app.config.js`가 번들 ID·이름·scheme을 바꿔 `WishShot Dev`로 빌드 — 스토어 앱과 한 기기에 나란히 설치, 별도 익명 계정
 - **디자인**: 흰 배경 + iOS 시스템 그레이 모노톤 리스킨(색 토큰 = `src/constants/theme.ts`)
 
-주요 화면: **하단 알약 탭바(전체·폴더·검색)** · 폴더 홈(2×2 모자이크 카드·설정 진입) · 전체(전체 아이템 3열 그리드) · 등록(OCR 자동채움·카테고리 추천·메모/태그) · **상세 풀스크린 뷰어 + 정보(i) 하프시트**(편집·카테고리 이동·삭제) · 편집 · 설정(개인정보 안내). **로그인 화면 없이 익명 로그인으로 바로 사용.**
+주요 화면: **하단 알약 탭바(카테고리·전체·알림·검색 — 앱을 열면 전체)** · 전체(전체 아이템 3열 그리드·설정 진입) · 카테고리(2×2 모자이크 카드·설정 진입) · 알림(저장 뒤 링크를 붙인 기록) · 검색 · 등록(OCR 자동채움·카테고리 추천·메모/태그) · **상세 풀스크린 뷰어 + 정보(i) 하프시트**(편집·카테고리 이동·삭제) · 편집 · 설정(개인정보 안내). **로그인 화면 없이 익명 로그인으로 바로 사용.**
 
 ## 로컬 실행
 
@@ -60,6 +61,11 @@ $env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wi
 `0003_orphan_images_fn.sql`(고아 이미지 키 열거 함수)에 있습니다(아래 "익명 계정·고아 파일 정리").
 `0004_internal_users.sql`은 지표 집계에서 뺄 개발자 uid 목록 테이블(`ops.internal_users`, API 비노출)입니다 —
 uid는 git에 두지 않고 SQL Editor에서 직접 insert하며, `supabase/tests/metrics.sql`이 이를 참조합니다.
+`0005_parse_quota.sql`은 AI 정제 함수의 요청 한도 카운터와 실패 기록입니다(`ops` 스키마, 함수는 service_role 전용 —
+아래 "요청 한도·입력 상한·실패 기록"). `0006_permissions_and_retention.sql`은 권한 정리(public 테이블의 CRUD 외 권한 회수,
+새 함수 기본 실행 권한 끔), `item-images` 업로드 제한(3MB·JPEG), 위시 삭제 시 분석 로그의 원문·AI 결과 비우기(개발자 계정 제외)입니다.
+`0007_purchase_link_quota.sql`은 구매처 링크 찾기 함수의 전용 요청 한도 카운터와
+실패 기록입니다(같은 구조 — 아래 "구매처 링크 찾기 Edge Function"). 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/`에 함께 둡니다.
 
 **마이그레이션 적용** (둘 중 하나):
 
@@ -79,8 +85,11 @@ npx tsc --noEmit
 ```
 
 - 스키마 변경은 기존 파일을 고치지 말고 **새 `000N_*.sql`** 을 추가합니다.
-- RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다.
+- RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다(테스트 4·5는 블록 단위 — 끝에 "통과"가 나오면 통과, 시험 데이터는 블록 안에서 되돌림).
+- RLS·GRANT·함수 권한·Storage 정책 점검은 `supabase/tests/audit.sql`(읽기 전용 한 문장 — 결과가 표 하나로 나옴)을 같은 방식으로 실행합니다.
 - 테스트 지표(링크 보유율·AI 정제 상태 분포·필드 수정률·추천 채택률)는 `supabase/tests/metrics.sql` 을 같은 방식으로 실행합니다(블록 상단 코호트 값 기입 후 — Phase 10).
+- 요청 한도 검증은 `supabase/tests/quota.sql`(권한 확인 + 트랜잭션 안 동작 시험 후 rollback), AI 정제 실패 원인 조회는 `supabase/tests/parse_failures.sql` 을 같은 방식으로 실행합니다.
+- 요청 한도 실제 동작 시험은 `supabase/tests/parse_quota_live.ts`(Deno, 공개 anon 키만 사용)로 합니다. 사용자 시간당 한도를 시크릿으로 잠시 낮춘 뒤 실행하고 바로 되돌립니다(실행 방법은 파일 상단 주석).
 - `src/types/database.ts` 는 자동 생성 파일이라 직접 수정하지 않습니다.
 
 ## 이미지 저장·전송 (egress 최적화, Phase 9)
@@ -134,9 +143,72 @@ npx supabase functions deploy parse-screenshot-text    # 배포(앱 재빌드와
 deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3
 ```
 
+- **정답셋 정확도 측정**은 `samples/goldset-eval.ts`로 합니다. 사람이 붙인 정답(라벨 규칙: `samples/goldset/LABELING.md`)으로 프롬프트·온도·모델 변형별 가격 정답률을 'N장 중 M장'으로 냅니다. 원문 데이터(`samples/goldset/data/`)와 결과(`samples/goldset/out/`)는 git에 올리지 않습니다. 기준선(Phase 13)과 재측정(Phase 17 — 중고거래 가격 규칙) 결과는 `samples/goldset/REPORT.md`에 숫자와 실패 패턴만 정리합니다. 재측정은 `--out`으로 `samples/goldset/out/` 아래 하위 폴더에 써서 기준선 결과를 덮어쓰지 않습니다.
+
+```bash
+# 키 없이 입력 검증·호출 수만 확인(--dry-run을 빼면 실제 호출)
+deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY \
+  --allow-read=supabase/functions/parse-screenshot-text/samples \
+  --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/out \
+  supabase/functions/parse-screenshot-text/samples/goldset-eval.ts --runs 3 --dry-run
+```
+
+- 홀드아웃은 `samples/goldset-holdout.ts`가 유형마다 25%를 시드 고정으로 지정합니다(`--write`일 때만 `labels.csv`의 `holdout` 열을 씀). 프롬프트를 고칠 때는 홀드아웃을 보지 않고 마지막 확인에만 씁니다.
+
+```bash
+deno run --allow-read=supabase/functions/parse-screenshot-text/samples \
+  --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/data \
+  supabase/functions/parse-screenshot-text/samples/goldset-holdout.ts --write
+```
+
+**요청 한도·입력 상한·실패 기록** (익명 로그인이 열려 있어 공개 키만으로 함수를 부를 수 있으므로 API 비용을 묶는다):
+
+- **입력 상한**: OCR 텍스트 2,000자, 카테고리 목록(프롬프트에 들어가는 JSON 형태) 2,000자. 넘으면 LLM을 부르지 않고
+  `400`(`text_too_long` / `categories_too_long`) — 자르지 않으므로 상한 안의 요청은 Anthropic 요청이 이전과 같습니다.
+- **요청 한도**: 검증을 통과한 요청만 셉니다. 사용자 시간당 30 · 하루 100(한국 시간 0시 기준) · 전체 하루 300(차단기).
+  넘으면 `429` + `{ "error": "rate_limited", "scope": "user" | "global" }` + `Retry-After`(초). 앱은 다른 실패와 같은 수동 입력 경로로 갑니다.
+  카운터는 DB 함수 `consume_parse_quota`(`0005`)이고 **service_role 전용**이라 앱에서 직접 부를 수 없습니다.
+  카운터 응답이 3초를 넘기면 `503`(`quota_unavailable`)으로 거절하고(요청을 한꺼번에 쏟아내 한도를 우회하는 것 방지),
+  그 밖의 카운터 DB 오류면 호출을 허용합니다(fail-open). 이미지 요청은 `PARSE_IMAGE_WEIGHT`(기본 1)만큼 셉니다.
+- **실패 기록**: 로그인 확인 뒤의 실패 응답(입력 오류·한도 초과·LLM 실패)은 원인을 `ops.parse_failures`에 남깁니다
+  (사용자·한국 날짜·사유·횟수, LLM 오류는 Anthropic 상태 코드, 상한 초과는 넘은 길이 — 텍스트·이미지 내용 없음).
+  함수 로그는 Free 플랜에서 1일만 보관되기 때문입니다. 빈 익명 계정이 정리돼도 기록은 남겨, 에러를 만나고
+  저장 없이 떠난 사용자도 집계에 들어갑니다. 조회: `supabase/tests/parse_failures.sql`.
+- **한도 조정**(선택, 미설정이면 위 기본값 — 함수가 요청마다 읽어 재배포 없이 반영):
+
+```bash
+npx supabase secrets set PARSE_LIMIT_USER_HOURLY=30 PARSE_LIMIT_USER_DAILY=100 PARSE_LIMIT_GLOBAL_DAILY=300 PARSE_IMAGE_WEIGHT=1
+```
+
 **OCR 엔진 참고**: 지시서의 Google ML Kit 대신 **Apple Vision**(로컬 모듈 `modules/expo-vision-ocr`)을
 씁니다 — iOS 전용이라 ML Kit iOS 이슈를 피하고 Expo SDK 57/New Architecture 호환 문제도 없습니다.
 이 모듈은 **네이티브라 추가·변경 시 EAS 재빌드**가 필요합니다.
+
+## 구매처 링크 찾기 Edge Function (`find-purchase-links`, Phase 21)
+
+등록 폼에서 AI 정제가 제품명을 채우고 링크 칸이 비어 있으면, 앱이 **제품명·브랜드·입구 채널**만 보내 판매처 링크를 찾습니다.
+입구 채널은 기기에서 OCR 원문으로 판별합니다(`src/lib/purchaseChannel.ts` — 캡처에 보인 판매처 도메인 또는 몰 이름·고유 문구). 원문·이미지는 보내지 않습니다.
+
+1. **요청 한도**: 전용 카운터(`0007`)로 사용자 시간당 10 · 하루 30 + 전체 하루 100. 카운터를 쓸 수 없으면 거절합니다(`503`, fail-closed — 웹 검색 비용이 커서 정제 함수와 다릅니다).
+2. **카페24 사이트 안 검색**: 도메인 채널이고 몰 사전에 없는 곳이면 그 사이트의 `/product/search.html?keyword=`를 읽어 검색 결과 영역의 상품 번호로 상세 주소를 만듭니다.
+3. **웹 검색**: 못 찾았으면 Claude Haiku 5.5 웹 검색으로 그 사이트(채널이 없으면 몰을 뺀 공식 홈페이지) 안의 같은 상품 페이지를 찾고, 구조화 출력으로 **후보 번호만** 고릅니다(주소는 서버가 모은 후보에서만 꺼냄).
+4. **링크 확인**: Google Web Risk 대조 + 접속 확인(https·인증서·같은 사이트 안 리다이렉트·응답 코드). 통과한 것만 넣습니다.
+5. 상품 페이지가 없으면 확인된 몰 검색 주소(지금은 쿠팡·무신사·29CM·오늘의집)나 상품이 검색된 카페24 사이트의 검색 결과 링크를 넣습니다. 사용자에게는 같은 '연결된 링크'라 폼에서 상품 링크와 따로 안내하지 않습니다. 링크를 못 찾으면 링크 칸에 "링크를 직접 입력하세요"를 보입니다.
+6. 결과가 오기 전에 저장하면, 저장 뒤 3분 안에 도착한 링크를 **링크가 비어 있을 때만** 붙이고 흐름을 끊지 않게 알립니다 — 3초 스낵바([보기]), 알림 탭 배지·기록, 타일 좌상단 와인색 점(기기 안에만 저장). 찾는 동안 그 위시 타일은 약간 흐리고, 못 찾으면 흐림만 사라집니다.
+
+**배포** (`0007`을 먼저 적용 — 한도 없이 배포하지 않습니다. 키는 함수 시크릿에만):
+
+```bash
+npx supabase secrets set WEB_RISK_API_KEY=...          # Google Cloud Web Risk API 키(없으면 링크를 항상 비움)
+npx supabase functions deploy find-purchase-links      # 함수 이름을 꼭 붙인다(앱 재빌드와 무관)
+# (선택) 한도 조정 — 요청마다 읽어 재배포 없이 반영
+npx supabase secrets set PURCHASE_LIMIT_USER_HOURLY=10 PURCHASE_LIMIT_USER_DAILY=30 PURCHASE_LIMIT_GLOBAL_DAILY=100
+```
+
+- 단위 시험(네트워크·키 없음): `deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts`(앱 입구 채널 판별 포함)
+- 한도 권한·동작 검증 SQL: `supabase/tests/purchase_link_quota.sql`(SQL Editor, rollback)
+- 실패 원인은 `ops.purchase_link_failures`에 남습니다(사용자·한국 날짜·사유·횟수 — 내용 없음).
+- 네이버 검색 API는 약관(AI 입력·처리 금지) 때문에 쓰지 않습니다.
 
 ## 문서
 
@@ -148,6 +220,9 @@ deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/fu
 - Phase 10 작업 지시(테스트 계측 — PostHog): [`docs/phases/phase-10-testflight-analytics.md`](docs/phases/phase-10-testflight-analytics.md)
 - Phase 11 작업 지시(익명 계정 수명주기 — 빈 계정·고아 파일 정리): [`docs/phases/phase-11-anon-account-lifecycle.md`](docs/phases/phase-11-anon-account-lifecycle.md)
 - Phase 14 작업 지시·결과(Sentry 오류·크래시 수집 · App Store 메타데이터 · 개발용 앱 분리): [`docs/phases/phase-14-sentry-and-store-metadata.md`](docs/phases/phase-14-sentry-and-store-metadata.md)
+- Phase 17 작업 지시·결과(가격 정확도 — 중고거래 가격 규칙 · 좋아요 수 오추출 재현): [`docs/phases/phase-17-price-accuracy.md`](docs/phases/phase-17-price-accuracy.md)
+- Phase 21 작업 지시·결과(구매처 찾기 — 등록 폼 링크 자동 채움·저장 뒤 붙이기 · 입구 채널 판별 · 카페24 사이트 안 검색): [`docs/phases/phase-21-purchase-finder.md`](docs/phases/phase-21-purchase-finder.md)
+- Phase 24 작업 지시·결과(UX 개선 — 탭 순서·기본 탭 전체 · 공유 시트 처리를 루트로 · 등록·편집 폼 정리 · 알림): [`docs/phases/phase-24-ux-improvements.md`](docs/phases/phase-24-ux-improvements.md)
 - 트래킹 플랜(이벤트 택소노미 정본): [`docs/testing/tracking-plan.md`](docs/testing/tracking-plan.md)
 - 개인정보처리방침 원문(TestFlight 외부 공개용): [`docs/legal/privacy.html`](docs/legal/privacy.html)
 - 저장소 작업 규칙: [`CLAUDE.md`](CLAUDE.md)

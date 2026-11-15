@@ -46,3 +46,7 @@ example
 # OMC / Ouroboros 운영 아티팩트 (커밋 금지 — 옛 .gitignore에서 승계)
 .omc
 .ouroboros*
+
+# 정답셋 원문 데이터·측정 결과 (커밋 금지 — OCR 원문에 타인 계정명·댓글이 섞일 수 있음, 레포 공개)
+supabase/functions/parse-screenshot-text/samples/goldset/data/
+supabase/functions/parse-screenshot-text/samples/goldset/out/

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/EmptyState';
 import { PhotoTile } from '@/components/PhotoTile';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
+import { useNotifications } from '@/hooks/useNotifications';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { getItemImageSignedUrls, listItems, type Item } from '@/lib/queries';
 
@@ -23,6 +24,7 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
  */
 export default function SearchScreen() {
   const router = useRouter();
+  const linkState = useNotifications(); // 저장 뒤 링크 찾기 상태(타일 흐림·새 링크 점)
   const { width } = useWindowDimensions();
   const tileSize = width / COLUMNS;
   const [items, setItems] = useState<Item[] | null>(null); // null = 로딩 중
@@ -106,11 +108,14 @@ export default function SearchScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={styles.list}
+          extraData={linkState}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
               size={tileSize}
               accessibilityLabel={item.product_name}
+              linkPending={linkState.pendingItemIds.has(item.id)}
+              unseen={linkState.unseenItemIds.has(item.id)}
               onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
             />
           )}

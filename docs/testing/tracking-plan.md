@@ -17,6 +17,7 @@
 - **개발자 uid 제외 목록** (2026-10-17 확정): uid 자체는 git에 두지 않고 **DB `ops.internal_users`**(마이그레이션 `0004`, API 비노출·SQL Editor 전용)에 둔다. `metrics.sql`은 이 테이블을 서브쿼리로 참조한다.
   - 선정 기준: 테스트 시작 전 생성된 uid 17개 중 TestFlight 외부 테스터 1명(09-27 가입, 시작 후 활동 없음)을 뺀 **16개**. 시작 후 활동이 있는 건 현 개발 기기 1개뿐이라 SQL 지표엔 사실상 이 1개만 영향을 주지만, PostHog(앱만 연 세션도 DAU에 잡힘)와 기준을 통일하려고 전부 넣는다. 시작 후 생성된 개발자 uid는 없음(현 기기 uid가 10-02 생성분 그대로).
   - 갱신 규칙: 개발 기기에서 재설치하면 새 uid가 생기므로 `ops.internal_users`에 insert하고 PostHog Person에도 `$internal_or_test_user = true`를 붙인다. 개발용 앱(`WishShot Dev`, 1.0.2~ — 스토어 앱과 별도 익명 계정)은 **DB 쪽만** uid를 `ops.internal_users`에 넣는다(2026-11-05 첫 설치분 반영). **PostHog 쪽은 사람 표시 대신** 프로젝트 내부 사용자 필터에 "`$app_namespace` = `com.k0nghaa.wishshot.dev` 제외" 조건을 한 번 둔다(사람이 설정) — 개발용 앱을 재설치해 uid가 바뀌어도 자동으로 빠진다. 개발용 앱은 `__DEV__`라 기본 옵트아웃이지만, 계측 토글 상태가 앱에 저장돼 켜 둔 채 잊으면 지표에 섞이기 때문이다.
+  - 이 "`$app_namespace` ≠ `com.k0nghaa.wishshot.dev`" 조건은 **값이 없는 이벤트(1.0.1 이하)를 남긴다** — 2026-11-06 확인(App namespace Breakdown에서 필터를 켜면 `.dev` 줄만 사라지고 값 없음(None) 줄은 그대로, 10월 1.0.1 기간 수치도 그대로).
 - **PostHog 쪽 오염 방지**: `__DEV__` 빌드는 기본 옵트아웃이라 개발 중 이벤트는 대부분 자동 제외된다. production 빌드를 쓰는 개발 기기는 Person 속성 `$internal_or_test_user = true`(BOOLEAN) → 동적 코호트 "Internal / Test users" → 프로젝트 내부 사용자 필터(신규·기존 인사이트 모두 ON)로 제외한다. Person 단위라 identify 전 anon ID 이벤트까지 함께 빠진다. 프로젝트 시간대는 `Asia/Seoul`.
 
 ## 2. 이벤트 택소노미 (정본)
@@ -26,13 +27,15 @@
 | 이벤트 | 트리거 시점 | 속성 | 답하는 질문 | 구현 위치 |
 |---|---|---|---|---|
 | (자동) 앱 열림·세션 | SDK 라이프사이클 자동 수집(`captureAppLifecycleEvents`). 1.0.2부터 `Application Installed`·`Application Updated`도 발생(SDK가 빌드 번호를 `expo-application`에서 읽게 됨 — 그 전엔 빌드 번호가 없어 만들지 못했다) | — | 질문 1 | `src/lib/analytics.ts` 초기화 옵션 |
-| `share_intent_received` | 홈이 공유 인텐트를 소비한 직후 | `type: image \| url` | 질문 3 | `src/app/(tabs)/index.tsx` |
+| `share_intent_received` | 공유 처리기가 공유 값을 소비한 직후(새 공유를 열지 묻는 경우도 포함 — 답과 무관하게 1회) | `type: image \| url` | 질문 3 | `src/components/ShareIntentHandler.tsx`(루트 레이아웃이 그림 — 2026-11 이전엔 카테고리 홈) |
 | `register_opened` | 등록 화면 마운트 | `entry: share \| manual` | 질문 2ⓐ·3 | `src/app/register.tsx` |
 | `analysis_completed` | 분석 상태머신 종료 전이 시 | `status: parsed \| low_confidence \| parse_failed \| ocr_empty` (analysis_logs와 동일 enum) | 질문 4 | `src/hooks/useAnalysis.ts` |
 | `autofill_edited` | AI가 채운 필드를 사용자가 **변경**했을 때, 필드당 1회 | `field: name \| price \| brand \| category` | 질문 4 | `src/app/register.tsx` |
 | `item_saved` | 저장 **성공 응답** 시(버튼 탭 아님, 덮어쓰기 포함) | `source: share \| picker \| recent_photo`, `duration_ms`(마운트→성공), `had_analysis: boolean` | 질문 2ⓐ | `src/app/register.tsx` |
 | `onboarding_step_viewed` | 온보딩 각 스텝 표시 시 | `step: card_1 \| card_2 \| card_3 \| category_coachmark` | 완주율·이탈 스텝 | `src/components/Onboarding/OnboardingOverlay.tsx` |
-| `onboarding_finished` | 완주 또는 스킵 시 | `result: completed \| skipped`, `last_step`(step과 동일 enum) | 이탈 지점 | 〃 |
+| `onboarding_finished` | 완주 또는 스킵 시. 온보딩 중에 공유가 와서 닫히면 보내지 않는다('봤음' 표시도 없어 다음 실행에 다시 뜬다 — 그 세션은 이탈처럼 보인다) | `result: completed \| skipped`, `last_step`(step과 동일 enum) | 이탈 지점 | 〃 |
+| `link_attached` | 저장 뒤 링크 붙이기가 성공했을 때(링크가 비어 있던 위시에 붙음 — `setSourceLinkIfEmpty` 성공) | — | 저장 뒤 붙이기가 얼마나 일어나는가 | `src/app/register.tsx`(`notifyLinkAttached`) |
+| `notification_opened` | 스낵바 [보기] 또는 알림 목록 행을 눌러 위시 상세로 갈 때 | `source: snackbar \| list` | 붙인 링크를 사용자가 확인하는가 | `src/app/register.tsx`(스낵바)·`src/app/(tabs)/notifications.tsx`(목록) |
 | `app_error` (갈래 F) | 전역 JS 에러 핸들러. 1.0.2부터 Sentry가 켜진 빌드에서는 루트 렌더 오류 경계가 넘긴 렌더 오류도 포함 | `name: string`(에러 클래스명), `is_fatal: boolean` — **메시지·스택 미수집** | 에러 빈도 집계(상세·네이티브 크래시는 Sentry) | `src/lib/analytics.ts`, `src/lib/monitoring.ts`(렌더 오류 경계) |
 
 ### 구현 노트 (코드와 1:1)
@@ -92,10 +95,10 @@
 
 **1.0.2(Sentry·언어·시간대) 추가 확인** — 출시 전에 전부 체크한다(지시서 `phase-14` 배포 순서)
 
-- [ ] App Store Connect 앱 개인정보에 Sentry 반영 — '기타 진단 데이터' 추가(Sentry만 수집, 설치별 무작위 ID라 연결 안 됨, 추적 안 함). '충돌 데이터'는 이미 PostHog `app_error`로 연결됨=예로 선언돼 있어 그대로 두고 목적만 확인한다(같은 유형은 한 번만 선언되며 하나라도 연결되면 '연결됨'). 성능 데이터는 넣지 않는다(추적 끔)
-- [ ] `docs/legal/privacy.html` 개정(§1·§4 언어·시간대, §5 Sentry) main 머지로 게시, 개정일을 게시일로 맞춤
-- [ ] 노션 개인정보 방침 동기화
-- [ ] 인앱 고지(`src/constants/privacy.ts`)와 방침 내용 일치 재확인
+- [x] App Store Connect 앱 개인정보에 Sentry 반영 — 진단 > '성능 데이터'·'기타 진단 데이터' 추가(목적 앱 기능, 설치별 무작위 ID라 연결 안 됨, 추적 안 함). '충돌 데이터'는 PostHog `app_error`로 연결됨=예를 유지하고 목적에 앱 기능을 더함(같은 유형은 한 번만 선언되며 하나라도 연결되면 '연결됨'). **정정**: 성능 데이터는 추적을 꺼도 넣는다 — Sentry iOS 기본 '앱 멈춤' 보고가 Apple 정의의 hang rate에 해당(지시서 `phase-14` 결과 기록 Step 8)
+- [x] `docs/legal/privacy.html` 개정(§1·§4 언어·시간대, §5 Sentry) 게시 — 심사 제출 전에 PR #33(`docs/privacy-v1.0.2` → `main`)으로 먼저 게시, 개정일 = 게시일 2026-11-06
+- [x] 노션 개인정보 방침 동기화(2026-11-06, 11곳 교체)
+- [x] 인앱 고지(`src/constants/privacy.ts`)와 방침 내용 일치 재확인(2026-11-06 — 영역 전송, PostHog 언어·시간대, Sentry 수집 항목·최대 90일, 콘텐츠·위치 미수집, IP 미저장)
 - [x] Sentry 과금 차단 — 결제 수단 미등록(체험 종료 뒤 무료 Developer 플랜, 한도 초과 이벤트는 버려짐), IP 저장 방지·위치 제거 규칙 설정(2026-11-05)
 
 ## 6. 실발화 확인 체크리스트 (dev client — 사람 확인)
@@ -113,6 +116,8 @@
 - [x] `item_saved` — `source`·`duration_ms`·`had_analysis` 속성 확인(저장 성공 시에만 발화)
 - [x] `onboarding_step_viewed` `card_1~3`·`category_coachmark` (※ SDK 비동기 초기화로 `Application Opened`가 card_1 뒤에 찍힐 수 있음 — 정상)
 - [x] `onboarding_finished` `result=completed`(last_step=category_coachmark) / `result=skipped`
+- [ ] `link_attached` — 링크를 찾는 중에 저장 → 링크가 붙을 때 1회(속성 없음)
+- [ ] `notification_opened` `source=snackbar`(스낵바 [보기]) / `source=list`(알림 탭 행)
 - [x] `app_error` — 설정 → **테스트 에러 발생(개발용)**: redbox **정상 표시**(핸들러 체이닝 확인) + 이벤트 수신
 
 ## 7. 측정 한계
@@ -122,6 +127,7 @@
   - **운영 원칙**: 1.0.1 이전 구간은 **건수의 정본 = DB**(`metrics.sql`, items·auth.users), PostHog는 비율·경로 참고용. 온보딩 자체(09-21 커밋)는 빌드 8에 포함돼 첫 실행에서 정상 노출됐고 **이벤트만** 빠졌다.
   - **대응**: 1.0.1 = 현 JS를 내장한 재빌드(네이티브 변경 없음 → OTA 줄기 유지) + 백그라운드 진입 시 `flush()`. 출시일에 PostHog Annotation을 남기고 여기 날짜를 기입한다: **2026-10-20 출시**(Annotation 동일 날짜). 업데이트 공지·설문 재공유는 하지 않았다 — 자연 업데이트로 반영되므로 전환 초기엔 1.0.0·1.0.1 사용자가 섞인다.
   - **flush 검증 방법**: dev client로는 검증하지 않는다 — 1.0.1까지는 모든 프로필이 같은 번들 ID라 설치 시 App Store 앱을 덮어썼고(재설치하면 익명 계정이 새로 생김. 1.0.2부터 개발용 앱은 별도 번들 ID라 덮어쓰지 않는다), `__DEV__`는 `flushAt 1`이라 큐가 쌓이지 않아 백그라운드 flush 상황 자체가 재현되지 않는다. 대신 OTA 전 `tsc`·`lint`·`expo export --platform ios`(production 번들 생성)로 번들 무결성을 확인하고, OTA 후 **개발자의 production 앱**(internal 플래그라 지표 오염 없음)에서 백그라운드 진입 직후 PostHog Activity 도착을 확인한다.
+- **1.0.2 출시(2026-11-06, PostHog Annotation 같은 날짜)**: 수동 출시, 단계적 출시 안 함. 자연 업데이트라 한동안 1.0.0~1.0.2 사용자가 섞인다. 1.0.2부터 이벤트에 `$app_version`이 붙어 버전별로 나눠 볼 수 있다(값이 없으면 1.0.1 이하). 1.0.2는 네이티브가 바뀌어 `runtimeVersion`이 달라졌으므로 이후 OTA는 1.0.2 사용자에게만 간다 — OTA 전후 비교에는 1.0.1 이하를 섞지 않는다.
 - **전송 지연·유실**: production은 이벤트를 20개 단위로 묶어 전송한다(배터리 절약). 미전송 큐는 로컬에 영속돼 다음 실행 때 전송되지만, 앱 삭제 직전 이벤트는 유실될 수 있다.
 - **`app_error`는 JS 에러의 클래스명만** 잡는 집계용이다. 오류 상세와 네이티브 크래시는 **1.0.2부터 Sentry**가 맡는다. RN 0.86은 렌더 오류를 전역 핸들러에 보내지 않는다. 그래서 렌더 오류는 Sentry DSN이 있는 빌드(루트 경계가 켜짐)에서만 `app_error`에 잡히고, 1.0.1 이하에서는 빠져 있었다.
 - **개발 기기 미수집(의도)**: `__DEV__` 기본 옵트아웃. production 빌드를 쓰는 개발자 uid는 §1 제외 목록으로 거른다.

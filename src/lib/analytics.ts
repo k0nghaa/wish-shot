@@ -21,7 +21,7 @@ export type OnboardingStep = 'card_1' | 'card_2' | 'card_3' | 'category_coachmar
  * 이벤트·속성을 늘릴 땐 트래킹 플랜을 먼저 고치고 여기에 반영한다.
  */
 export type AnalyticsEventMap = {
-  /** 홈이 공유 인텐트를 소비한 직후. */
+  /** 공유 처리기(루트)가 공유 값을 소비한 직후. */
   share_intent_received: { type: 'image' | 'url' };
   /** 등록 화면 마운트. entry=share 는 공유 인텐트 경유(이미지·URL 프리필). */
   register_opened: { entry: 'share' | 'manual' };
@@ -35,6 +35,10 @@ export type AnalyticsEventMap = {
   onboarding_step_viewed: { step: OnboardingStep };
   /** 온보딩 완주/스킵 시. */
   onboarding_finished: { result: 'completed' | 'skipped'; last_step: OnboardingStep };
+  /** 저장 뒤 링크 붙이기가 성공했을 때(링크가 비어 있던 위시에 붙음). 속성 없음 — 링크·제품명 미수집. */
+  link_attached: Record<string, never>;
+  /** 스낵바 [보기] 또는 알림 목록 행을 눌러 위시 상세로 갈 때. */
+  notification_opened: { source: 'snackbar' | 'list' };
   /** 전역 JS 에러(갈래 F-2). name=에러 클래스명뿐 — 메시지·스택은 콘텐츠 유입 가능성 때문에 미수집. */
   app_error: { name: string; is_fatal: boolean };
 };

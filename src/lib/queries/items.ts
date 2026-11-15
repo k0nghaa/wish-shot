@@ -161,6 +161,22 @@ export async function updateItem(id: string, input: UpdateItemInput): Promise<It
 }
 
 /**
+ * 저장 뒤 링크 붙이기(구매처 찾기): 아이템의 링크가 **아직 비어 있을 때만** source_link 를 채운다.
+ * 그사이 사용자가 편집 화면에서 링크를 넣었으면 덮어쓰지 않는다(조건부 update). 붙였으면 true.
+ * 다른 필드·normalized_name 은 건드리지 않으므로 중복 위험이 없다.
+ */
+export async function setSourceLinkIfEmpty(id: string, url: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('items')
+    .update({ source_link: url })
+    .eq('id', id)
+    .is('source_link', null)
+    .select('id');
+  if (error) throw new Error(`링크를 저장하지 못했습니다: ${error.message}`);
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * 여러 아이템의 카테고리를 한 번에 바꾼다(전체 탭 다중 선택 이동). `categoryId === null` 이면 미분류로.
  * `moveItemCategory` 와 같이 category_id 만 바꾸므로 normalized_name·중복 위험이 없다.
  */

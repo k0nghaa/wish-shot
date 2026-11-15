@@ -10,6 +10,9 @@ import { createContext, useCallback, useContext, useRef, type ReactNode } from '
  */
 export type TargetRect = { x: number; y: number; width: number; height: number };
 
+/** 카테고리 안내가 비추는 탭 바의 카테고리 버튼. 탭 바는 어느 탭에서나 보여 측정이 안정적이다. */
+export const CATEGORIES_TAB_TARGET = 'tabbar.categories';
+
 // View·TouchableOpacity 등 measureInWindow 를 가진 요소면 무엇이든 대상이 될 수 있다.
 export type Measurable = {
   measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void;

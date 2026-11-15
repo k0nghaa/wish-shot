@@ -2,6 +2,7 @@ import { useCallback, useState, type Dispatch, type SetStateAction } from 'react
 import { Alert } from 'react-native';
 
 import { promptDeleteIfCategoryEmpty } from '@/lib/emptyCategory';
+import { removeNotificationItems } from '@/lib/notifications';
 import {
   createCategory,
   deleteItemImages,
@@ -101,6 +102,7 @@ export function useItemSelection({
     setBusy(true);
     try {
       await deleteItems(chosen.map((it) => it.id));
+      void removeNotificationItems(chosen.map((it) => it.id)); // 지운 위시의 알림·기록도 지운다(기기 안)
       // Storage 정리는 실패해도 행 삭제가 우선(단건 삭제와 동일).
       await deleteItemImages(chosen.map((it) => it.image_key)).catch(() => undefined);
       await promptEmptiedCategories(chosen, null);

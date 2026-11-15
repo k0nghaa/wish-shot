@@ -16,11 +16,11 @@ import { capture, type OnboardingStep } from '@/lib/analytics';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import { AutoFillMock, CaptureFlowMock, OrganizeMock } from './CardMock';
 import { CoachmarkSpotlight } from './CoachmarkSpotlight';
-import { useOnboardingTarget, type TargetRect } from './onboardingTarget';
+import { CATEGORIES_TAB_TARGET, useOnboardingTarget, type TargetRect } from './onboardingTarget';
 
-// 홈 "카테고리 추가" 알약 코치마크 대상. 미마운트/측정 실패면 스킵되고 바로 등록 투어로 넘어간다.
-const CATEGORY_KEY = 'home.addCategory';
-const CATEGORY_TEXT = '여기서 카테고리를 추가하고 관리합니다.';
+// 카테고리 안내: 탭 바의 카테고리 버튼을 비춘다(기본 탭이 전체라 카테고리 화면은 처음에 마운트되지 않음).
+// 미마운트/측정 실패면 스킵되고 바로 등록 투어로 넘어간다.
+const CATEGORY_TEXT = '카테고리 탭에서 위시를 분류하고 관리합니다.';
 
 type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'captureFlow' | 'autoFill' | 'organize' };
 
@@ -54,8 +54,8 @@ type Phase = { kind: 'cards' } | { kind: 'transition' } | { kind: 'category'; ta
 type Props = { onDone: () => void };
 
 /**
- * 첫 실행 온보딩 오버레이(카드 + 홈 카테고리 코치마크).
- * 카드 캐러셀(FlatList + reanimated 도트, 첫 카드=캡처 흐름 모션 그래픽) → 홈 "카테고리 추가" 코치마크
+ * 첫 실행 온보딩 오버레이(카드 + 탭 바 카테고리 코치마크).
+ * 카드 캐러셀(FlatList + reanimated 도트, 첫 카드=캡처 흐름 모션 그래픽) → 탭 바 카테고리 버튼 코치마크
  * → "다음"에서 등록 폼을 열며(onboarding 파라미터) 완료. 등록 폼 위 코치마크는 등록 화면이 직접 띄운다
  * (RN Modal 위로 네이티브 모달이 얹히는 순서 문제 회피 — RegisterCoachmarkTour).
  * 완료·건너뛰기·측정 실패 모두 onDone 으로 수렴. reduce-motion 이면 전환 애니메이션을 끈다.
@@ -70,6 +70,15 @@ export function OnboardingOverlay({ onDone }: Props) {
   const [index, setIndex] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: 'cards' });
+
+  // 공유가 와서 게이트가 오버레이를 닫았으면(언마운트) 측정 대기 뒤 등록 투어를 열지 않는다.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // 계측(Phase 10): 스텝 노출은 스텝당 1회(뒤로 스와이프 재노출은 last_step 만 갱신), 종료는 완주/스킵 1회.
   const viewedStepsRef = useRef(new Set<OnboardingStep>());
@@ -135,10 +144,11 @@ export function OnboardingOverlay({ onDone }: Props) {
     onDone();
   }, [captureFinished, onDone]);
 
-  // 카드 끝 → 카테고리 코치마크(측정 성공 시) → 없으면 바로 등록 투어로.
+  // 카드 끝 → 탭 바 카테고리 코치마크(측정 성공 시) → 없으면 바로 등록 투어로.
   const finishCards = useCallback(async () => {
     setPhase({ kind: 'transition' });
-    const target = await measure(CATEGORY_KEY);
+    const target = await measure(CATEGORIES_TAB_TARGET);
+    if (!mountedRef.current) return;
     if (target) {
       setPhase({ kind: 'category', target });
       captureStepViewed('category_coachmark');

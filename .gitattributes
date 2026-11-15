@@ -1,0 +1,2 @@
+# 정답셋 fixture CSV 는 LF 고정 — 따옴표 안 줄바꿈이 CRLF 로 바뀌면 실행기의 CR 검사(goldset-eval.ts)에 걸린다
+supabase/functions/parse-screenshot-text/samples/goldset/fixture/*.csv text eol=lf
