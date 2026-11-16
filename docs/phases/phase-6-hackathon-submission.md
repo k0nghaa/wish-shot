@@ -1,5 +1,7 @@
 # Phase 6 — 해커톤 제출 요건 + 제품 영역 지정(이미지 폴백) + 검색
 
+> **2026-11 기준**: 완료 기준 체크는 '결과 기록'과 PR #15·#16 본문의 확인 기록을 근거로 맞췄다. 확인 기록이 없는 항목(공개 링크 활성, iCloud 실기기 재현, API 키 확인, 랜딩·녹화 준비, 영역 지정 전송 크기 확인, 최종 빌드·영상·랜딩·제출)은 비워 두었고, dev 재빌드(Step 3)는 Expo Go 검증으로 대체했다.
+
 > **이 문서 사용법**: Claude Code에 이 파일 전체를 컨텍스트로 넘기고 "Step N을 진행해달라"고 요청한다. Step은 순서대로 진행하고, 각 Step의 **DoD**를 사람이 확인한 뒤 다음으로 넘어간다. 참가 신청·TestFlight 베타 심사·실기기 iCloud 재현·영상 촬영·제출 폼은 에이전트가 할 수 없으므로 사람이 직접 한다.
 >
 > **마감 (원티드 AI Championship 2026)**: 참가 신청 **9/18(금)** · 프로젝트 제출 **9/20(일)** · 예선 심사·온라인 투표 **9/21~10/5**(이 기간 내 **서비스 링크가 정상 작동**해야 하며, 미작동 시 평가 제외 가능). 오늘 9/17(목) 기준 **제출까지 3일**. 예선 = 내부 심사 80% + 온라인 투표 20%, 기준 = 기획력·실현 가능성·확장성·**AI 활용의 적절성**.
@@ -34,7 +36,7 @@ Phase 5까지 리스킨·탭바·익명 로그인·내부 TestFlight가 끝났�
 ## 사전 조건 (사람이 준비)
 
 - [x] Phase 5 완료·`dev` 머지(`1.0.0 (4)` TestFlight 처리 완료).
-- [ ] **원티드 AI Championship 2026 참가 신청 완료(9/18까지)** — Step 0.
+- [x] **원티드 AI Championship 2026 참가 신청 완료(9/18까지)** — Step 0.
 - [ ] **ASC → TestFlight → 외부 테스트 그룹 생성 + 공개 링크 활성 + 베타 앱 심사 제출** (개인정보처리방침 URL = `docs/legal/privacy.html` Notion 게시본) — Step 0. **첫 빌드 심사는 1~2일 걸릴 수 있어 오늘 반드시 제출.**
 - [ ] iCloud 재현 환경: 테스트 아이폰에 **설정 → 사진 → "iPhone 저장 공간 최적화" ON** + 기기에 원본이 없는(클라우드 아이콘 뜨는) 사진 1장 이상.
 - [ ] Supabase Edge Function 시크릿 `ANTHROPIC_API_KEY` 유효, 로컬 `supabase functions serve` 가능.
@@ -86,7 +88,7 @@ Phase 1~5 규칙(한국어·단답형 카피, 디자인 토큰, 비밀값 커밋
 - 그 외 데모 중 눈에 띄는 1분짜리 수정(오탈자·정렬)만. 구조 변경 금지.
 
 **DoD**
-- [ ] 등록·편집에서 최하단 필드 탭 → 키보드에 가리지 않고 입력·확인 가능
+- [x] 등록·편집에서 최하단 필드 탭 → 키보드에 가리지 않고 입력·확인 가능
 
 ## Step 3 — 네이티브 모듈 추가 + dev client 재빌드 1회 (`expo-image-manipulator` [+ `expo-media-library`])
 
@@ -110,7 +112,7 @@ Phase 1~5 규칙(한국어·단답형 카피, 디자인 토큰, 비밀값 커밋
 6. `supabase functions serve`로 (a) 텍스트만 (b) 이미지+빈 텍스트 (c) 초과 크기 3케이스 curl 검증 후 `supabase functions deploy`.
 
 **DoD**
-- [ ] 텍스트 전용 호출 응답 Phase 5와 동일 · 크롭 JPEG 호출 시 productName/brand 반환 · 크기 초과 400 · 배포 완료
+- [x] 텍스트 전용 호출 응답 Phase 5와 동일 · 크롭 JPEG 호출 시 productName/brand 반환 · 크기 초과 400 · 배포 완료
 
 ## Step 5 — "제품 영역 지정" 시트 + 이미지 폴백 흐름 (`useAnalysis` · `queries/parse.ts` · 신규 `RegionSelectSheet` · `register.tsx`)  ⭐ AI
 
@@ -133,14 +135,14 @@ Phase 1~5 규칙(한국어·단답형 카피, 디자인 토큰, 비밀값 커밋
 - grep으로 "기기를 떠나지" "이미지는 전송되지" 잔재 0 확인.
 
 **DoD**
-- [ ] 방침 HTML·Notion·인앱 고지·README·CLAUDE.md가 같은 사실 진술. 과장 문구 잔재 없음
+- [x] 방침 HTML·Notion·인앱 고지·README·CLAUDE.md가 같은 사실 진술. 과장 문구 잔재 없음
 
 ## Step 7 — (여유 시) 검색 (`src/app/(tabs)/search.tsx`)
 
 **작업**: 플레이스홀더 → 상단 `TextInput`(자동 포커스, 지우기) + 기존 items 쿼리 재사용 클라이언트 필터(제품명·브랜드·태그·메모, 대소문자·공백 무시, 300ms 디바운스) → `PhotoTile` 3열 그리드 → 상세 진입. 빈 상태 `EmptyState` 2종(입력 전 / 결과 없음). 서버 쿼리·인덱스 없음. **9/19 오후까지 시작 못 하면 Phase 7.**
 
 **DoD**
-- [ ] (선택) 검색어 입력 → 결과 그리드 → 상세. 빈 상태 표시
+- [x] (선택) 검색어 입력 → 결과 그리드 → 상세. 빈 상태 표시
 
 ## Step 8 — 최종 빌드·제출 + 랜딩 페이지 + 데모 영상  ⭐ (사람 — 9/19 저녁 빌드, 9/20 제출)
 
@@ -160,7 +162,7 @@ Phase 1~5 규칙(한국어·단답형 카피, 디자인 토큰, 비밀값 커밋
 **작업**: `CLAUDE.md`(상태 머신·Edge Function 계약·네이티브 모듈 목록·NFR-3)·`README.md` 갱신 + 이 문서 "결과 기록". 커밋 `fix: iCloud 최적화 사진 업로드 + 폼 키보드` / `feat: Edge Function 이미지 분기(선택 영역)` / `feat: 제품 영역 지정 시트 + 이미지 폴백` / `docs: NFR-3 개정(선택 영역 전송)` / `feat: 검색` / `docs: Phase 6 완료`, `dev`로 PR.
 
 **DoD**
-- [ ] 문서 동기화 + PR
+- [x] 문서 동기화 + PR
 
 ---
 
@@ -203,6 +205,6 @@ Phase 1~5 규칙(한국어·단답형 카피, 디자인 토큰, 비밀값 커밋
 - **제품 영역 지정 시트 구현 결과(트리거 임계값·크롭 UI 방식·상태 머신 변경·페이로드 크기)**: 트리거 `OCR_MIN_CHARS=20`. 크롭 UI = **중앙 박스 + 4모서리 핸들**(비율 기반, gesture-handler+reanimated, 영역 밖 딤). `useAnalysis`에 `regionSelect`·`imageParsing` 상태 + `submitRegion`/`cancelRegion`/`reopenRegion`. 크롭 = 선택 영역 → 긴 변 ≤1024 resize → JPEG 0.8 → base64. `parsed`에 `source:'image_region'` 기록. 실패 시 시트 재열기.
 - **NFR-3 개정 최종 문구(4곳)**: "AI 정제엔 인식된 텍스트만 전송. 단, 텍스트를 찾지 못한 경우 사용자가 직접 선택한 제품 영역만 확인 후 전송하며 저장하지 않음." — `src/constants/privacy.ts`·`docs/legal/privacy.html`(§2·§3)·`README.md`·`CLAUDE.md` 정합. 과장 문구("기기를 떠나지 않는다" 등) 라이브 표면 0. **Notion 게시본 동기화는 사람.**
 - **검색 구현 여부·범위**: 구현. 클라이언트 필터(제품명·브랜드·태그·메모, 대소문자·공백 무시, 300ms 디바운스) → 3열 그리드 → 상세(단일). 빈 상태 2종. 서버 쿼리·인덱스 없음.
-- **최종 빌드 번호 / 영상 / 랜딩 URL / 제출 완료 시각**: 사람 진행(Step 8).
+- **최종 빌드 번호 / 영상 / 랜딩 URL / 제출 완료 시각**: 사람 진행(Step 8) — 제출 결과는 이 저장소에 기록하지 않았다.
 - **발생한 이슈와 해결**: 테스트를 **옛 TestFlight(프로덕션) 빌드**로 진행해 JS 변경이 반영 안 되던 혼선 → **Expo Go**로 검증 전환(새 모듈이 Expo Go에 포함돼 dev 재빌드 없이 Step 5~7 검증, EAS 빌드 절약). 키보드는 여러 시도 끝에 `automaticallyAdjustKeyboardInsets`가 정답으로 확인. 크롭 UI는 React Compiler `react-hooks/immutability`와의 충돌을 shared value를 비율로 다루고 deps에서 제외해 해소, 제스처 콜백은 `'worklet'` 명시.
 - **다음(Phase 7)으로 넘길 것**: 찜·New·배지 · OCR 탭-투-필 오버레이(bbox 모듈) · 피사체 분리(VisionKit) · 빠른 담기 · 필름스트립 · 공유 · 출처 앱 · 다크 모드 · 이메일 승격 · 새로고침·스켈레톤 · 아이콘 개선 · iCloud 2차(`expo-media-library` getAssetInfoAsync — 필요 시)

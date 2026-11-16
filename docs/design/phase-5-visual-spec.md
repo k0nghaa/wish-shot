@@ -2,7 +2,7 @@
 
 > **색 토큰 정본 = [`color_tokens.md`](./color_tokens.md)** (같은 폴더). 이 문서는 그 토큰을 **`theme.ts`에 어떻게 매핑할지** + **화면별 리스킨 지시**만 담는다. 색 값의 단일 출처는 정본 파일이다(중복 정의 금지).
 >
-> 화면 정본 = `docs/design/`의 스크린샷 `M1_home.png` · `M2_folder.png` · `M3_addWish.png` · `M6_itemDetail.png` · `M7_itemInformation.png`(라이트). 원본 목업 `Wish-Shot-mockup.html`은 자기압축이라 스크린샷을 정본으로 삼는다.
+> 화면 정본 = `docs/design/`의 스크린샷 `M1_home.png` · `M2_folder.png` · `M3_addWish.png` · `M6_itemDetail.png` · `M7_itemInformation.png`(라이트). 원본 목업 `Wish-Shot-mockup.html`(저장소 밖 원본)은 자기압축이라 스크린샷을 정본으로 삼는다.
 >
 >
 > **Phase 24 갱신(2026-11-10)**: 탭 순서·기본 탭·알림 탭·탭바 배지·새 링크 점·등록/편집 폼 순서·스낵바·공유 확인창의 **현재 상태는 맨 아래 '화면 명세 — Phase 24' 절**이다. 앞 절의 Phase 5 서술과 다르면 그 절을 따른다(앞 절은 Phase 5 기록으로 남겨 두고 바뀐 곳에 표시만 했다).
@@ -50,12 +50,14 @@
 - RN: Expo Router **Tabs** 그룹 `(tabs)/전체·폴더·검색` + 커스텀 `tabBar`(플로팅 알약, JS 전용). 상세/등록/편집/설정/태그는 탭 위 스택으로 push. **구조 변경이라 순수 리스킨보다 무겁다.**
 
 ### M1 — 폴더 홈 (`src/app/index.tsx` → `(tabs)/폴더` + `CategoryCard`) — `M1_home.png`
+- ⚠️ 지금 위치: `src/app/(tabs)/categories.tsx`(카테고리 탭). 탭바는 `src/app/(tabs)/_layout.tsx` + `CustomTabBar`.
 - 흰 배경. 상단 중앙 `[로고/심볼 추가 예정]`, 우상단 설정 기어(라인).
 - **Large Title "폴더"**(~34 Bold) + 우측 **`+ | ···` 알약**(`backgroundGrouped`).
 - 카테고리별 **2×2 모자이크 카드**: 대표 썸네일 4칸 + 이름 라벨 좌하단. radius ~14. 없으면 `placeholder` 타일. 빈 카테고리 노출 유지.
 - 하단에 위 탭바. RN: `FlatList numColumns={2}`, 카드 내부 2×2 중첩 flex.
 
 ### M2 — 폴더 안 (`src/app/category/[id].tsx` + `ItemCard`) — `M2_folder.png`
+- ⚠️ 지금 그리드 타일은 `PhotoTile`이다(`ItemCard`는 없음).
 - 헤더 `‹ 폴더` + 우 `···`. 제목 **"옷" + "12개"**(개수 `labelSecondary`).
 - **3열 그리드**(현재 2열 → 3열), 정사각, 최신순. 검정 원형 FAB(+).
 - ⚠️ 타일 **하트(우하단)·New 점(좌상단)** 은 **Phase 6**.
@@ -94,14 +96,14 @@
 
 ## RN 구현 주의
 
-- CSS `grid` → `FlatList numColumns`. 하프시트 → `Modal` 기반(네이티브 라이브러리 금지). 그림자 얕게. 헤어라인 `hairlineWidth`+`separator`. Light만 소비.
+- CSS `grid` → `FlatList numColumns`. 하프시트 → expo-router `formSheet`(react-native-screens 네이티브 반시트 — 위 M7, 재빌드 없음). 그림자 얕게. 헤어라인 `hairlineWidth`+`separator`. Light만 소비.
 - 탭바 도입 = `_layout` 구조 변경(가장 무거운 작업). 커스텀 알약 `tabBar`.
-- 폴더 2×2 모자이크 대표 4장 규칙 미결(예: 최신 4장).
+- 폴더 2×2 모자이크 대표 4장 규칙 미결(예: 최신 4장). → **결정됨: 최신 4장**(`src/app/(tabs)/categories.tsx`).
 
-## 미결 (구현 세션)
+## 미결 (구현 세션) → 결정됨
 
-- **토큰 네이밍**: 현행 이름 유지+값 교체(저비용, 권장) vs 정본 이름 채택(명확·리네임 비용).
-- 카테고리목록 2열 → 3열 / "카테고리 → 폴더" 용어 교체 / 풀스크린 뷰어 핀치 줌 / 설정 로그아웃 처리.
+- **토큰 네이밍**: 현행 이름 유지+값 교체(저비용, 권장) vs 정본 이름 채택(명확·리네임 비용). → **현행 이름 유지 + 값 교체**(`src/constants/theme.ts`).
+- 카테고리목록 2열 → 3열 / "카테고리 → 폴더" 용어 교체 / 풀스크린 뷰어 핀치 줌 / 설정 로그아웃 처리. → **3열**(`category/[id].tsx`) / 화면 용어는 Phase 5에서 '폴더'로 했다가 **Phase 7에서 '카테고리'로 통일** / **핀치 줌 있음**(상세 뷰어, `react-native-awesome-gallery`) / **로그아웃 없음**(익명 로그인이라 설정에 계정 섹션 없음).
 
 ---
 

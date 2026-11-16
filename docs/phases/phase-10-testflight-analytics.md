@@ -1,5 +1,9 @@
 # Phase 10 — TestFlight 테스트 계측 (PostHog 트래킹 플랜)
 
+> **2026-11 기준**: 선택 peer 의존성 중 `expo-device`는 처음부터 설치돼 있었고, `expo-application`·`expo-localization`과 Sentry는 '다음 네이티브 배치(v1.1)'가 아니라 1.0.2(Phase 14)에 들어갔다. 계측이 내장된 첫 바이너리는 1.0.1이다(`docs/testing/tracking-plan.md` §7).
+>
+> 아래 택소노미 표는 작성 당시 복사본이다. 현행 정본은 `docs/testing/tracking-plan.md`다(`share_intent_received` 위치는 지금 `ShareIntentHandler`). 완료 기준은 PR #23 머지와 2026-10-03 실기기 확인(tracking-plan §5·§6)을 근거로 체크했다.
+
 > **이 문서 사용법**: Claude Code에 이 파일 전체를 컨텍스트로 넘기고 "**A/B/C/D/E(+채택 시 F)를 진행해달라**"고 요청한다. 갈래 A~E(+선택 F)는 **한 브랜치·한 세션**에서 순서대로 구현하는 것을 전제로 자족적으로 적었다(B·C가 같은 파일 `register.tsx`를 공유하므로 병렬로 쪼개지 않는다). PostHog 대시보드에서의 이벤트 실발화 확인과 SQL 드라이런은 **에이전트가 검증할 수 없으므로 사람이 확인**한다.
 >
 > **브랜치**: 이 작업은 `feat/phase-10-analytics`(= `dev`에서 분기)에서 한다. **release/v1.0.0 직접 작업 금지** — 심사 제출된 릴리스 브랜치다(2026-10 현재 **심사 통과·출시 대기**). 세션 시작 시 `git status --short --branch`로 브랜치를 먼저 확인한다. 완료 후 PR로 `dev`에 머지한다.
@@ -178,10 +182,10 @@ TestFlight 외부 테스트 기간에 아래 4가지 질문에 **숫자로 답�
 
 ## 완료 기준 (Phase DoD)
 
-- [ ] A~E(+채택 시 F) 전부 DoD 충족, 타입·린트 통과
-- [ ] 네이티브 모듈 추가 0개 (재빌드 불필요 확인)
-- [ ] 사람 체크: PostHog Activity에서 7종 수신, metrics.sql 드라이런, 라벨·방침 반영
-- [ ] CLAUDE.md·README 갱신 포함 PR (`.github/pull_request_template.md` 구조 준수)
+- [x] A~E(+채택 시 F) 전부 DoD 충족, 타입·린트 통과
+- [x] 네이티브 모듈 추가 0개 (재빌드 불필요 확인)
+- [x] 사람 체크: PostHog Activity에서 7종 수신, metrics.sql 드라이런, 라벨·방침 반영
+- [x] CLAUDE.md·README 갱신 포함 PR (`.github/pull_request_template.md` 구조 준수)
 
 ## 근거·출처
 

@@ -27,6 +27,7 @@ Asset Catalog에 직접 등록할 것은 `silver`, `wine` 둘. 나머지는 iOS 
   - 앱 안: 하트(찜), 찜 카운트 숫자, 찜 필터 칩의 하트, New 점(새로 담긴 항목 타일 모서리, 6pt), 탭바 배지(새 항목 개수)
   - 앱 밖: 앱 아이콘
   - 탭바 배지는 iOS 기본 빨강 대신 `wine`으로 교체한다 (`UITabBarItem.badgeColor`).
+  - 지금 앱(2026-11)에서 `wine`을 쓰는 곳은 새 링크 점(타일 모서리 — 8pt·흰 0.5pt 테두리)과 알림 탭 배지다. 크기·테두리는 `phase-5-visual-spec.md`의 'Phase 24' 절에서 정했다.
 2. `wine`과 `destructive`를 같은 컴포넌트에 함께 쓰지 않는다. 삭제·에러는 항상 `destructive`.
 3. `silver`는 쇼핑카트 아이콘에만 쓴다. 라이트에서 `inactive`와 값이 같아도 이름을 분리한 이유는, 카트 색은 다크에서도 바꾸지 않고 브랜드 시그니처로 고정하기 위해서다.
 4. 사진 위 하트는 `wine` 채움 + 흰색 1pt 외곽선. 다크 모드는 검정 20% 그림자(y 1pt, blur 2pt) 추가. 통제된 배경(칩·텍스트 옆)에서는 외곽선 없이 `wine` 단독.
@@ -49,4 +50,5 @@ Asset Catalog에 직접 등록할 것은 `silver`, `wine` 둘. 나머지는 iOS 
 
 - **Xcode**: Asset Catalog에 `silver`, `wine` Color Set 생성, Appearances = Any + Dark. 코드에서 `Color("wine")`, `Color("silver")`.
 - **Figma**: Variables Collection `Color`, Mode Light/Dark. 위 표 10개를 그대로 변수로 등록.
+- **React Native 앱(이 저장소)**: `src/constants/theme.ts`. 정본 이름과 코드 토큰 이름의 대응은 `phase-5-visual-spec.md`. 탭바는 JS로 그리므로 배지 색도 거기서 정한다(`CustomTabBar`).
 

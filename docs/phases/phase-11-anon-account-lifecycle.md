@@ -1,5 +1,7 @@
 # Phase 11 — 익명 계정 수명주기: 빈 계정·고아 파일 정리
 
+> **2026-11 기준**: 완료 기준은 아래 '결과 기록'의 2026-10-04 실측을 근거로 체크했다(고아 파일 스윕 확인은 고아 0건 상태에서 했다). 1~2주 뒤 계정·Storage·Egress 추이는 확인 기록이 없어 비워 두었다.
+
 > **이 문서 사용법**: Claude Code에 이 파일 전체를 컨텍스트로 넘기고 "**Step 1/2/3을 진행해달라**"고 요청한다. Step은 순서대로 진행하되 **Step 1(빈 계정 삭제)과 Step 2(고아 파일 스윕)는 서로 독립**이라 어느 것부터 해도 된다(권장: 비밀값이 없는 Step 1 먼저). 실제 Supabase 프로젝트(auth.users·Storage)에 대한 dry-run·스케줄 활성화는 **에이전트가 검증할 수 없으므로 사람이 대시보드에서 확인**한다.
 >
 > **브랜치**: 최신 `dev` 기준 `feat/phase-11-anon-lifecycle`에서 작업한다. 세션 시작 시 `git status --short --branch`로 확인하고, **release/v1.0.0 직접 작업 금지**(출시 릴리스 브랜치). 참고: 계측(Phase 10) 데이터는 DB가 아니라 PostHog(외부)에 있어 이 Phase의 삭제 작업과 상호작용이 없다 — 삭제된 익명 계정의 과거 이벤트가 PostHog에 가명 uid로 남는 것은 정상.
@@ -120,9 +122,9 @@ RLS는 `user_id = auth.uid()`로 행을 거르므로, 새 uid로는 옛 uid의 �
 **적용**: `0001`과 동일하게 **대시보드 SQL Editor에 붙여넣어 적용**한다(또는 `supabase db push`). 마이그레이션 파일은 재현/계약용으로 커밋한다.
 
 **DoD**
-- [ ] dry-run 카운트가 **합리적**이다(전체 익명 유저 대비 "오래되고 빈" 일부만). 아이템이 있는 계정은 한 건도 포함되지 않음(사람 확인).
-- [ ] 수동 1회 실행(또는 1건 타깃 삭제) 시 해당 유저의 `categories/items/analysis_logs`가 cascade로 사라지고, 다른 유저 데이터는 불변.
-- [ ] `cron.job`에 잡이 등록되고 다음 실행 시각이 잡힘. 마이그레이션 파일 커밋.
+- [x] dry-run 카운트가 **합리적**이다(전체 익명 유저 대비 "오래되고 빈" 일부만). 아이템이 있는 계정은 한 건도 포함되지 않음(사람 확인).
+- [x] 수동 1회 실행(또는 1건 타깃 삭제) 시 해당 유저의 `categories/items/analysis_logs`가 cascade로 사라지고, 다른 유저 데이터는 불변.
+- [x] `cron.job`에 잡이 등록되고 다음 실행 시각이 잡힘. 마이그레이션 파일 커밋.
 
 ---
 
@@ -207,11 +209,11 @@ Deno.serve(async (req) => {
 - **(대안·SQL 커밋) pg_cron + pg_net**으로 함수 URL을 `net.http_post`로 호출. 이때 `CRON_SECRET`·함수 URL은 **Supabase Vault**에 넣고 잡에서 읽는다(평문 커밋 금지). 배선이 복잡하니 대시보드 Cron으로 충분하면 그걸 쓴다.
 
 **DoD**
-- [ ] `list_orphan_item_images()` dry-run: 건수·샘플이 합리적이고, **살아있는 아이템의 원본/썸네일이 샘플에 없음**(불변식 2, 사람 확인).
-- [ ] Edge Function `?dryRun=true` 응답의 `orphanCount`가 위 SQL과 일치.
-- [ ] 비밀 헤더 없이 호출 시 401.
-- [ ] 실삭제 1회 후, 임의의 살아있는 아이템이 **그리드(썸네일)·상세(원본) 모두 정상 표시**(살아있는 파일 미삭제). 지워진 키는 접근 시 사라짐.
-- [ ] 재실행 시 `removed: 0`(멱등, 불변식 6).
+- [x] `list_orphan_item_images()` dry-run: 건수·샘플이 합리적이고, **살아있는 아이템의 원본/썸네일이 샘플에 없음**(불변식 2, 사람 확인).
+- [x] Edge Function `?dryRun=true` 응답의 `orphanCount`가 위 SQL과 일치.
+- [x] 비밀 헤더 없이 호출 시 401.
+- [x] 실삭제 1회 후, 임의의 살아있는 아이템이 **그리드(썸네일)·상세(원본) 모두 정상 표시**(살아있는 파일 미삭제). 지워진 키는 접근 시 사라짐.
+- [x] 재실행 시 `removed: 0`(멱등, 불변식 6).
 
 ---
 
@@ -233,8 +235,8 @@ Deno.serve(async (req) => {
 - `npx tsc --noEmit`·`npx expo lint`는 앱 코드 무변경이라 영향 없음(그래도 1회 돌려 회귀 0 확인).
 
 **사람(실 프로젝트 — 에이전트가 못 하는 것)**:
-- [ ] Step 1 dry-run 카운트 검토 → 수동 1건 삭제로 cascade(+GoTrue 내부) 확인 → 주간 잡 활성화.
-- [ ] Step 2 `list_orphan_item_images()` dry-run 샘플에 **살아있는 썸네일/원본이 없음** 확인 → Edge Function dryRun 확인 → 실삭제 1회 → 살아있는 아이템 표시 정상 → 주간 잡 활성화.
+- [x] Step 1 dry-run 카운트 검토 → 수동 1건 삭제로 cascade(+GoTrue 내부) 확인 → 주간 잡 활성화.
+- [x] Step 2 `list_orphan_item_images()` dry-run 샘플에 **살아있는 썸네일/원본이 없음** 확인 → Edge Function dryRun 확인 → 실삭제 1회 → 살아있는 아이템 표시 정상 → 주간 잡 활성화.
 - [ ] 1~2주 후 `auth.users` 익명 계정 수·Storage 객체 수·Egress가 **급증 없이 안정/감소**하는지 확인.
 
 ---
