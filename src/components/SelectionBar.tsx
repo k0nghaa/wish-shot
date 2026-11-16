@@ -5,8 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadow, spacing } from '@/constants/theme';
 
 /**
- * 다중 선택 하단 액션바(전체 탭). 플로팅 탭바 자리에 뜨는 알약(CustomTabBar 톤).
- * JS 전용. 선택이 없으면 disabled 로 흐리게 처리한다.
+ * 다중 선택 하단 액션바. 플로팅 탭바 자리에 뜨는 알약(CustomTabBar 톤).
+ * 선택이 없으면 disabled 로 흐리게 처리한다.
  */
 export type SelectionAction = {
   key: string;

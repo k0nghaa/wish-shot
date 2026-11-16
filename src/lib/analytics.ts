@@ -3,7 +3,7 @@ import { PostHog } from 'posthog-react-native';
 import { AppState } from 'react-native';
 
 /**
- * 테스트 계측(Phase 10) — PostHog 캡슐화 모듈. 화면·훅은 이 모듈만 import 한다
+ * 계측 — PostHog 캡슐화 모듈. 화면·훅은 이 모듈만 import 한다
  * (supabase 직접 호출 금지와 같은 사상 — `posthog-react-native` 를 직접 부르지 않는다).
  *
  * 불변식:
@@ -39,7 +39,7 @@ export type AnalyticsEventMap = {
   link_attached: Record<string, never>;
   /** 스낵바 [보기] 또는 알림 목록 행을 눌러 위시 상세로 갈 때. */
   notification_opened: { source: 'snackbar' | 'list' };
-  /** 전역 JS 에러(갈래 F-2). name=에러 클래스명뿐 — 메시지·스택은 콘텐츠 유입 가능성 때문에 미수집. */
+  /** 전역 JS 에러. name=에러 클래스명뿐 — 메시지·스택은 콘텐츠 유입 가능성 때문에 미수집. */
   app_error: { name: string; is_fatal: boolean };
 };
 
@@ -61,7 +61,7 @@ export function initAnalytics(): void {
       host: process.env.EXPO_PUBLIC_POSTHOG_HOST || undefined,
       // 선택 peer 의존성(expo-file-system 자동 탐지) 대신 이미 설치된 AsyncStorage 를 명시.
       customStorage: AsyncStorage,
-      // 앱 열림/백그라운드/설치 라이프사이클 자동 수집 — 방문 빈도·리텐션(질문 1).
+      // 앱 열림/백그라운드/설치 라이프사이클 자동 수집 — 방문 빈도·리텐션.
       captureAppLifecycleEvents: true,
       // 개발 기기 이벤트 오염 방지. 설정의 __DEV__ 토글(optIn)로만 켠다 — 토글 상태는 영속된다.
       defaultOptIn: !__DEV__,
@@ -114,7 +114,7 @@ export function identifyUser(uid: string): void {
 let errorHandlerInstalled = false;
 
 /**
- * 전역 JS 에러 수집(갈래 F-2) — app_error{name, is_fatal}만. 사용량 지표용 집계이며 크래시 모니터링이 아니다 —
+ * 전역 JS 에러 수집 — app_error{name, is_fatal}만. 사용량 지표용 집계이며 크래시 모니터링이 아니다 —
  * 오류 상세·네이티브 크래시는 Sentry(src/lib/monitoring.ts)가 맡는다. 렌더 오류는 RN 이 전역 핸들러를 거치지 않으므로
  * monitoring.ts 의 루트 경계가 켜져 있을 때(Sentry DSN 설정 시)만 여기로 들어온다.
  * 기존 핸들러를 반드시 체이닝해 개발 redbox·기본 크래시 동작을 보존한다.

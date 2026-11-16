@@ -8,8 +8,8 @@ import { formatPriceKRW } from '@/lib/formatPrice';
 import { getItem, listCategories, type Category, type Item } from '@/lib/queries';
 
 /**
- * M7 정보 하프시트: 상세(뷰어)의 (i) 로 열리는 formSheet 라우트.
- * 카드1(제품명·브랜드·가격·링크) + 카드2(폴더·메모·태그) + 푸터(담은 시각).
+ * 정보 하프시트: 상세(뷰어)의 (i) 로 열리는 formSheet 라우트.
+ * 카드1(제품명·브랜드·가격·링크) + 카드2(카테고리·메모·태그) + 푸터(담은 시각).
  */
 export default function ItemInfoScreen() {
   const router = useRouter();

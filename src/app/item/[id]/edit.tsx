@@ -54,7 +54,7 @@ export default function ItemEditScreen() {
       mountedRef.current = false;
     };
   }, []);
-  // linkPrefill: 링크붙이기 모드(기능 1)에서 넘어온 공유 URL. 기존 링크가 없으면 채우고, 있으면 확인 후 교체.
+  // linkPrefill: 링크붙이기 모드에서 넘어온 공유 URL. 기존 링크가 없으면 채우고, 있으면 확인 후 교체.
   const { id, linkPrefill } = useLocalSearchParams<{ id: string; linkPrefill?: string }>();
 
   const [loading, setLoading] = useState(true);
@@ -93,7 +93,7 @@ export default function ItemEditScreen() {
         setPrice(item.price != null ? String(item.price) : '');
         const existingLink = item.source_link ?? '';
         setSourceLink(existingLink);
-        // 링크붙이기(기능 1): 기존 링크가 없으면 프리필, 있으면(다르면) 무단 덮어쓰기 없이 확인 후 교체.
+        // 링크붙이기: 기존 링크가 없으면 프리필, 있으면(다르면) 무단 덮어쓰기 없이 확인 후 교체.
         if (linkPrefill) {
           if (!existingLink) {
             setSourceLink(linkPrefill);
@@ -138,7 +138,7 @@ export default function ItemEditScreen() {
     setNewImage({ uri: asset.uri, contentType: asset.mimeType ?? 'image/jpeg' });
   }
 
-  // 폴더 시트의 인라인 생성 — 만든 폴더를 목록에 추가하고 반환한다(시트가 선택·닫기 처리).
+  // 카테고리 시트의 인라인 생성 — 만든 카테고리를 목록에 추가하고 반환한다(시트가 선택·닫기 처리).
   async function createCategoryInline(name: string): Promise<Category> {
     const created = await createCategory(name);
     setCategories((prev) => [...prev, created]);
@@ -164,10 +164,10 @@ export default function ItemEditScreen() {
         tags: tags.length ? tags : null,
       });
       // 필드 저장이 통과한 뒤에만 이미지를 같은 Storage 키에 덮어쓴다(image_key 불변).
-      // 원본은 저장 시점에만 축소·압축하고, 썸네일도 함께 재업로드한다(불변식 1·2·3).
+      // 원본은 저장 시점에만 축소·압축하고, 썸네일도 함께 재업로드한다.
       if (newImage) {
         const userId = await getCurrentUserId();
-        await ensureFileReady(newImage.uri); // iCloud 처리 유지(불변식 3)
+        await ensureFileReady(newImage.uri); // iCloud 처리 유지
         const compressed = await compressForUpload(newImage.uri);
         const thumbUri = await makeThumbnail(compressed.uri);
         const [bytes, thumbBytes] = await Promise.all([readImageBytes(compressed.uri), readImageBytes(thumbUri)]);
@@ -188,7 +188,7 @@ export default function ItemEditScreen() {
       router.back();
     } catch (e) {
       setSaving(false);
-      // 다른 아이템과 정규화명이 겹치면 덮어쓰기 없이 안내·차단한다(제약 3).
+      // 다른 아이템과 정규화명이 겹치면 덮어쓰기 없이 안내·차단한다.
       if (e instanceof DuplicateItemError) {
         Alert.alert('이미 있는 위시', '같은 브랜드·제품명의 위시가 있습니다. 브랜드나 제품명을 다르게 바꾸세요.');
         return;

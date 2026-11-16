@@ -7,10 +7,10 @@ export type AnalysisLog = Tables<'analysis_logs'>;
 
 /**
  * 분석 로그 상태(개발자용). 4종:
- * - ocr_empty      : OCR 인식 결과 없음 (E-1)
+ * - ocr_empty      : OCR 인식 결과 없음
  * - parsed         : 정제 성공
- * - parse_failed   : LLM 정제 실패/타임아웃 (E-2)
- * - low_confidence : 정제는 됐으나 신뢰도가 낮음 (FR-7a)
+ * - parse_failed   : LLM 정제 실패/타임아웃
+ * - low_confidence : 정제는 됐으나 신뢰도가 낮음(확인 안내 대상)
  */
 export type AnalysisStatus = 'ocr_empty' | 'parsed' | 'parse_failed' | 'low_confidence';
 

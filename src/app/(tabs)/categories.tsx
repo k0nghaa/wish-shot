@@ -22,7 +22,7 @@ import {
 const TABBAR_SPACE = 96;
 // 카테고리 카드 모자이크에 채울 대표 썸네일 수(최신순).
 const MOSAIC_TILES = 4;
-// 폴더 카드 그리드: 2열 + 좌우 패딩/열 간격(고정 크기 계산용).
+// 카테고리 카드 그리드: 2열 + 좌우 패딩/열 간격(고정 크기 계산용).
 const GRID_PAD = spacing.three;
 const GRID_GAP = spacing.two;
 
@@ -44,7 +44,7 @@ export default function CategoriesScreen() {
   const { width } = useWindowDimensions();
   const cardSize = (width - GRID_PAD * 2 - GRID_GAP) / 2; // 2열 고정 크기(부분 행에서도 안 늘어남)
   const [rows, setRows] = useState<Row[] | null>(null); // null = 로딩 중
-  const [deleteMode, setDeleteMode] = useState(false); // iOS 앨범 톤 폴더 삭제 모드
+  const [deleteMode, setDeleteMode] = useState(false); // iOS 앨범 톤 카테고리 삭제 모드
 
   const load = useCallback(async () => {
     try {
@@ -120,7 +120,7 @@ export default function CategoriesScreen() {
     router.push('/register');
   }
 
-  // 상단 ··· = 폴더 삭제 모드 진입(각 폴더 좌상단 − 배지 노출).
+  // 상단 ··· = 카테고리 삭제 모드 진입(각 카드 좌상단 − 배지 노출).
   function enterDeleteMode() {
     const deletable = (rows ?? []).filter((r) => !r.isUncat);
     if (deletable.length === 0) {
@@ -179,7 +179,7 @@ export default function CategoriesScreen() {
   }
 
   function handleDelete(row: Row) {
-    // 이 폴더가 마지막 삭제 대상이면 삭제 후 삭제 모드를 종료한다.
+    // 이 카테고리가 마지막 삭제 대상이면 삭제 후 삭제 모드를 종료한다.
     const wasLast = (rows ?? []).filter((r) => !r.isUncat).length <= 1;
     Alert.alert('삭제할까요?', `'${row.name}' 안의 아이템은 미분류로 이동합니다.`, [
       { text: '취소', style: 'cancel' },

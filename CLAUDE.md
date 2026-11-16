@@ -94,7 +94,7 @@ src/
     emptyCategory.ts          # 카테고리가 비면 삭제/유지 묻기
     formatDate.ts, formatPrice.ts
   constants/
-    theme.ts                  # 디자인 토큰(라이트) + colorsDark(상세 뷰어·스낵바의 어두운 면에만)
+    theme.ts                  # 디자인 토큰(라이트) + colorsDark(상세 뷰어·스낵바·사진 확대창의 어두운 면에만)
     privacy.ts                # 개인정보 안내 문구 단일 소스(바꿔서 다시 보이려면 register 의 PRIVACY_NOTICE_KEY 도 바꾼다)
   types/database.ts           # supabase gen types 자동 생성(직접 수정 금지)
 modules/expo-vision-ocr/      # 자작 OCR 네이티브 모듈. ios/ 아래는 fingerprint 에 들어간다
@@ -160,7 +160,7 @@ tsconfig.json, .npmrc, .gitattributes, .env.example, .github/
    - 라벨·버튼·탭·플레이스홀더: **명사 또는 동사 원형의 단답**. 예: "저장", "삭제", "취소", "편집", "카테고리 이동", "다른 사진 선택".
    - 안내·에러: 짧은 서술("~습니다") 또는 명사구. 예: "불러오지 못했어요" → "불러오지 못했습니다"(또는 더 짧게 "불러오기 실패"). 감탄·수다·군더더기 배제.
    - 확인 다이얼로그: 제목은 짧은 질문 가능("삭제할까요?"), 본문은 담백하게("복구할 수 없습니다").
-5. **디자인 토큰을 쓴다.** 색상은 `src/constants/theme.ts`의 시맨틱 토큰(`primary`(검정), `accent`(와인 — 제한 사용), `error`, `textMain`, `textSub`, `textDisabled`, `bgCard`, `silver`(iOS 시스템 그레이) 등)만 사용. 컴포넌트에 원시 hex를 직접 쓰지 않는다.
+5. **디자인 토큰을 쓴다.** 색상은 `src/constants/theme.ts`의 시맨틱 토큰(`primary`(검정), `accent`(와인 — 제한 사용), `error`, `textMain`, `textSub`, `textDisabled`, `bgCard`, `silver`(iOS 시스템 그레이) 등)만 사용. 컴포넌트에 원시 hex를 직접 쓰지 않는다. 예외: 그림자 색(`shadowColor`·`textShadowColor`)의 검정.
 6. **모르면 만들어내지 않는다.** 패키지 버전·Expo SDK 호환·EAS 설정 필드가 불확실하면 공식 문서를 확인하거나 사람에게 묻는다. 아이폰 설치·공유 시트 동작은 에이전트가 검증할 수 없으므로 "확인해달라"고 명시적으로 요청한다.
 7. **커밋 메시지는 기존 컨벤션**: `feat:`, `fix:`, `chore:`, `docs:`, `style:`, `refactor:`, `test:` + 한국어 요약.
 8. **문서를 현실에 맞춘다.** 구조나 명령어가 바뀌면 이 파일과 `docs/development.md`(개발 가이드)를 같은 커밋에서 갱신한다. 절차·명령·수치는 개발 가이드가 정본이고, 이 파일엔 규칙·구조·원칙과 링크만 둔다. `README.md`는 서비스 소개라 기능·구조가 크게 바뀔 때만 함께 고친다.

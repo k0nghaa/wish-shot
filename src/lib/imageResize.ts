@@ -3,11 +3,11 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { toFileUri } from './imageBytes';
 
 /**
- * 이미지 egress·저장 최적화(Phase 9 B·D). 저장 시점에만 축소·압축한다 —
+ * 이미지 egress·저장 최적화. 저장 시점에만 축소·압축한다 —
  * OCR·AI 분석·원본 확대 보기는 사용자가 고른 원본 uri 를 그대로 쓴다(품질 저하 금지).
  *
  * 리사이즈 관용구는 RegionSelectSheet(제품 영역 크롭)와 동일하다: 긴 변 기준 축소, 업스케일 금지.
- * manipulateAsync 는 로컬 file:// 뿐 아니라 원격 https URL 도 입력으로 받는다(D 백필에서 활용).
+ * manipulateAsync 는 로컬 file:// 뿐 아니라 원격 https URL 도 입력으로 받는다(썸네일 백필에서 활용).
  */
 async function downscaleToJpeg(uri: string, maxEdge: number, compress: number): Promise<string> {
   const file = toFileUri(uri);

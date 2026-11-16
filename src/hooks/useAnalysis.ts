@@ -5,17 +5,21 @@ import { ensureFileReady, ImageNotReadyError } from '@/lib/imageBytes';
 import { ocrEngine } from '@/lib/ocr';
 import { parseScreenshotText, type ParseImage, type ParseResult } from '@/lib/queries';
 
-/** "확인이 필요해요"(FR-7a) 를 띄우는 신뢰도 임계값(잠정). */
+/**
+ * 저신뢰 확인 안내("AI가 채운 값을 확인하세요.")를 띄우는 신뢰도 임계값(잠정).
+ * 정답셋 측정 스크립트(supabase/functions/parse-screenshot-text/samples/goldset-eval.ts)에도 같은 값이 있다 — 바꾸면 함께 바꾼다.
+ */
 export const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
 /**
- * 이미지 폴백 트리거 임계값(Phase 6): OCR 원문이 이보다 짧으면 텍스트 정제를 건너뛰고
+ * 이미지 폴백 트리거 임계값: OCR 원문이 이보다 짧으면 텍스트 정제를 건너뛰고
  * "제품 영역 지정" 시트로 유도한다(텍스트가 거의 없는 제품 사진). 실기기 샘플로 조정 가능.
+ * 정답셋 측정 스크립트(supabase/functions/parse-screenshot-text/samples/goldset-eval.ts)에도 같은 값이 있다 — 바꾸면 함께 바꾼다.
  */
 export const OCR_MIN_CHARS = 20;
 
 /**
- * 분석 상태 전이(결정 문서 4.3 + Phase 6 이미지 폴백):
+ * 분석 상태 전이(텍스트가 부족하면 제품 영역 이미지로 폴백):
  *   idle → imageReceived → ocrRunning → (parsing | regionSelect → imageParsing) → filled → submitted
  * 실패 시 어느 지점에서든 → error (→ 화면은 수동 입력 폴백).
  */
@@ -31,14 +35,14 @@ export type AnalysisPhase =
   | 'error';
 
 /**
- * 실패 종류: OCR 결과 없음(E-1) / 정제 실패(E-2) / 사진 미준비(iCloud 미다운로드) / 이미지 분석 실패.
+ * 실패 종류: OCR 결과 없음 / 정제 실패 / 사진 미준비(iCloud 미다운로드) / 이미지 분석 실패.
  * image_not_ready·image_parse_failed 는 막다른 상태가 아니라 재시도로 회복되는 상태다(수동 입력도 가능).
  */
 export type AnalysisErrorKind = 'ocr_empty' | 'parse_failed' | 'image_not_ready' | 'image_parse_failed';
 
 export interface AnalysisState {
   phase: AnalysisPhase;
-  rawText: string | null; // OCR 원문(E-2 표시·로그 기록용)
+  rawText: string | null; // OCR 원문(정제 실패 때 표시·로그 기록용)
   result: ParseResult | null; // 정제 결과(filled 일 때)
   errorKind: AnalysisErrorKind | null;
   via: 'text' | 'image_region' | null; // filled 가 어느 경로로 채워졌는지(로그 source 기록용)
@@ -66,7 +70,7 @@ const initialState: AnalysisState = {
 };
 
 /**
- * analysis_completed(Phase 10, 질문 4) — 상태머신 종료 전이에서만 부른다.
+ * analysis_completed — 상태머신 종료 전이에서만 부른다.
  * status 는 analysis_logs 와 동일 enum. image_parse_failed 는 parse_failed 로 접고,
  * image_not_ready(사진 미준비)는 분석이 시작되지 못한 회복형 상태라 발화하지 않는다.
  */
@@ -107,7 +111,7 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
       if (state.phase === 'idle' || state.phase === 'submitted') return state;
       return { ...state, phase: 'error', errorKind: action.kind, rawText: action.rawText };
     case 'reparse':
-      // E-2 재시도: OCR 원문이 남아 있을 때만 error → parsing 으로 되돌린다.
+      // 정제 재시도: OCR 원문이 남아 있을 때만 error → parsing 으로 되돌린다.
       return state.phase === 'error' && state.rawText ? { ...state, phase: 'parsing', errorKind: null } : state;
     case 'submitted':
       return state.phase === 'filled' ? { ...state, phase: 'submitted' } : state;
@@ -121,9 +125,9 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
  *
  * - `analyze(uri)`: 이미지가 들어오면 호출. OCR → (텍스트 있으면) Edge Function 정제 →
  *   filled, 없으면/실패면 error. 개발/시뮬레이터에선 MockOcrEngine 이 쓰인다(@/lib/ocr).
- * - `markSubmitted()`: 저장 성공 후 호출(Step 4).
+ * - `markSubmitted()`: 저장 성공 후 호출.
  * - `reset()`: 초기화.
- * - `needsConfirmation`: filled 이고 신뢰도가 임계값 미만이면 true(FR-7a).
+ * - `needsConfirmation`: filled 이고 신뢰도가 임계값 미만이면 true.
  */
 export function useAnalysis() {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -146,8 +150,8 @@ export function useAnalysis() {
       rawText = ocr.text?.trim() ?? '';
       dispatch({ type: 'ocrDone', rawText });
 
-      // 텍스트가 거의 없으면(제품 단독 사진 등) 텍스트 정제를 건너뛰고 "제품 영역 지정" 시트로 유도(Phase 6).
-      // 사용자가 시트를 취소하면 기존 E-1(수동 입력) 경로로 떨어진다.
+      // 텍스트가 거의 없으면(제품 단독 사진 등) 텍스트 정제를 건너뛰고 "제품 영역 지정" 시트로 유도.
+      // 사용자가 시트를 취소하면 OCR 결과 없음(수동 입력) 경로로 떨어진다.
       if (rawText.length < OCR_MIN_CHARS) {
         dispatch({ type: 'regionSelect' });
         return;
@@ -166,14 +170,14 @@ export function useAnalysis() {
         dispatch({ type: 'error', kind: 'image_not_ready', rawText: '' });
         return;
       }
-      // E-2: 정제 실패/타임아웃/네트워크, 또는 OCR 모듈 실패 → 원문 유지 + 수동 입력 폴백.
+      // 정제 실패/타임아웃/네트워크, 또는 OCR 모듈 실패 → 원문 유지 + 수동 입력 폴백.
       if (__DEV__) console.warn('[WishShot/analyze] 실패', { hadRawText: !!rawText }, e);
       dispatch({ type: 'error', kind: 'parse_failed', rawText });
       capture('analysis_completed', { status: 'parse_failed' });
     }
   }, []);
 
-  // E-2 재시도: OCR 은 성공했으나 정제가 실패한 경우, OCR 을 다시 돌리지 않고 정제만 재시도한다.
+  // 정제 재시도: OCR 은 성공했으나 정제가 실패한 경우, OCR 을 다시 돌리지 않고 정제만 재시도한다.
   const reparse = useCallback(async (rawText: string) => {
     const run = ++runRef.current;
     const isCurrent = () => runRef.current === run;
@@ -208,7 +212,7 @@ export function useAnalysis() {
     }
   }, []);
 
-  // 시트 취소 → 수동 입력 폴백(E-1 경로). 분석 종료(텍스트 없음·이미지 미시도) = ocr_empty.
+  // 시트 취소 → 수동 입력 폴백(OCR 결과 없음 경로). 분석 종료(텍스트 없음·이미지 미시도) = ocr_empty.
   const cancelRegion = useCallback((rawText: string) => {
     dispatch({ type: 'error', kind: 'ocr_empty', rawText });
     capture('analysis_completed', { status: 'ocr_empty' });

@@ -2,11 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { supabase } from '@/lib/supabase';
 
+// 원본·썸네일을 함께 올리고 지우는 규칙과 signed URL 캐시의 근거: docs/phases/phase-9-image-egress.md
+
 /** private 버킷. RLS 로 경로 첫 세그먼트(=user_id)가 본인인 객체만 접근 가능. */
 const BUCKET = 'item-images';
 
 /**
- * signed URL 유효시간(초) = 1일(Phase 9 A).
+ * signed URL 유효시간(초) = 1일.
  * 영속 캐시(AsyncStorage)로 일 단위 재방문 egress 를 거의 0 으로 유지하면서,
  * signed URL 수명(유출 시 노출 창)은 짧게 둔다. 재발급이 필요해도 캐시 히트가 대부분이라 부담 없다.
  */
@@ -77,8 +79,8 @@ export async function hydrateSignedUrlCache(): Promise<void> {
 
 /**
  * 이미지 바이트를 업로드하고 객체 키를 반환한다.
- * uri → 바이트(ArrayBuffer) 변환은 호출자(Step 4, expo-image-picker + 파일 읽기) 몫이다.
- * `upsert: true` 라 같은 키에 다시 올리면 덮어쓴다(Step 4 중복 덮어쓰기).
+ * uri → 바이트(ArrayBuffer) 변환은 호출자(imageBytes.readImageBytes) 몫이다.
+ * `upsert: true` 라 같은 키에 다시 올리면 덮어쓴다(중복 덮어쓰기·이미지 교체).
  */
 export async function uploadItemImage(
   userId: string,
@@ -90,7 +92,7 @@ export async function uploadItemImage(
   const { error } = await supabase.storage.from(BUCKET).upload(key, bytes, {
     contentType,
     upsert: true,
-    cacheControl: '604800', // 7일(Phase 9 C) — signed URL 재사용과 함께 캐시 히트를 늘린다
+    cacheControl: '604800', // 7일 — signed URL 재사용과 함께 캐시 히트를 늘린다
   });
   if (error) throw new Error(`이미지를 업로드하지 못했습니다: ${error.message}`);
   invalidateSignedUrl(key); // 덮어쓰기 시 캐시된 옛 URL 이 옛 사진을 재사용하지 않도록
@@ -99,7 +101,7 @@ export async function uploadItemImage(
 
 /**
  * 원본 키 `{uid}/{id}.jpg` → 썸네일 키 `{uid}/{id}_thumb.jpg`(파생 — DB 에 저장하지 않는다).
- * 그리드용 축소본(Phase 9 D). 원본과 달리 항상 JPEG.
+ * 그리드용 축소본. 원본과 달리 항상 JPEG.
  */
 export function thumbKeyFromImageKey(imageKey: string): string {
   return imageKey.replace(/\.jpg$/i, '_thumb.jpg');
@@ -107,7 +109,7 @@ export function thumbKeyFromImageKey(imageKey: string): string {
 
 /**
  * 그리드 썸네일 업로드(항상 JPEG). 키만 원본과 다르고 나머지는 uploadItemImage 와 동일 규칙.
- * 담기·덮어쓰기·이미지 교체 시 원본과 함께 재업로드해 고아 객체를 만들지 않는다(불변식 1).
+ * 담기·덮어쓰기·이미지 교체 시 원본과 함께 재업로드해 고아 객체를 만들지 않는다.
  */
 export async function uploadItemImageThumb(
   userId: string,
@@ -171,7 +173,7 @@ export async function getItemImageSignedUrls(
 }
 
 /**
- * 그리드용 썸네일 signed URL 배치 발급(Phase 9 D). 화면이 넘긴 원본 `image_key` 배열을
+ * 그리드용 썸네일 signed URL 배치 발급. 화면이 넘긴 원본 `image_key` 배열을
  * 받아 `{ 원본 image_key → 썸네일 signed URL }` 로 돌려준다(화면은 여전히 image_key 로 인덱싱).
  * signed URL 발급은 바이트 전송이 아니라 egress 가 아니므로, 폴백용 원본 URL 과 함께 발급해도 무해하다.
  */
@@ -191,7 +193,7 @@ export async function getItemThumbSignedUrls(
 
 /**
  * Storage 객체 삭제(아이템 삭제 시 행과 함께 지운다). 원본과 썸네일을 **함께** 제거해
- * 고아 객체를 남기지 않는다(불변식 1). 두 키 모두 캐시 무효화.
+ * 고아 객체를 남기지 않는다. 두 키 모두 캐시 무효화.
  */
 export async function deleteItemImage(imageKey: string): Promise<void> {
   const keys = [imageKey, thumbKeyFromImageKey(imageKey)];
@@ -200,7 +202,7 @@ export async function deleteItemImage(imageKey: string): Promise<void> {
   keys.forEach(invalidateSignedUrl);
 }
 
-/** 여러 Storage 객체를 한 번에 삭제한다(다중 선택 삭제). 각 원본과 썸네일을 함께 제거(불변식 1). */
+/** 여러 Storage 객체를 한 번에 삭제한다(다중 선택 삭제). 각 원본과 썸네일을 함께 제거. */
 export async function deleteItemImages(imageKeys: string[]): Promise<void> {
   if (imageKeys.length === 0) return;
   const keys = imageKeys.flatMap((k) => [k, thumbKeyFromImageKey(k)]);

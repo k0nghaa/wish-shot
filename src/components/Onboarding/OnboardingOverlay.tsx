@@ -42,7 +42,7 @@ const CARDS: Card[] = [
   },
 ];
 
-// 계측(Phase 10) 스텝 식별자 — 캐러셀 장 번호와 1:1.
+// 계측 스텝 식별자 — 캐러셀 장 번호와 1:1.
 const CARD_STEPS: OnboardingStep[] = ['card_1', 'card_2', 'card_3'];
 
 type Phase = { kind: 'cards' } | { kind: 'transition' } | { kind: 'category'; target: TargetRect };
@@ -76,7 +76,7 @@ export function OnboardingOverlay({ onDone }: Props) {
     };
   }, []);
 
-  // 계측(Phase 10): 스텝 노출은 스텝당 1회(뒤로 스와이프 재노출은 last_step 만 갱신), 종료는 완주/스킵 1회.
+  // 계측: 스텝 노출은 스텝당 1회(뒤로 스와이프 재노출은 last_step 만 갱신), 종료는 완주/스킵 1회.
   const viewedStepsRef = useRef(new Set<OnboardingStep>());
   const lastStepRef = useRef<OnboardingStep>('card_1');
   const finishedRef = useRef(false);

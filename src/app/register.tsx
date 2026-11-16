@@ -99,7 +99,7 @@ function followLinkAfterSave(search: LinkSearch, item: SavedItemRef) {
   });
 }
 
-/** 분석 상태를 사용자용 문구·색으로 매핑(NFR-1). idle/submitted 에선 표시 안 함(null). */
+/** 분석 상태를 사용자용 문구·색으로 매핑. idle/submitted 에선 표시 안 함(null). */
 function analysisStatusInfo(
   state: AnalysisState,
   needsConfirmation: boolean,
@@ -112,7 +112,7 @@ function analysisStatusInfo(
     case 'imageParsing':
       return { text: 'AI가 정보를 정리하는 중…', color: colors.textSub, loading: true };
     case 'filled':
-      // E-3(부분 성공): 정제는 됐으나 제품명을 못 뽑음 → 제품명 입력을 명시적으로 안내.
+      // 부분 성공: 정제는 됐으나 제품명을 못 뽑음 → 제품명 입력을 명시적으로 안내.
       if (state.result && !state.result.productName) {
         return { text: '제품명을 인식하지 못했습니다. 직접 입력하세요.', color: colors.textMain, loading: false };
       }
@@ -148,8 +148,8 @@ export default function RegisterScreen() {
       mountedRef.current = false;
     };
   }, []);
-  // sourceLink: 링크붙이기 모드(기능 1) "새로 담기"로 넘어온 공유 URL 프리필.
-  // onboarding: 첫 실행 온보딩이 이 폼을 열었으면 '1' — 폼 위에 코치마크 투어를 띄운다(Phase 7 Batch D).
+  // sourceLink: 링크붙이기 모드 "새로 담기"로 넘어온 공유 URL 프리필.
+  // onboarding: 첫 실행 온보딩이 이 폼을 열었으면 '1' — 폼 위에 코치마크 투어를 띄운다.
   const params = useLocalSearchParams<{ imageUri?: string; imageMime?: string; sourceLink?: string; onboarding?: string }>();
 
   // 온보딩 코치마크 대상 등록(첫 실행 투어). 온보딩이 없을 땐 아무 영향 없음.
@@ -164,7 +164,7 @@ export default function RegisterScreen() {
     else router.replace('/');
   }, [router]);
 
-  // 계측(Phase 10): entry 는 마운트 시점 인텐트 여부(이미지 imageUri·URL sourceLink 프리필 = share).
+  // 계측: entry 는 마운트 시점 인텐트 여부(이미지 imageUri·URL sourceLink 프리필 = share).
   // 사진 출처(source)는 저장 시점에 확정 — 공유로 받았다가 picker/최근사진으로 바꾸면 갱신된다.
   const entryRef = useRef<'share' | 'manual'>(params.imageUri || params.sourceLink ? 'share' : 'manual');
   const imageSourceRef = useRef<'share' | 'picker' | 'recent_photo' | null>(params.imageUri ? 'share' : null);
@@ -172,17 +172,17 @@ export default function RegisterScreen() {
   // autofill_edited 는 필드당 1회만(택소노미 구현 노트) — 발화한 필드를 기록해 중복을 막는다.
   const autofillEditedRef = useRef(new Set<'name' | 'price' | 'brand' | 'category'>());
 
-  // register_opened(질문 2ⓐ·3): 퍼널 시작, 마운트 1회.
+  // register_opened: 퍼널 시작, 마운트 1회.
   useEffect(() => {
     capture('register_opened', { entry: entryRef.current });
   }, []);
 
   const [imageUri, setImageUri] = useState<string | null>(params.imageUri ?? null);
-  // 앨범 원본 삭제(기능 2): 앱 내에서 고른 사진의 자산 id(picker·"방금 캡처한 사진"). 전체 접근이 아니면
+  // 앨범 원본 삭제: 앱 내에서 고른 사진의 자산 id(picker·"방금 캡처한 사진"). 전체 접근이 아니면
   // picker 결과가 null 일 수 있어 그 경우 삭제 옵션 비노출. 공유 시트(params.imageUri)는 원본 참조가
   // 없어 이 값을 세우지 않아 자연히 제외된다.
   const [pickedAssetId, setPickedAssetId] = useState<string | null>(null);
-  // "방금 캡처한 사진" 제안(기능 1): 최근 사진 로드 중 표시 / 실패 시 숨김.
+  // "방금 캡처한 사진" 제안: 최근 사진 로드 중 표시 / 실패 시 숨김.
   const [recentLoading, setRecentLoading] = useState(false);
   const [recentHidden, setRecentHidden] = useState(false);
 
@@ -198,7 +198,7 @@ export default function RegisterScreen() {
   const [allTags, setAllTags] = useState<string[]>([]); // 기존 태그(선택 칩용)
 
   const [categories, setCategories] = useState<Category[]>([]);
-  // 카테고리도 자동채움처럼 "파생"으로 다룬다(FR-8 추천 미리선택).
+  // 카테고리도 자동채움처럼 "파생"으로 다룬다(추천 카테고리를 미리 고름).
   // undefined = 사용자가 아직 안 고름(추천을 따름), null = 사용자가 미분류 선택, id = 특정 카테고리.
   const [categoryIdEdit, setCategoryIdEdit] = useState<string | null | undefined>(undefined);
   const [folderSheet, setFolderSheet] = useState(false);
@@ -234,7 +234,7 @@ export default function RegisterScreen() {
     if (imageUri) analyze(imageUri);
   }, [imageUri, analyze]);
 
-  // 개인정보 고지(NFR-3): 첫 이미지 업로드 시 1회만. 플래그를 먼저 세워 중복 노출을 막는다.
+  // 개인정보 고지: 첫 이미지 업로드 시 1회만. 플래그를 먼저 세워 중복 노출을 막는다.
   useEffect(() => {
     if (!imageUri) return;
     let cancelled = false;
@@ -276,7 +276,7 @@ export default function RegisterScreen() {
     };
   }, [analysisState.phase]);
 
-  // E-3(제품명 미인식): 정제는 됐으나 제품명이 없고 사용자가 아직 입력 안 했으면 입력란에 포커스.
+  // 제품명 미인식: 정제는 됐으나 제품명이 없고 사용자가 아직 입력 안 했으면 입력란에 포커스.
   useEffect(() => {
     if (analysisState.phase === 'filled' && !analysisState.result?.productName && productNameEdit === null) {
       productNameRef.current?.focus();
@@ -324,7 +324,7 @@ export default function RegisterScreen() {
       : null;
   }
 
-  // FR-8: AI가 추천한 카테고리(목록 내 이름)를 id 로 환산. 사용자가 아직 안 골랐으면 추천을 미리선택한다.
+  // 카테고리 추천: AI가 추천한 카테고리(목록 내 이름)를 id 로 환산. 사용자가 아직 안 골랐으면 추천을 미리선택한다.
   const suggestedCategoryId = aiResult?.suggestedCategory
     ? (categories.find((c) => c.name === aiResult.suggestedCategory)?.id ?? null)
     : null;
@@ -358,14 +358,14 @@ export default function RegisterScreen() {
     });
   }
 
-  // autofill_edited(질문 4): AI가 채운 값과 다르게 바꾼 첫 변경에만 1회(필드별 Set 중복 방지).
+  // autofill_edited: AI가 채운 값과 다르게 바꾼 첫 변경에만 1회(필드별 Set 중복 방지).
   function captureAutofillEdited(field: 'name' | 'price' | 'brand' | 'category') {
     if (autofillEditedRef.current.has(field)) return;
     autofillEditedRef.current.add(field);
     capture('autofill_edited', { field });
   }
 
-  // item_saved(질문 2ⓐ): 저장 성공 응답 시(새 저장·덮어쓰기 공통). had_analysis = AI 자동채움 존재.
+  // item_saved: 저장 성공 응답 시(새 저장·덮어쓰기 공통). had_analysis = AI 자동채움 존재.
   function captureItemSaved() {
     if (!imageSourceRef.current) return; // 이미지 없이는 저장 불가 — 방어용
     capture('item_saved', {
@@ -375,7 +375,7 @@ export default function RegisterScreen() {
     });
   }
 
-  // 재시도: 이미지 분석 실패면 시트 재열기, 정제 실패(E-2, OCR 원문 있음)면 정제만 다시, 그 외(E-1)엔 처음부터.
+  // 재시도: 이미지 분석 실패면 시트 재열기, 정제 실패(OCR 원문 있음)면 정제만 다시, 그 외(OCR 결과 없음 등)엔 처음부터.
   function retryAnalysis() {
     if (analysisState.errorKind === 'image_parse_failed') {
       reopenRegion();
@@ -402,7 +402,7 @@ export default function RegisterScreen() {
     setPickedAssetId(asset.assetId ?? null);
   }
 
-  // "방금 캡처한 사진 담기"(기능 1): 탭할 때만 최근 사진 읽기 권한을 요청한다(HIG 적시 요청).
+  // "방금 캡처한 사진 담기": 탭할 때만 최근 사진 읽기 권한을 요청한다(HIG 적시 요청).
   // 권한 거부·제한이거나 사진이 없으면 제안을 감추고 일반 "사진 선택"만 남긴다.
   async function useRecentPhoto() {
     if (recentLoading) return;
@@ -415,7 +415,7 @@ export default function RegisterScreen() {
         return;
       }
       logImageDiag('recentPhoto', recent.uri);
-      // "방금 캡처한 사진"도 원본 assetId 가 있으므로 저장 후 앨범 삭제 대상에 포함한다(기능 2 취지에 부합).
+      // "방금 캡처한 사진"도 원본 assetId 가 있으므로 저장 후 앨범 삭제 대상에 포함한다.
       setPickedAssetId(recent.assetId);
       setImageUri(recent.uri); // 설정되면 기존 OCR/AI 파이프라인이 자동으로 돈다.
       imageSourceRef.current = 'recent_photo';
@@ -424,7 +424,7 @@ export default function RegisterScreen() {
     }
   }
 
-  // 폴더 시트의 인라인 생성 — 만든 폴더를 목록에 추가하고 반환한다(시트가 선택·닫기 처리).
+  // 카테고리 시트의 인라인 생성 — 만든 카테고리를 목록에 추가하고 반환한다(시트가 선택·닫기 처리).
   async function createCategoryInline(name: string): Promise<Category> {
     const created = await createCategory(name);
     setCategories((prev) => [...prev, created]);
@@ -438,7 +438,7 @@ export default function RegisterScreen() {
     setDupVisible(true);
   }
 
-  // 저장 성공 직후 원본 스크린샷 앨범 삭제를 제안한다(기능 2). picker 로 고른 사진(assetId 있음)만.
+  // 저장 성공 직후 원본 스크린샷 앨범 삭제를 제안한다. picker 로 고른 사진(assetId 있음)만.
   // 공유 시트·최근사진 경로는 pickedAssetId 가 null 이라 자연히 제외된다. 이미 저장된 뒤라 삭제는 선택.
   async function offerAlbumDelete() {
     if (!pickedAssetId) return;
@@ -499,13 +499,13 @@ export default function RegisterScreen() {
     const userId = await getCurrentUserId();
     const id = uuid.v4();
     // 원본 uri(사용자가 고른 사진, OCR 은 이미 이걸로 돌았음)에서 저장 시점에만 축소·압축한다.
-    await ensureFileReady(imageUri!); // iCloud 미다운로드 흡수(불변식 3) — 새 에러 경로 없이 기존 안내로 폴백
+    await ensureFileReady(imageUri!); // iCloud 미다운로드 흡수 — 새 에러 경로 없이 기존 안내로 폴백
     const compressed = await compressForUpload(imageUri!); // ≤1600 jpeg
     const thumbUri = await makeThumbnail(compressed.uri); // 축소본에서 400px(디코드 절약)
     const [bytes, thumbBytes] = await Promise.all([readImageBytes(compressed.uri), readImageBytes(thumbUri)]);
-    // Storage 업로드 실패 시 여기서 throw → 아이템 행을 만들지 않는다(E-5: 이미지 없는 아이템 금지).
+    // Storage 업로드 실패 시 여기서 throw → 아이템 행을 만들지 않는다(사진 없는 위시는 만들지 않음).
     const imageKey = await uploadItemImage(userId, id, bytes, compressed.contentType);
-    await uploadItemImageThumb(userId, id, thumbBytes); // 원본+썸네일 함께(불변식 1)
+    await uploadItemImageThumb(userId, id, thumbBytes); // 원본+썸네일 함께
     try {
       await createItem({
         id,
@@ -550,18 +550,18 @@ export default function RegisterScreen() {
     const existing = dupItem;
     if (!existing) return;
     setOverwriteBusy(true);
-    // 기존 위시에 링크가 있고 링크 칸을 손대지 않았으면 기존 링크를 그대로 둔다(불변식 5 — 찾은 링크로 바꾸지 않음).
+    // 기존 위시에 링크가 있고 링크 칸을 손대지 않았으면 기존 링크를 그대로 둔다(찾은 링크로 바꾸지 않음).
     const keepExistingLink = sourceLinkEdit === null && !!existing.source_link;
     const linkHandOff = keepExistingLink ? null : takeLinkHandOff();
     saveStartedRef.current = true;
     try {
       const userId = await getCurrentUserId();
-      await ensureFileReady(imageUri!); // iCloud 처리 유지(불변식 3)
+      await ensureFileReady(imageUri!); // iCloud 처리 유지
       const compressed = await compressForUpload(imageUri!);
       const thumbUri = await makeThumbnail(compressed.uri);
       const [bytes, thumbBytes] = await Promise.all([readImageBytes(compressed.uri), readImageBytes(thumbUri)]);
       // 같은 Storage 키에 새 스크린샷 덮어쓰기(upsert) + 필드 갱신. 원본과 썸네일을 모두 재업로드해
-      // 옛 사진이 캐시로 남지 않게 한다(불변식 1 — 업로드 함수가 각 키를 invalidate).
+      // 옛 사진이 캐시로 남지 않게 한다(업로드 함수가 각 키를 invalidate).
       await uploadItemImage(userId, existing.id, bytes, compressed.contentType);
       await uploadItemImageThumb(userId, existing.id, thumbBytes);
       await updateItem(existing.id, {
@@ -643,7 +643,7 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
 
-          {/* "방금 캡처한 사진 담기"(기능 1): 이미지가 없을 때만. 탭 시점에만 사진 접근을 요청한다. */}
+          {/* "방금 캡처한 사진 담기": 이미지가 없을 때만. 탭 시점에만 사진 접근을 요청한다. */}
           {!imageUri && !recentHidden ? (
             <TouchableOpacity
               ref={setRecentRef}
@@ -686,7 +686,7 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
-          {/* 실패(E-1/E-2) 상세 */}
+          {/* 실패(OCR 결과 없음·정제 실패) 상세 */}
           {analysisState.phase === 'error' ? (
             <View style={styles.errorBox}>
               {analysisState.errorKind === 'parse_failed' && analysisState.rawText ? (
@@ -824,7 +824,7 @@ export default function RegisterScreen() {
         categories={categories}
         selectedId={categoryId}
         onSelect={(id) => {
-          // FR-8 추천이 미리선택된 상태에서 다른 폴더를 고르면 = AI 추천 수정(카테고리 필드).
+          // 추천 카테고리가 미리 선택된 상태에서 다른 카테고리를 고르면 = AI 추천 수정(카테고리 필드).
           if (categoryIsSuggested && id !== suggestedCategoryId) captureAutofillEdited('category');
           setCategoryIdEdit(id);
         }}
@@ -844,7 +844,7 @@ export default function RegisterScreen() {
       {/* 원본 확대 보기(롱프레스) — 텍스트를 직접 읽고 입력할 때 */}
       <ImageZoomModal visible={zoomVisible} uri={imageUri} onClose={() => setZoomVisible(false)} />
 
-      {/* 제품 영역 지정(Phase 6): OCR 텍스트 부족 시 자동으로, 또는 "제품 영역으로 분석" 버튼으로 열림. 선택 영역만 크롭해 '분석' 때 전송. */}
+      {/* 제품 영역 지정: OCR 텍스트 부족 시 자동으로, 또는 "제품 영역으로 분석" 버튼으로 열림. 선택 영역만 크롭해 '분석' 때 전송. */}
       <RegionSelectSheet
         visible={analysisState.phase === 'regionSelect' || analysisState.phase === 'imageParsing'}
         imageUri={imageUri}
@@ -853,7 +853,7 @@ export default function RegisterScreen() {
         onCancel={() => cancelRegion(analysisState.rawText ?? '')}
       />
 
-      {/* 첫 실행 온보딩(Phase 7 Batch D): 이 폼 위 코치마크 2스텝(사진 선택·방금 캡처한 사진). */}
+      {/* 첫 실행 온보딩: 이 폼 위 코치마크 2스텝(사진 선택·방금 캡처한 사진). */}
       {params.onboarding === '1' ? <RegisterCoachmarkTour onDone={endOnboardingTour} /> : null}
     </SafeAreaView>
   );
@@ -944,7 +944,7 @@ const styles = StyleSheet.create({
   },
   retryBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
   saveNote: { fontSize: 12, color: colors.textSub, textAlign: 'center' },
-  // 폴더/메모 카드 위 FR-8 추천 안내 문구. 위 간격 축소(marginTop) + 폴더 섹션을 위로 당김(marginBottom).
+  // 카테고리/메모 카드 위 카테고리 추천 안내 문구. 위 간격 축소(marginTop) + 카테고리 섹션을 위로 당김(marginBottom).
   suggestHint: { fontSize: 13, color: colors.textSub, marginTop: 5, marginBottom: -4, paddingHorizontal: spacing.one },
   suggestHintHidden: { opacity: 0 },
 });

@@ -10,7 +10,7 @@
  * 구분자 '|' 는 각 토큰을 정규화한 뒤 붙이므로, 입력값 안의 '|' 는 제거되어 충돌하지 않는다.
  *
  * ⚠️ 이 값은 DB `items.normalized_name`(서버 전용 숨김 컬럼)과 `UNIQUE(user_id, normalized_name)`
- * 의 판정 소스다. Step 4 의 중복 사전조회와 저장이 반드시 이 함수를 함께 써야 판정이 일치한다.
+ * 의 판정 소스다. 중복 사전조회·저장·수정이 반드시 이 함수를 함께 써야 판정이 일치한다.
  */
 export function normalizeName(
   brand: string | null | undefined,

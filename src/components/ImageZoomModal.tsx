@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Image as RNImage, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 
-import { radius, shadow } from '@/constants/theme';
+import { colorsDark, radius, shadow } from '@/constants/theme';
 import { toFileUri } from '@/lib/imageBytes';
 
 /**
@@ -86,7 +86,7 @@ export function ImageZoomModal({ visible, uri, onClose }: { visible: boolean; ur
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)' },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colorsDark.overlay },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: {
     borderRadius: radius.lg,

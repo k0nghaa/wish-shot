@@ -42,7 +42,7 @@ export default function AllScreen() {
   const [fallbackUrls, setFallbackUrls] = useState<Record<string, string>>({}); // 원본(폴백 — 썸네일 없는 레거시)
   const [categories, setCategories] = useState<Category[]>([]);
 
-  // 링크붙이기 모드(기능 1): 공유 URL 을 기존 위시에 달거나 "새로 담기". 선택 모드와 상호 배타.
+  // 링크붙이기 모드: 공유 URL 을 기존 위시에 달거나 "새로 담기". 선택 모드와 상호 배타.
   // 별도 상태 없이 라우트 파라미터를 단일 소스로 삼는다(재진입 시 새 URL 이 그대로 반영됨).
   const params = useLocalSearchParams<{ attachLink?: string }>();
   const attachLink = params.attachLink || null;
@@ -57,7 +57,7 @@ export default function AllScreen() {
       const [list, cats] = await Promise.all([listItems(), listCategories().catch(() => [] as Category[])]);
       const keys = list.map((it) => it.image_key);
       // 썸네일(우선)과 원본(폴백)을 함께 발급한다 — 발급은 egress 가 아니라 무해하고,
-      // 원본 바이트는 썸네일이 실제로 없을 때(레거시)만 내려온다(불변식 4).
+      // 원본 바이트는 썸네일이 실제로 없을 때(레거시)만 내려온다.
       const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
       setItems(list);
       setUrls(thumbMap);
@@ -146,7 +146,7 @@ export default function AllScreen() {
         ) : null}
       </View>
 
-      {/* 링크붙이기 안내 배너 + 새로 담기(기능 1) */}
+      {/* 링크붙이기 안내 배너 + 새로 담기 */}
       {attachMode ? (
         <View style={styles.banner}>
           <Text style={styles.bannerText} numberOfLines={2}>

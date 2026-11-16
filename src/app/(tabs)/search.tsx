@@ -19,7 +19,7 @@ const COLUMNS = 3;
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
 
 /**
- * 검색 탭(Phase 6): 상단 입력 + 기존 items 쿼리 재사용 클라이언트 필터(제품명·브랜드·태그·메모).
+ * 검색 탭: 상단 입력 + 기존 items 쿼리 재사용 클라이언트 필터(제품명·브랜드·태그·메모).
  * 서버 쿼리·인덱스 없음. 300ms 디바운스. 결과는 3열 그리드 → 상세(단일).
  */
 export default function SearchScreen() {

@@ -16,12 +16,12 @@ import {
 import { colors, hairlineWidth, radius, spacing, type } from '@/constants/theme';
 
 /**
- * iOS 설정 톤의 그룹 카드 폼 프리미티브(M3). 등록·편집 화면이 공유한다.
+ * iOS 설정 톤의 그룹 카드 폼 프리미티브. 등록·편집 화면이 공유한다.
  * - FormCard: 그룹 카드 컨테이너. 직계 자식 사이에 헤어라인 구분선을 자동 삽입.
  * - FormRow: 라벨 좌 / 값 우(children) 한 줄. required(*) 표시 지원.
  * - FormLineInput: FormRow 안의 한 줄 입력. 넘치면 앞부분을 보이고 오른쪽 끝을 페이드로 흐린다(옆으로 밀어 볼 수 있음).
  * - FormBlock: 라벨 위 / 전체폭 children 아래(메모·태그 등).
- * - DisclosureRow: 라벨 좌 / 값 + › 우, 탭 가능(폴더 선택 등).
+ * - DisclosureRow: 라벨 좌 / 값 + › 우, 탭 가능(카테고리 선택 등).
  */
 
 export function FormCard({ children }: { children: ReactNode }) {
@@ -55,7 +55,7 @@ const FADE_WIDTH = 28;
 
 /**
  * FormRow 안의 한 줄 입력(등록·편집 공용 — 제품명·브랜드·가격·링크).
- * - 값이 칸에 들어가면 지금처럼 오른쪽 정렬.
+ * - 값이 칸에 들어가면 오른쪽 정렬.
  * - 넘치면(포커스 밖) 앞부분부터 한 줄로 보이고, 오른쪽 끝을 카드 배경색으로 페이드해 글자가 이어져 있음을 표시한다.
  *   표시는 입력 위에 덮은 가로 스크롤 한 줄이라, 입력하지 않고도 옆으로 밀어 잘린 부분을 볼 수 있다
  *   (민 만큼 왼쪽 끝도 흐리고, 끝까지 밀면 오른쪽 흐림은 사라진다). 탭하면 입력을 시작한다.

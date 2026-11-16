@@ -153,7 +153,7 @@ export function ShareIntentHandler() {
     if (last && last.sig === sig && now - last.at < DUPLICATE_WINDOW_MS) return;
     lastHandledRef.current = { sig, at: now };
 
-    capture('share_intent_received', { type: target.kind }); // 공유 진입 전체량(질문 3)
+    capture('share_intent_received', { type: target.kind }); // 공유 진입 전체량
     if (target.kind === 'image') logImageDiag('shareIntent', target.path, { mimeType: target.mimeType });
 
     // 작성 중인 폼이 있으면 묻는다(확인창이 이미 떠 있으면 내용만 마지막 공유로 바뀐다).
