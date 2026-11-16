@@ -88,7 +88,8 @@ SNS에서 찍은 스크린샷을 공유 시트로 바로 보내면 더 간편하
 
 | 주제 | 문서 |
 | :--- | :--- |
-| 로컬 실행, DB, Edge Function 배포·운영 | [개발 가이드](docs/development.md) |
+| 읽는 순서, 작업 기록 목록, 용어 | [문서 안내](docs/README.md) |
+| 로컬 실행, 빌드·출시, DB, Edge Function 배포·운영 | [개발 가이드](docs/development.md) |
 | 단계별 작업 지시와 결과 | [작업 기록](docs/phases/) |
 | 디자인 명세 | [비주얼 스펙](docs/design/phase-5-visual-spec.md) |
 | 계측 이벤트 정의 | [트래킹 플랜](docs/testing/tracking-plan.md) |

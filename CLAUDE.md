@@ -12,6 +12,7 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 
 - 제품 요구사항: 노션 「WishShot — 스크린샷으로 시작되는 개인 위시리스트」(v1 PRD, v2 PRD 작성 중)
 - 기술 결정: 노션 「WishShot v2 — 플랫폼·아키텍처 결정 문서 (Expo + Supabase)」
+- 문서 안내(읽는 순서·작업 기록 목록·용어 — 요구사항 번호 FR·NFR·E의 뜻 포함): `docs/README.md`
 - 개발 가이드(로컬 실행·DB·Edge Function·빌드·출시·환경 변수): `docs/development.md` — **절차·명령·수치의 정본**
 - 작업 기록: `docs/phases/` — Phase 번호순, 각 문서 끝에 결과 기록. 코드·문서가 "Phase N"으로 가리키는 근거는 여기 있다.
 - 트래킹 플랜(이벤트 택소노미 **정본**): `docs/testing/tracking-plan.md`
@@ -107,6 +108,7 @@ supabase/
     cleanup-orphan-images/    # 고아 이미지 주간 스윕(service_role, x-cron-secret)
   tests/                      # SQL Editor 용 검증 SQL(rls·audit·quota·purchase_link_quota·metrics·parse_failures) + Deno 시험(find_purchase_links_test·purchase_channel_test·parse_quota_live)
 docs/
+  README.md                   # 문서 안내 — 읽는 순서·작업 기록 목록·용어
   development.md              # 개발 가이드 — 절차·명령·수치 정본
   phases/                     # Phase별 작업 지시·결과 기록
   design/                     # 디자인 정본(색 토큰·화면 명세·목업 이미지)
