@@ -12,7 +12,7 @@
  * 컴포넌트에는 원시 hex를 직접 쓰지 말고 이 시맨틱 토큰만 사용한다. (CLAUDE.md 규칙 5)
  */
 
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 export const colors = {
   // 브랜드 포인트
@@ -38,7 +38,6 @@ export const colors = {
 
   // 기능성
   success: '#34C759', // systemGreen — 저장 완료 등(현재 미소비)
-  warning: '#FF9500', // systemOrange — 주의 상태(현재 미소비)
   error: '#FF3B30', // destructive(systemRed) — 삭제·에러
 
   // 오버레이 (모달 배경 딤)
@@ -64,7 +63,6 @@ export const colorsDark: Record<ColorToken, string> = {
   textSub: '#8E8E93',
   textDisabled: '#636366',
   success: '#30D158',
-  warning: '#FF9F0A',
   error: '#FF453A',
   overlay: 'rgba(0,0,0,0.6)',
 };
@@ -98,7 +96,6 @@ export const hairlineWidth = StyleSheet.hairlineWidth;
 export const type = {
   largeTitle: { fontSize: 34, fontWeight: '700' as const, letterSpacing: 0.37 },
   title: { fontSize: 22, fontWeight: '700' as const },
-  title3: { fontSize: 20, fontWeight: '600' as const },
   headline: { fontSize: 17, fontWeight: '600' as const },
   body: { fontSize: 17, fontWeight: '400' as const },
   subhead: { fontSize: 15, fontWeight: '400' as const },
@@ -128,18 +125,3 @@ export const shadow = {
     boxShadow: '0px 1px 2px 1px rgba(0, 0, 0, 0.2)',
   },
 } as const;
-
-export const fonts = Platform.select({
-  ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-});

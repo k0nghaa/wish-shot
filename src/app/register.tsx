@@ -908,7 +908,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.three,
   },
   recentBtnText: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
   status: {
     flexDirection: 'row',
     alignItems: 'center',

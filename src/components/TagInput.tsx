@@ -22,12 +22,10 @@ export function TagInput({
   tags,
   onChange,
   suggestions = [],
-  label = '태그',
 }: {
   tags: string[];
   onChange: (tags: string[]) => void;
   suggestions?: string[];
-  label?: string;
 }) {
   const [text, setText] = useState('');
   const inputRef = useRef<TextInput>(null);
@@ -59,7 +57,7 @@ export function TagInput({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>태그</Text>
 
       {/* 칩 + 입력이 함께 들어가는 하나의 필드 */}
       <TouchableOpacity activeOpacity={1} style={styles.field} onPress={() => inputRef.current?.focus()}>

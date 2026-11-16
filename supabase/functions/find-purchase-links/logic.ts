@@ -9,7 +9,7 @@ import { MALLS, type Mall, type MallId, NON_SELLER_DOMAINS, isMallId } from './m
 export const MAX_PRODUCT_NAME_LEN = 200;
 export const MAX_BRAND_LEN = 100;
 // 검색 1회 결과는 보통 10개 안팎 — 검색 3회분을 담을 수 있게.
-export const MAX_CANDIDATES = 30;
+const MAX_CANDIDATES = 30;
 const MAX_URL_LEN = 2048;
 
 // 입구 채널: 그 사이트(들) 안에서 찾는다 / 채널을 모른다(공식 홈페이지를 찾는다)
@@ -57,12 +57,12 @@ export function normalizeDomain(raw: string): string | null {
   return d;
 }
 
-export function hostMatches(host: string, domain: string): boolean {
+function hostMatches(host: string, domain: string): boolean {
   return host === domain || host.endsWith(`.${domain}`);
 }
 
 // 도메인이 사전의 몰이면 그 몰 id
-export function mallForDomain(domain: string): MallId | null {
+function mallForDomain(domain: string): MallId | null {
   for (const [id, mall] of Object.entries(MALLS) as [MallId, (typeof MALLS)[MallId]][]) {
     if (mall.domains.some((md) => hostMatches(domain, md))) return id;
   }
@@ -95,7 +95,7 @@ export function resolveChannel(domain: unknown, mall: unknown): ChannelResult {
 }
 
 // 브랜드 비교용 정규화(앱 normalizeName 과 같은 방향: NFC·소문자·문자/숫자만)
-export function normalizeBrand(brand: string): string {
+function normalizeBrand(brand: string): string {
   return brand.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
@@ -332,7 +332,7 @@ function stripTags(s: string): string {
 // 검색 결과 영역(카페24 공통 모듈 xans-search-result ~ 페이지 번호 xans-search-paging). 머리말·추천 상품 등
 // 검색 결과가 아닌 상품 링크는 읽지 않는다. 영역이 없으면 null(검색 결과 없음으로 본다).
 const MAX_AREA_CHARS = 300_000;
-export function cafe24ResultArea(html: string): string | null {
+function cafe24ResultArea(html: string): string | null {
   // class 속성 안에서만 찾는다(머리말 CSS·JS 에 같은 이름이 있어도 영역이 앞당겨지지 않게)
   const start = html.search(/class\s*=\s*"[^"<>]{0,200}\bxans-search-result(?![\w-])/);
   if (start < 0) return null;

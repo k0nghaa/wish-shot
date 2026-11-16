@@ -464,7 +464,6 @@ const styles = StyleSheet.create({
   feedHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   avatar: { width: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.placeholder },
   line60: { height: 8, width: '60%', borderRadius: radius.pill, backgroundColor: colors.silver },
-  line80: { height: 8, width: '80%', borderRadius: radius.pill, backgroundColor: colors.silver },
   feedImage: { flex: 1, borderRadius: radius.sm, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center' },
   feedActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.three },
 

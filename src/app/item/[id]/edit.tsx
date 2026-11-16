@@ -359,6 +359,5 @@ const styles = StyleSheet.create({
   },
   image: { width: '100%', height: '100%' },
   imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  changeImage: { fontSize: 14, color: colors.primary, textAlign: 'center' },
   saveNote: { fontSize: 12, color: colors.textSub, textAlign: 'center' },
 });

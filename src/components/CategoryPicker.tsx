@@ -4,32 +4,27 @@ import { colors, spacing } from '@/constants/theme';
 import type { Category } from '@/lib/queries';
 
 /**
- * 카테고리 선택 칩 목록: 미분류 + 기존 카테고리 + (선택) 새 카테고리 생성.
- * 등록 화면과 편집 화면이 공유한다. `selectedId === null` 은 미분류.
- * `onCreate` 를 넘기면 "+ 새 카테고리" 칩이 붙는다.
+ * 카테고리 선택 칩 목록: 미분류 + 기존 카테고리.
+ * 카테고리 선택 시트와 상세의 카테고리 이동이 공유한다. `selectedId === null` 은 미분류.
+ * 새 카테고리 만들기는 FolderPickerSheet 의 입력이 맡는다.
  */
 export function CategoryPicker({
   categories,
   selectedId,
   onSelect,
-  onCreate,
-  label = '카테고리',
 }: {
   categories: Category[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onCreate?: () => void;
-  label?: string;
 }) {
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>카테고리</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
         <Chip label="미분류" selected={selectedId === null} onPress={() => onSelect(null)} />
         {categories.map((c) => (
           <Chip key={c.id} label={c.name} selected={selectedId === c.id} onPress={() => onSelect(c.id)} />
         ))}
-        {onCreate ? <Chip label="+ 새 카테고리" selected={false} onPress={onCreate} /> : null}
       </ScrollView>
     </View>
   );

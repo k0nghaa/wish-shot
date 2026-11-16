@@ -116,7 +116,7 @@ docs/
   legal/                      # 개인정보처리방침·지원 페이지 원본
   readme/                     # README 이미지
   archive/                    # 폐기·참고 자산(지시 아님)
-assets/                       # 아이콘·스플래시·헤더 로고, logo-v1(참고용)
+assets/                       # 아이콘·스플래시·헤더 로고(옛 v1 로고는 docs/archive/assets-v1)
 app.json                      # Expo 설정 = 운영(스토어) 정본(플러그인·공유 확장·privacy manifest·CFBundleDevelopmentRegion ko)
 app.config.js                 # APP_VARIANT=development 일 때만 개발용 앱(이름·번들 ID·scheme·공유 확장)으로 덮어씀
 eas.json                      # EAS 빌드 프로필(development / preview / production)

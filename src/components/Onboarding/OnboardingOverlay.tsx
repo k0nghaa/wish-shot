@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,24 +21,21 @@ import { CATEGORIES_TAB_TARGET, useOnboardingTarget, type TargetRect } from './o
 // 미마운트/측정 실패면 스킵되고 바로 등록 투어로 넘어간다.
 const CATEGORY_TEXT = '카테고리 탭에서 위시를 분류하고 관리합니다.';
 
-type Card = { icon: SymbolViewProps['name']; title: string; body: string; mock?: 'captureFlow' | 'autoFill' | 'organize' };
+type Card = { title: string; body: string; mock: 'captureFlow' | 'autoFill' | 'organize' };
 
 // 문구는 실제 기능과 일치(없는 기능 홍보 금지) · 앱 톤 단답("~습니다").
 const CARDS: Card[] = [
   {
-    icon: 'square.and.arrow.up',
     title: '스크린샷 바로 담기',
     body: '캡처 직후 스크린샷을 눌러 WishShot에 진입해보세요.\n바로 위시리스트를 저장할 수 있습니다.',
     mock: 'captureFlow',
   },
   {
-    icon: 'sparkles',
     title: 'AI가 자동 정리',
     body: '담기만 하면 제품 정보를 AI가 읽어 채우고\n 카테고리까지 추천합니다.',
     mock: 'autoFill',
   },
   {
-    icon: 'square.grid.2x2',
     title: '카테고리로 정리',
     body: '담은 위시를 카테고리별로 \n한눈에 모아 보세요.',
     mock: 'organize',
@@ -204,13 +200,9 @@ export function OnboardingOverlay({ onDone }: Props) {
                     <View style={styles.mockWrap}>
                       <AutoFillMock key={active ? 'on' : 'off'} active={active} />
                     </View>
-                  ) : item.mock === 'organize' ? (
+                  ) : (
                     <View style={styles.mockWrap}>
                       <OrganizeMock key={active ? 'on' : 'off'} active={active} />
-                    </View>
-                  ) : (
-                    <View style={styles.iconWrap}>
-                      <SymbolView name={item.icon} size={72} tintColor={colors.primary} />
                     </View>
                   )}
                   <Text style={styles.cardTitle}>{item.title}</Text>
@@ -274,15 +266,6 @@ const styles = StyleSheet.create({
   skipRow: { alignItems: 'flex-end', paddingHorizontal: spacing.three, paddingTop: spacing.two },
   skip: { fontSize: 15, color: colors.textSub },
   card: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.five, gap: spacing.three },
-  iconWrap: {
-    width: 128,
-    height: 128,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bgCard,
-    marginBottom: spacing.two,
-  },
   mockWrap: { width: '100%', alignItems: 'center', marginBottom: spacing.two },
   cardTitle: { ...type.title, color: colors.textMain, textAlign: 'center' },
   cardBody: { ...type.body, color: colors.textSub, textAlign: 'center', lineHeight: 24 },

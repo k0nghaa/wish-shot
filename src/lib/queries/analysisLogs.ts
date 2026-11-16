@@ -25,7 +25,7 @@ export interface NewAnalysisLog {
 /**
  * 분석 로그 1건 기록. **로그 기록은 저장을 막지 않는다** — insert 실패는 삼키고 null 을 돌려줘
  * 사용자 흐름에 영향이 없게 한다. `user_id` 는 편의로 채우되 RLS 가 강제한다.
- * 성공 시 생성된 로그 id 를 반환한다(저장 후 item_id 연결용).
+ * 성공 시 생성된 로그 id 를 반환한다. 위시와의 연결은 저장 성공 뒤 `itemId` 를 넣어 한 번에 기록한다.
  */
 export async function createAnalysisLog(input: NewAnalysisLog): Promise<string | null> {
   try {
@@ -47,18 +47,5 @@ export async function createAnalysisLog(input: NewAnalysisLog): Promise<string |
   } catch (e) {
     console.warn('[analysisLogs] 로그 기록 실패(무시):', e);
     return null;
-  }
-}
-
-/**
- * 저장 성공 후 로그에 item_id 를 연결한다(Step 4). 실패는 삼킨다.
- * 저장 전 이탈이면 이 호출이 없어 item_id 는 null 로 남는다.
- */
-export async function linkAnalysisLogToItem(logId: string, itemId: string): Promise<void> {
-  try {
-    const { error } = await supabase.from('analysis_logs').update({ item_id: itemId }).eq('id', logId);
-    if (error) throw error;
-  } catch (e) {
-    console.warn('[analysisLogs] item_id 연결 실패(무시):', e);
   }
 }
