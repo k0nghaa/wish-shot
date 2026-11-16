@@ -1,191 +1,196 @@
 # CLAUDE.md
 
-이 파일은 이 저장소에서 작업하는 Claude Code에게 제공하는 가이드입니다.
+이 파일은 이 저장소에서 작업하는 Claude Code에게 제공하는 가이드입니다. 규칙·구조·원칙을 담고, 절차·명령·수치는 [`docs/development.md`](docs/development.md)(개발 가이드)가 정본입니다.
 
-> 상태: **Phase 6 앱 코드 완료 · 제출(Step 8) 진행 중** (원티드 AI Championship 2026 제출용). Phase 5(리스킨·하단 탭바·상세 뷰어/정보 시트·익명 로그인·TestFlight) 위에 다음을 추가했습니다: (1) **iCloud "저장 공간 최적화" 사진 업로드 대응** — 파일 준비 폴링(`ensureFileReady`, exists&&size>0 재시도)·안내·재시도 + `__DEV__` 계측(1차). (2) **등록/편집 폼 키보드 가림 수정** — ScrollView `automaticallyAdjustKeyboardInsets`. (3) **텍스트가 부족한 제품 사진용 "제품 영역 지정" 이미지 폴백** — 사용자가 고른 사각 영역만 동의 후 Edge Function→Claude로 전송(하위호환, 미저장). (4) **NFR-3 문구 개정** — 방침·인앱 고지·README 정합, 과장 문구 제거. (5) **검색**(클라이언트 필터). 네이티브 모듈 `expo-image-manipulator`(크롭)·`expo-media-library`(iCloud 2차 대비)를 dev 재빌드 1회에 묶었습니다. **최종 production 빌드·외부 TestFlight 제출·랜딩·영상(Step 8)과 방침 Notion 동기화는 사람 진행.** 이 문서는 현재 저장소 상태를 반영합니다.
+> 상태: **1.1.0 출시(2026-11-11, App Store)** — 구매처 링크 찾기·탭 순서·알림·몰 검색 링크까지 반영. 운영 runtimeVersion은 1.1.0 빌드 값이라 이후 OTA(JS만 바꾼 배포)는 1.1.0 사용자에게만 간다. 로그인·계정 연결은 보류. 이 문서는 `dev`의 현재 상태를 반영한다.
 
 ## 프로젝트 개요
 
 WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고리별 개인 위시리스트로 관리하는 **iOS 앱**입니다. 홈 화면 아이콘으로 여는 일반 앱이 본체이며, iOS 공유 시트(Share Extension)에서 스크린샷을 바로 받아 등록하는 진입 경로를 갖습니다. 웹 버전은 목표에서 제외되었습니다.
 
+## 문서
+
 - 제품 요구사항: 노션 「WishShot — 스크린샷으로 시작되는 개인 위시리스트」(v1 PRD, v2 PRD 작성 중)
 - 기술 결정: 노션 「WishShot v2 — 플랫폼·아키텍처 결정 문서 (Expo + Supabase)」
-- Phase 1 작업 기록: `docs/phases/phase-1-toolchain.md`
-- Phase 3 작업 지시·결과: `docs/phases/phase-3-ocr-and-autofill.md`
-- Phase 4 작업 지시·결과: `docs/phases/phase-4-edit-and-manage.md`
-- Phase 5 작업 지시·결과: `docs/phases/phase-5-redesign-and-deploy.md` (리스킨·탭바·상세 뷰어·익명 로그인·TestFlight)
-- Phase 10 작업 지시: `docs/phases/phase-10-testflight-analytics.md` (테스트 계측 — PostHog)
-- Phase 11 작업 지시: `docs/phases/phase-11-anon-account-lifecycle.md` (익명 계정 수명주기 — 빈 계정·고아 파일 정리, 전부 서버 측)
-- Phase 14 작업 지시·결과: `docs/phases/phase-14-sentry-and-store-metadata.md` (Sentry 오류·크래시 수집 · App Store 메타데이터 · 개발용 앱 분리 · 1.0.2)
-- Phase 17 작업 지시·결과: `docs/phases/phase-17-price-accuracy.md` (가격 정확도 — 중고거래 가격 규칙 채택 · 좋아요 수 오추출 재현과 프롬프트 수정 미채택 · 프롬프트 시도 비교 부록)
-- Phase 21 작업 지시·결과: `docs/phases/phase-21-purchase-finder.md` (구매처 찾기 — 등록 폼 링크 자동 채움·저장 뒤 붙이기 · 입구 채널 판별 · 카페24 사이트 안 검색 · 몰 검색 결과 링크 · 전용 한도 `0007`)
-- Phase 24 작업 지시·결과: `docs/phases/phase-24-ux-improvements.md` (UX 개선 — 탭 순서·기본 탭 전체 · 공유 시트 처리를 루트로 · 등록·편집 폼 정리 · 알림)
+- 개발 가이드(로컬 실행·DB·Edge Function·빌드·출시·환경 변수): `docs/development.md` — **절차·명령·수치의 정본**
+- 작업 기록: `docs/phases/` — Phase 번호순, 각 문서 끝에 결과 기록. 코드·문서가 "Phase N"으로 가리키는 근거는 여기 있다.
 - 트래킹 플랜(이벤트 택소노미 **정본**): `docs/testing/tracking-plan.md`
-- 디자인 정본: `docs/design/phase-5-visual-spec.md`, `docs/design/color_tokens.md`
-- 개인정보처리방침 원문: `docs/legal/privacy.html` (TestFlight 외부 공개용)
+- 디자인 정본: `docs/design/color_tokens.md`(색), `docs/design/phase-5-visual-spec.md`(토큰 매핑·화면 명세)
+- 개인정보처리방침 원문: `docs/legal/privacy.html` — App Store 방침 URL로 게시하는 원본(`main` 머지로 GitHub Pages에 게시). 고칠 땐 게시 절차와 노션 동기화를 거친다.
 
-## 기술 스택 (현재)
+## 기술 스택과 원칙
 
-- **앱**: Expo SDK 57 (React Native 0.86, React 19) + Expo Router + TypeScript. iOS 우선.
-- **백엔드**: 별도 서버 없음. `@supabase/supabase-js`로 Supabase(Postgres + Storage + Auth)를 직접 호출하고, 행 단위 권한은 RLS로 강제. API 키가 필요한 일만 **Supabase Edge Function(Deno)** 으로 처리 — **LLM 정제 `parse-screenshot-text`**(Phase 3)·**구매처 링크 찾기 `find-purchase-links`**(Phase 21).
-- **인증**: **익명 로그인**(Phase 5). 세션이 없으면 `auth.signInAnonymouslyIfNeeded()`가 `supabase.auth.signInAnonymously()`로 기기별 익명 세션을 만든다 → **로그인 벽 없이 즉시 사용**. 세션은 `@react-native-async-storage/async-storage`에 저장 → 재시작 후 유지, RLS가 익명 세션의 `auth.uid()`로 행 격리(익명도 `authenticated` 롤이라 기존 GRANT·정책 그대로 적용). 대시보드 **Authentication → Anonymous sign-ins 토글 ON**(하단 Save)이 필요하다. 이메일 로그인 라우트(`login.tsx`)는 보존하되 정상 흐름에선 도달하지 않는다(계정 승격은 Phase 6). `signInWithPassword`/`signOut`은 `__DEV__` 왕복 버튼에서만 쓴다.
-- **공유 시트**: `expo-share-intent`(iOS Share Extension, 이미지 1개 수신). 받은 공유는 **루트의 공유 처리기**(`ShareIntentHandler`, `_layout.tsx`가 세션 준비 뒤 1개 그림)가 처리한다 — 어느 탭·화면에서든 이미지=등록 폼, URL=전체 탭 링크 저장 모드. 등록·편집 폼이 떠 있으면 앱 자체 확인창(FullWindowOverlay — "새 사진/링크를 받았습니다", 묻는 중 또 받으면 내용이 마지막 공유로 바뀜)으로 묻는다: [지금 열기](작성 중인 내용 버림) / [저장 후 열기](맡아 두고 폼을 저장·취소해 닫으면 이어서 엶). `+native-intent.ts`는 앱이 켜져 있을 때 온 공유 딥링크로 화면을 옮기지 않는다(`null` — 이동은 처리기만).
-- **이미지**: `expo-image-picker`(앱 내 사진 선택), `expo-file-system`(선택/공유 이미지 uri → 바이트 읽기, `File.arrayBuffer()`). 둘 다 네이티브.
-- **OCR**: 온디바이스 **Apple Vision**(iOS 내장). 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr/`가 `recognitionLanguages=["ko-KR","en-US"]`로 한국어+영어를 인식. `OcrEngine` 인터페이스(`src/lib/ocr/`) 뒤에 캡슐화해 교체 가능. **엔진 결정**: 지시서의 Google ML Kit 대신 Apple Vision 채택 — iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, 어떤 RN용 ML Kit 래퍼도 Expo SDK 57/New Architecture 호환을 확인하지 못했기 때문. OCR은 온디바이스라 이미지가 서버로 가지 않고, AI 정제엔 **텍스트만** 전송한다. **단, 텍스트가 부족하거나(시트 자동 열림) 사용자가 "제품 영역으로 분석"을 누른 경우, 사용자가 직접 선택한 제품 영역 크롭만 '분석'을 누를 때 전송한다**(NFR-3 개정, Phase 6 — 통이미지·자동 전송 없음, 크롭 미저장. 문구는 Phase 14에서 실제 동작에 맞게 정정).
-- **LLM 정제 + 카테고리 추천(FR-8)**: Edge Function `parse-screenshot-text`(Deno)가 Claude Haiku(`claude-haiku-4-5`)로 OCR 원문을 정제해 `{productName, price, brand, confidence, suggestedCategory}` 반환. 입력에 `categories?: string[]`(사용자 기존 카테고리 이름)을 받으면 그중 하나를 추천(`suggestedCategory`), 없거나 빈 배열이면 `null`(하위호환). 목록 밖 값은 서버·앱 양쪽에서 무시. 구조화 출력(json_schema) 사용. Claude 키는 함수 시크릿에만. **Phase 6**: 입력에 `image?: {base64, mediaType}`(사용자가 선택한 제품 영역 크롭)을 추가로 받는다 — OCR 텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누른 경우, 사용자가 고른 영역만 '분석' 때. 이미지가 있으면 이미지+텍스트로 정제하고 없으면 기존과 바이트 동일(하위호환). 출력 스키마 불변. 크롭 이미지는 서버에서 미저장·미로깅(길이만 기록). **요청 한도·입력 상한·실패 기록**: OCR 텍스트 2,000자·카테고리(프롬프트에 들어가는 JSON 형태) 2,000자를 넘으면 LLM 호출 없이 `400`(`text_too_long`/`categories_too_long`, 자르지 않음). 검증을 통과한 요청만 사용자 시간당 30·하루 100(한국 시간 0시)·전체 하루 300(차단기)으로 세고, 넘으면 `429 {error:'rate_limited', scope:'user'|'global'}` + `Retry-After`(앱은 다른 실패와 같은 E-2 경로). 카운터는 DB 함수 `consume_parse_quota`(`0005`, **service_role 전용** — 앱에서 직접 호출 불가). 카운터 응답이 3초를 넘기면 `503 {error:'quota_unavailable'}`(몰아치기로 한도 우회 방지), 그 밖의 카운터 오류는 호출 허용(fail-open). 로그인 확인 뒤의 실패 응답은 원인을 `ops.parse_failures`에 남긴다(`record_parse_failure` — 사용자·한국 날짜·사유·횟수, 내용 없음, FK 없이 계정이 정리돼도 남음).
-- **구매처 링크 찾기(Phase 21)**: 등록 폼에서 AI 정제가 제품명을 채우고 링크 칸이 비어 있으면 `usePurchaseLinkSearch`가 Edge Function `find-purchase-links`를 부른다. 보내는 값은 **제품명·브랜드·입구 채널(캡처에 보인 도메인 또는 몰 id)만** — 입구 채널은 기기에서 OCR 원문으로 판별한다(`src/lib/purchaseChannel.ts`, 원문·이미지는 보내지 않음). 함수 흐름: 입력 검증 → 전용 한도(`0007` `consume_purchase_link_quota` — 사용자 시간당 10·하루 30 + 전체 하루 100, **카운터 오류면 거절(fail-closed 503)** — 웹 검색 비용이 커서 정제 함수와 다르다) → ① 도메인 채널이고 몰 사전(`malls.ts`)에 없으면 **카페24 사이트 안 검색**(`/product/search.html?keyword=` — 검색 결과 영역의 상품 번호로 정규 상세 주소를 만듦, 단계 전체 8초) → ② 못 찾으면 **Claude Haiku 5.5(`claude-haiku-5-5`) 웹 검색**(`web_search_20250305` — 채널이 있으면 그 사이트만, 없으면 몰 도메인을 빼고 공식 홈페이지) → 구조화 출력으로 **후보 번호만** 고르기(URL은 서버가 모은 후보에서만 꺼냄 — 모델이 주소를 쓰지 않음) → **Google Web Risk 대조**(`WEB_RISK_API_KEY` — 키 없음·조회 실패면 비움) + 접속 확인(https·인증서·같은 사이트 안 리다이렉트·2xx, 대형 몰은 401·403·429 허용) → 상품 페이지가 없으면 확인된 몰 검색 주소(지금은 쿠팡·무신사·29CM·오늘의집 — 검색어에서 상품명의 대괄호 홍보 표기는 뗌)나 상품이 검색된 카페24 사이트의 검색 결과 링크(`kind: 'search'` — 사용자에게는 같은 '연결된 링크'라 폼에서 따로 안내하지 않는다. 못 찾으면 링크 칸 자리표시 "링크를 직접 입력하세요", 카테고리·링크 카드 아래 오른쪽에 "저장 후에도 링크를 계속 찾습니다. 앱을 닫으면 중단됩니다." 고정 안내 — Phase 24). 결과가 오기 전에 저장하면 저장 뒤 3분 안에 도착한 링크를 **링크가 비어 있을 때만** 붙이고(`setSourceLinkIfEmpty` 조건부 업데이트) 흐름을 끊지 않게 알린다 — 기기 안 알림 기록 + 3초 스낵바([보기] → 상세) + 알림 탭 배지 + 타일 좌상단 와인색 점(상세에서 보면 사라짐). 찾는 동안 그 위시 타일은 약간 흐리고, 못 찾으면 흐림만 사라진다(Phase 24 — `src/lib/notifications.ts`). 편집 화면은 링크를 자동으로 찾지 않으므로 빈 링크 칸 자리표시가 늘 "링크를 직접 입력하세요"다. 실패·한도·없음·앱 쪽 90초 초과는 조용히 빈칸. 실패 원인은 `ops.purchase_link_failures`(`record_purchase_link_failure` — 내용 없음). 네이버 검색 API는 약관(AI 입력·처리 금지) 때문에 쓰지 않는다.
-- **계측(Phase 10)**: `posthog-react-native`(코어 순수 JS). 선택 peer 의존성 중 `expo-device`는 처음부터 설치돼 있었고, `expo-application`·`expo-localization`은 **1.0.2 빌드(Phase 14)부터 설치** — SDK가 자동으로 앱 버전·빌드·번들 ID·언어(`$locale`)·시간대(`$timezone`)를 붙이고, 빌드 번호가 생겨 `Application Installed`·`Application Updated`가 처음 발생한다. **IP로 추정한 위치는 끈다**(`disableGeoip: true` + PostHog 프로젝트 GeoIP 변환 Paused, IP는 "Discard client IP data"로 미저장 — IP 버리기만으로는 GeoIP가 안 꺼진다). 모든 수집은 **`src/lib/analytics.ts` 경유**(이벤트명·속성을 타입 유니언으로 강제 — 화면·훅에서 PostHog 직접 호출 금지, eslint `no-restricted-imports`로 강제). 커스텀 이벤트 9종(Phase 24에 `link_attached`·`notification_opened` 추가) + `app_error`(전역 JS 에러 + Sentry 활성 시 렌더 오류, 클래스명만) + SDK 라이프사이클 자동 수집, 익명 부트스트랩 후 Supabase uid로 `identify`. **키(`EXPO_PUBLIC_POSTHOG_KEY`) 미설정 시 전 호출 no-op**(키 없이 빌드해도 동작 불변), `__DEV__` 기본 옵트아웃(설정의 "계측 토글(개발용)"로만 켬). 속성은 enum·boolean·수치만 — **사용자 콘텐츠(사진·OCR 원문·상품명·URL 등) 절대 미수집**(NFR-3 정합). 택소노미 정본: `docs/testing/tracking-plan.md`, DB 지표 SQL: `supabase/tests/metrics.sql`.
-- **오류·크래시 수집(Phase 14)**: `@sentry/react-native` 7.11(네이티브, sentry-cocoa 8.58). 모든 호출은 **`src/lib/monitoring.ts` 경유**(화면에서 직접 import 금지 — eslint `no-restricted-imports`로 강제). **오류·크래시만** 수집한다(성능 추적·세션 리플레이·스크린샷·뷰 계층 끔 — `tracesSampleRate`·리플레이 비율 키는 0이어도 통합을 켜므로 아예 넣지 않는다). **사용자 내용 제외**: 콘솔 기록과 **네트워크 요청 기록(xhr·fetch·http)은 버림**(방침 §5에 요청 주소를 수집 항목으로 두지 않음 — 켜려면 방침 먼저. Expo SDK 57은 전역 `fetch`를 `expo/fetch`로 바꿔 Sentry가 요청을 거의 못 보지만, SDK·라이브러리 변경에 대비해 확정적으로 버린다), 그 밖 기록·메시지의 URL은 Supabase만 경로를 남기고 쿼리·UUID 제거(그 밖 URL은 `<url>`), 오류 메시지의 큰따옴표 값·UUID 가림, `extra` 삭제, 네이티브 자동 기록(네트워크 URL·화면 제목) 끔(`enableNetworkBreadcrumbs`·`enableAutoBreadcrumbTracking: false` — 네이티브 크래시엔 JS 필터가 안 걸림), 거르기 실패 시 버림. `setUser` 금지(설치별 무작위 ID만), IP 미저장(SDK `infer_ip: never` + 조직 설정), 위치는 서버 규칙(`$user.geo.**` 제거)으로 지움. **DSN(`EXPO_PUBLIC_SENTRY_DSN`) 미설정 시 no-op**, `__DEV__` 기본 비활성(`EXPO_PUBLIC_SENTRY_DEV=1`로만). `_layout.tsx` 모듈 최상단에서 초기화 → 전역 핸들러 순서 PostHog `app_error` → Sentry → RN 기본(redbox·크래시). RN 0.86은 렌더 오류를 전역 핸들러에 보내지 않으므로 `wrapRoot`의 루트 경계가 받아 같은 체인으로 넘긴다. 소스맵은 EAS Build가 자동 업로드(`SENTRY_AUTH_TOKEN`), OTA는 수동 업로드(명령어 참고). 보존 최대 90일(방침 §5). 조직·프로젝트 슬러그 `wishshot`, 데이터 저장 위치 US.
-- **빌드**: 윈도우 PC에서 EAS 클라우드 빌드 → 아이폰 개발 빌드 → TestFlight. 로컬에 Xcode/Mac 없음.
+- **앱**: Expo SDK 57 (React Native 0.86, React 19) + Expo Router + TypeScript. iOS 전용.
+- **백엔드**: 별도 서버 없음. `@supabase/supabase-js`로 Supabase(Postgres + Storage + Auth)를 직접 호출하고, 행 단위 권한은 RLS로 강제. API 키가 필요한 일만 **Supabase Edge Function(Deno)** 으로 처리 — `parse-screenshot-text`(AI 정제)·`find-purchase-links`(구매처 링크 찾기)·`cleanup-orphan-images`(고아 이미지 스윕).
+- **인증**: **익명 로그인**. 세션이 없으면 `signInAnonymouslyIfNeeded()`가 기기별 익명 세션을 만든다 → 로그인 벽 없이 바로 쓴다. 세션은 AsyncStorage에 저장돼 재시작 뒤에도 유지되고, RLS가 익명 세션의 `auth.uid()`로 행을 격리한다(익명도 `authenticated` 롤이라 GRANT·정책이 그대로 적용). 대시보드 **Authentication → Anonymous sign-ins ON**이 필요하다. 이메일 로그인 라우트(`login.tsx`)는 보존하지만 정상 흐름에선 도달하지 않는다(`__DEV__` 왕복용). 계정 연결(Apple 등)은 보류.
+- **공유 시트**: `expo-share-intent`(이미지 1개 또는 URL). 받은 공유는 **루트의 공유 처리기**(`ShareIntentHandler`, 앱 전체 1개)가 어느 화면에서든 처리한다 — 이미지는 등록 폼, URL은 전체 탭 링크붙이기 모드. 등록·편집 폼이 떠 있으면 앱 자체 확인창으로 [지금 열기](작성 중인 내용 버림)·[저장 후 열기](폼을 닫으면 이어서 엶)를 묻는다. `+native-intent.ts`는 앱이 켜져 있을 때 온 공유 딥링크로 화면을 옮기지 않는다(이동은 처리기만).
+- **이미지**: `expo-image-picker`(앱 내 선택), `expo-file-system`(uri → 바이트), `expo-image-manipulator`(크롭·리사이즈), `expo-media-library`(최근 사진·앨범 원본 삭제). 모두 네이티브.
+- **OCR**: 온디바이스 **Apple Vision** — 자작 로컬 모듈 `modules/expo-vision-ocr/`(ko-KR + en-US). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화하고, Expo Go·시뮬레이터처럼 모듈이 없으면 `MockOcrEngine`. Google ML Kit 대신 Apple Vision을 쓴 이유: iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, Expo SDK 57·New Architecture와 호환되는 RN용 ML Kit 래퍼를 확인하지 못했다.
+- **AI로 보내는 데이터 (개인정보 원칙 — 방침과 맞물림)**: 정제엔 **OCR 텍스트와 사용자 카테고리 이름만** 보낸다. 이미지는 텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누를 때, **사용자가 고른 제품 영역 크롭만 '분석'을 누를 때** 보낸다(통이미지·자동 전송 없음, 서버 미저장·미로깅). 구매처 찾기엔 **제품명·브랜드·입구 채널만** 보낸다(OCR 원문·이미지 없음). 보내는 범위를 넓히려면 방침부터 고친다.
+- **AI 정제 `parse-screenshot-text`**: Claude Haiku(`claude-haiku-4-5`) + 구조화 출력 → `{productName, price, brand, confidence, suggestedCategory}`. 카테고리 이름 목록을 받으면 그중 하나만 추천하고, 목록 밖 값은 서버·앱 모두 무시한다. 모델·스키마·프롬프트는 `prompt.ts` 한 곳. 입력 상한을 넘으면 LLM을 부르지 않고 `400`, 요청 한도(사용자·전체)를 넘으면 `429` — 앱은 다른 실패와 같은 수동 입력 경로. 한도 카운터 오류는 호출을 허용하되(fail-open) 카운터 응답이 3초를 넘기면 거절한다(요청을 몰아쳐 한도를 우회하는 것 방지). 실패 원인은 `ops.parse_failures`에 내용 없이 남긴다. 가격 원칙: 원화 금액만, 애매하면 null(틀린 값보다 빈칸), 정가 우선 — 중고거래 매물은 판매자 등록가.
+- **구매처 링크 찾기 `find-purchase-links`**: 등록 폼에서 제품명이 채워지고 링크 칸이 비면 부른다. 입구 채널(캡처에 보인 판매처 도메인 또는 몰)은 기기에서 판별한다(`src/lib/purchaseChannel.ts`). 서버는 카페24 사이트 안 검색 → Claude Haiku 5.5(`claude-haiku-5-5`) 웹 검색 순으로 찾고, **주소는 서버가 모은 후보에서만 꺼낸다**(모델은 번호만 고름). **Google Web Risk 대조와 접속 확인을 통과한 링크만** 넣는다(키 없음·조회 실패면 비움). 전용 한도 카운터 오류는 **거절**한다(fail-closed — 웹 검색 비용이 커서 정제 함수와 다르다). 저장 뒤 도착한 링크는 **링크가 비어 있을 때만** 붙이고(`setSourceLinkIfEmpty`) 기기 안 알림으로 알린다(서버 미전송). 네이버 검색 API는 약관(AI 입력·처리 금지) 때문에 쓰지 않는다.
+- **계측(PostHog)**: 모든 수집은 `src/lib/analytics.ts` 경유(이벤트명·속성을 타입으로 강제, 화면에서 직접 import는 eslint `no-restricted-imports`로 금지). 속성은 enum·boolean·수치만 — **사용자 콘텐츠(사진·OCR 원문·상품명·URL 등) 절대 미수집**(`app_error`도 에러 클래스명만). IP로 추정한 위치는 끈다(SDK `disableGeoip` + 프로젝트 GeoIP 변환 끔 — IP 버리기만으론 안 꺼진다). 키가 없으면 전부 no-op, `__DEV__`는 기본 옵트아웃. 이벤트 정본은 tracking-plan.
+- **오류·크래시(Sentry)**: `@sentry/react-native` 7.11(sentry-cocoa 8.58). 모든 호출은 `src/lib/monitoring.ts` 경유(eslint 강제). **오류·크래시만** 수집한다 — `tracesSampleRate`·리플레이 비율 키는 0이어도 통합을 켜므로 아예 넣지 않는다. **사용자 내용 제외**: 콘솔·네트워크 요청 기록은 버린다(방침 §5가 요청 주소를 수집 항목으로 두지 않음 — 켜려면 방침 먼저), 그 밖 URL·메시지의 값·UUID는 가리고 `extra`는 지우며, 네이티브 자동 기록(네트워크 URL·화면 제목)은 끈다(`enableNetworkBreadcrumbs`·`enableAutoBreadcrumbTracking: false` — 네이티브 크래시엔 JS 필터가 안 걸림). 거르기에 실패하면 버린다. `setUser` 금지(설치별 무작위 ID만), IP 미저장. DSN이 없으면 no-op, `__DEV__`는 기본 비활성. `_layout.tsx` 최상단에서 초기화해 전역 핸들러 순서가 PostHog `app_error` → Sentry → RN 기본이 된다. RN 0.86은 렌더 오류를 전역 핸들러에 보내지 않으므로 `wrapRoot`의 루트 경계가 받는다.
+- **빌드·출시**: Windows PC에서 EAS 클라우드 빌드. 개발용 앱(`WishShot Dev`, `APP_VARIANT=development`)으로 확인 → production 빌드 → `eas submit`으로 App Store Connect 업로드 → 심사 제출(TestFlight 테스트 단계 없음). JS만 바뀐 수정은 `eas update`(OTA)로 낸다. 명령·순서는 개발 가이드.
 
 ## 디렉터리 구조
 
 ```
 src/
-  app/                  # Expo Router 라우트 (파일 기반)
-    _layout.tsx         # ShareIntentProvider + AuthGate(익명 부트스트랩 — 세션 없으면 signInAnonymouslyIfNeeded; 첫 세션 후엔 세션이 잠깐 null이어도 네비게이터 유지). 등록·편집=모달, 상세=세로 풀스크린 모달, info=formSheet(네이티브 반시트). OnboardingTargetProvider(코치마크 대상 등록소)로 스택+오버레이를 감싸고, OnboardingGate가 첫 실행 온보딩을 최초 마운트 1회 판단(공유로 열렸으면 스킵 — 공유 값 또는 첫 URL이 공유 딥링크인지로 판단, 온보딩 중 공유가 오면 '봤음' 표시 없이 닫음, 본 뒤엔 미노출) — Phase 7 Batch D. ShareIntentHandler(공유 시트 처리, 앱 전체 1개 — Phase 24)
-    (tabs)/             # 하단 알약 탭바 그룹 (Expo Router Tabs + CustomTabBar — 카테고리·전체·알림·검색). 상세·등록·편집·설정·태그는 이 그룹 위 스택으로 push
-      _layout.tsx       # Tabs 레이아웃(기본 탭=index/전체 — 앱을 열면 `/` = 전체). tabBar=CustomTabBar(플로팅 알약, JS 전용)
-      index.tsx         # 전체(기본 탭): 모든 위시 3열 정사각 그리드(최신순) + 업로드 FAB + 다중 선택 + 설정 진입. 링크붙이기 모드(Phase 7, attachLink 파라미터 — 공유 처리기가 URL 공유로 엶): 배너+새로담기, 타일 탭→편집(링크 프리필). 선택 모드와 상호 배타
-      categories.tsx    # 카테고리: 카테고리 2×2 모자이크 카드(개수·대표 4장, 빈 카테고리도 노출)·미분류·설정 진입. 롱프레스/··· = 카테고리 이름변경·삭제
-      notifications.tsx # 알림: 저장 뒤 링크를 붙인 기록(기기 안, 최근 20개·14일) — 썸네일·한 문장 "{제품명}에 링크를 붙였습니다"(제품명 굵게, 길면 제품명만 말줄임 — 한 줄)·상대 시각, 안 읽은 행은 와인색 점+검정 글씨, 읽은 행은 연하게(사진 반투명·글자 회색), 누르면 상세(notification_opened list). 탭 바 배지 = 안 읽은 수
-      search.tsx        # 검색: 제품명·브랜드·태그·메모 클라이언트 필터(3열 그리드)
-    login.tsx           # 이메일 로그인(익명 도입으로 정상 흐름 미도달; __DEV__ 왕복용). 성공 시 홈 복귀 + 취소 버튼
-    register.tsx        # 등록(저장): 이미지 선택/미리보기 + OCR 자동채움(칩 없이 상태 문구 "AI가 채웠습니다. 확인하세요." — Phase 24) + 수동 입력(카드 순서: 제품명·브랜드·가격 / 카테고리·링크 / 메모 — 한 줄 입력 FormLineInput) + 폴더 선택·생성·**FR-8 추천 미리선택** + 메모/**태그** + 중복 덮어쓰기 + 개인정보 고지(NFR-3). Phase 7: sourceLink 프리필(링크붙이기 새로담기) + "방금 캡처한 사진 담기"(getRecentPhotoAsset, 탭 시점 권한 요청) + 저장 성공 후 "앨범에서 삭제" 옵션(Batch C, 앱 내 선택 사진(picker·최근사진)의 assetId만·전체 접근 필요·공유 시트 비노출·제한/거부 시 제안 자체 생략). Phase 21: 구매처 링크 자동 채움(링크 찾는 중 표시·찾는 동안 저장 뒤 붙임 안내·못 찾으면 직접 입력 자리표시) + 저장 뒤 링크 이어 찾기(followLinkAfterSave — 타일 흐림 → 붙으면 알림 기록·스낵바·link_attached, 못 찾으면 흐림만 해제)
-    settings.tsx        # 설정: 개인정보 안내(NFR-3) 열람 + 지원(의견 보내기 — 지원 메일 mailto, Phase 10 F). (익명이라 로그아웃·계정 섹션 없음.) __DEV__ 전용: 세션 리셋 · 이메일 로그인 왕복 · 온보딩 다시 보기 · 썸네일 백필 · 계측 토글 · 테스트 에러 발생(Phase 10) · 네이티브 크래시 테스트 · 렌더 오류 테스트(Phase 14, Sentry 검증용)
-    category/[id].tsx   # 카테고리(폴더)별 아이템 목록(3열 그리드, 최신순). id='uncategorized'=미분류. 삭제된 카테고리 진입 시 카테고리 탭(`/categories`)으로 리다이렉트
-    tag/[name].tsx      # 태그별 모아보기(FR-15a): 그 태그가 달린 아이템만(카테고리 무관, 3열 그리드, 최신순)
-    item/[id]/index.tsx # 상세 뷰어(세로 풀스크린 모달): 큰 이미지 탭 → 풀스크린 뷰어(원본 비율·핀치 줌) + 하단 액션바(정보(i)·링크·편집·삭제 — 링크 없으면 링크 버튼 비활성) + 카테고리 이동. 화면에 나온 위시(좌우 넘김 포함)의 새 링크 알림을 읽음 처리(Phase 24), 삭제 시 그 위시의 알림·기록도 지움
-    item/[id]/info.tsx  # 정보(i) 하프시트(M7, expo-router formSheet — 네이티브 반시트): 제품명/브랜드/가격/링크·폴더/메모/태그·담은 시각 + 편집 진입
-    item/[id]/edit.tsx  # 편집(FR-14): 제품명/브랜드/가격/링크/메모/태그/폴더 + 이미지 교체. OCR·분석 없음. 중복 시 차단·안내. Phase 7: linkPrefill 파라미터(링크붙이기) — 기존 링크 없으면 프리필, 있으면 교체 확인. Phase 24: 등록 폼과 같은 카드 순서·한 줄 입력, 빈 링크 칸 자리표시 "링크를 직접 입력하세요"(편집은 자동 찾기가 없어 늘 직접 입력)
-    +native-intent.ts   # 공유 딥링크: 첫 실행이면 / (전체), 앱이 켜져 있을 때 온 공유면 null(이동 없음 — 공유 처리기가 이동). 그 밖 딥링크는 그대로
-  components/           # CategoryCard(폴더 모자이크), PhotoTile(그리드 정사각 썸네일 — linkPending=저장 뒤 링크 찾는 중 약간 흐림, unseen=링크가 붙고 아직 안 봄 좌상단 와인색 점 NewDot — 8pt+흰 0.5pt 테두리+옅은 그림자 shadow.onPhoto(boxShadow, 스프레드 1pt), Phase 24), SnackbarHost(앱 전체 스낵바 1개 — react-native-screens FullWindowOverlay 로 네이티브 모달 위에도, 3초(VoiceOver 6초)·차례로·모션 줄이기 대응·VoiceOver 안내, 한 줄 "{lead 굵게·말줄임}{text}" + [보기], Phase 24), CustomTabBar(플로팅 탭바 — 카테고리·전체·알림·검색, 카테고리 버튼은 온보딩 안내 대상), ShareIntentHandler(공유 시트 처리 — 앱 스택 준비 대기·ref 잠금+resetShareIntent로 중복 방지, 같은 공유 3초 안 재수신 무시·폼 작성 중이면 앱 자체 확인창 ShareConfirmDialog([저장 후 열기] 대기열 1건·[지금 열기], 마지막 공유로 내용 갱신)·위 화면 닫고 등록 폼/링크 저장 모드), TabHeaderLogo(헤더 로고), EmptyState, OverwriteDialog, Thumbnail, FormField(FormCard/FormRow/FormLineInput[한 줄 입력 — 넘치면 앞부분 + 오른쪽 페이드(expo-linear-gradient, bgCardClear→bgCard), 입력하지 않고도 옆으로 밀어 보기(가로 스크롤 덮개 — 민 만큼 왼쪽도 흐림, 탭하면 입력), 포커스 중엔 기본 입력]/DisclosureRow/FormBlock), FolderPickerSheet(폴더 선택 반시트 — 키보드 회피·슬라이드업), TagInput, Onboarding/(첫 실행 온보딩 — onboardingStorage[플래그 wishshot.onboardingShown], onboardingTarget[코치마크 대상 등록소·measureInWindow·안전 스킵], CoachmarkSpotlight[react-native-svg 둥근 마스크 스포트라이트·다단계], CardMock[3장 카드 모션 그래픽 — CaptureFlowMock(캡처→편집→공유시트→폼 연결 흐름) + AutoFillMock(AI 분석중→필드 자동 채움) + OrganizeMock(카테고리 그리드 정리)], OnboardingOverlay[카드 캐러셀 reanimated 도트 → 탭 바 카테고리 버튼 코치마크 → 등록 폼 open, safe-area 인셋·reduce-motion 대응], RegisterCoachmarkTour[등록 폼 위 코치마크 2스텝(정사각/알약 구멍+테두리) — 등록 화면 안 절대배치 오버레이, 대상을 오버레이 루트 기준 상대좌표로 보정해 시트 오프셋 제거] — Phase 7 Batch D)
-  constants/
-    theme.ts            # 디자인 토큰 (Phase 5 목업 팔레트 — 흰 배경 모노톤, 이름 유지·값 교체) + colorsDark(준비만) + type/spacing/radius/shadow + overlay
-    privacy.ts          # 개인정보 안내 문구 단일 소스 — summary(register 최초 고지 모달, 짧은 요약) + sections(설정 화면의 항목별 자세한 안내). 내용을 바꿔 기존 사용자에게 다시 보이려면 register 의 PRIVACY_NOTICE_KEY 를 바꾼다(지금 .v2)
+  app/                        # Expo Router 라우트(파일 = 화면)
+    _layout.tsx               # 루트: 익명 세션 부트스트랩(AuthGate) · 첫 실행 온보딩 판단 · 공유 처리기 · 스낵바. 등록·편집 = 모달, 상세 = 풀스크린 모달, 정보 = formSheet
+    (tabs)/                   # 하단 플로팅 탭바(CustomTabBar): 카테고리·전체·알림·검색. 앱을 열면 전체(index)
+      _layout.tsx
+      index.tsx               # 전체: 3열 그리드(최신순)·업로드 버튼·다중 선택·설정 진입. 링크붙이기 모드(URL 공유로 열림 — 위시를 골라 편집에 링크를 채우거나 새로 담기)
+      categories.tsx          # 카테고리: 2×2 모자이크 카드(빈 카테고리 포함)·미분류. + = 새 카테고리, ··· = 삭제 모드, 카드 길게 누르기 = 이름 변경·삭제
+      notifications.tsx       # 알림: 저장 뒤 링크를 붙인 기록(기기 안, 최근 20개·14일). 탭 배지 = 안 읽은 수
+      search.tsx              # 검색: 제품명·브랜드·태그·메모 클라이언트 필터
+    register.tsx              # 등록: 사진 → OCR·AI 자동채움 → 확인·수정 → 저장. 카테고리 추천·중복 덮어쓰기·개인정보 고지(첫 1회)·구매처 링크 자동 채움과 저장 뒤 이어 찾기·앨범 원본 삭제 제안
+    item/[id]/index.tsx       # 상세: 풀스크린 갤러리(좌우 넘김·핀치 줌) + 정보·링크·편집·삭제·카테고리 이동. 본 위시의 새 링크 알림을 읽음 처리, 삭제하면 그 위시의 알림 기록도 지움
+    item/[id]/info.tsx        # 정보 반시트(formSheet): 제품 정보·메모·태그·담은 시각 + 편집 진입
+    item/[id]/edit.tsx        # 편집: 필드·태그·카테고리·이미지 교체(OCR 없음). 다른 위시와 이름이 겹치면 막음. 링크붙이기로 들어오면 링크를 미리 채움
+    category/[id].tsx         # 카테고리별 목록('uncategorized' = 미분류)
+    tag/[name].tsx            # 태그별 목록
+    settings.tsx              # 설정: 개인정보 안내·의견 보내기. __DEV__ 도구(세션 초기화·이메일 로그인·온보딩 다시 보기·썸네일 백필·계측 토글·오류·크래시 시험)
+    login.tsx                 # 이메일 로그인 — 정상 흐름 미도달, __DEV__ 왕복용으로 보존
+    +native-intent.ts         # 공유 딥링크: 첫 실행이면 '/', 앱이 켜져 있으면 이동 없음(공유 처리기가 처리)
+  components/
+    ShareIntentHandler.tsx    # 공유 시트 처리(앱 전체 1개) — 같은 공유 중복 수신 무시, 폼 작성 중이면 확인창
+    SnackbarHost.tsx          # 앱 전체 스낵바 1개(FullWindowOverlay — 모달 위에도), 3초(VoiceOver 6초)
+    CustomTabBar.tsx          # 플로팅 탭바(카테고리 버튼은 온보딩 안내 대상)
+    tabBarVisibility.tsx      # 다중 선택 중 탭바 숨김 컨텍스트
+    PhotoTile.tsx             # 그리드 타일 — 링크 찾는 중 흐림, 새 링크 점
+    Thumbnail.tsx             # 썸네일(실패 시 원본으로 폴백)
+    CategoryCard.tsx          # 카테고리 모자이크 카드
+    CategoryPicker.tsx        # 카테고리 칩 목록(상세의 이동·카테고리 선택 시트 공용)
+    FolderPickerSheet.tsx     # 카테고리 선택 반시트(새 카테고리 입력 포함)
+    ItemSelectionControls.tsx # 다중 선택 하단 바·이동 시트(전체·카테고리 화면 공용) — SelectionBar.tsx 사용
+    FormField.tsx             # 등록·편집 폼 부품(한 줄 입력은 넘치면 페이드·옆으로 밀어 보기)
+    TagInput.tsx
+    RegionSelectSheet.tsx     # 제품 영역 지정 시트(크롭)
+    ImageZoomModal.tsx        # 등록·편집 사진 원본 미리보기
+    OverwriteDialog.tsx, EmptyState.tsx, TabHeaderLogo.tsx
+    Onboarding/               # 첫 실행 온보딩: 카드 3장(CardMock 모션) → 탭바 코치마크 → 등록 폼 코치마크. 플래그 wishshot.onboardingShown
   hooks/
-    useAnalysis.ts      # 분석 상태머신(useReducer): idle→imageReceived→ocrRunning→parsing→filled→submitted, 실패 시 error. reparse(E-2 재시도)·needsConfirmation 제공. 종료 전이에서 analysis_completed 계측(Phase 10)
-    usePurchaseLinkSearch.ts  # 구매처 링크 찾기(Phase 21): (제품명·브랜드·채널) 조합별 1회 호출·결과 보관, 저장 시작 뒤 새 찾기 금지. takeForHandOff(저장 직전 넘겨받기) + attachLinkAfterSave(화면 밖에서 이어 받아 저장 뒤 3분 안이면 빈 링크에만 붙임 — onAttached·onSettled 로 결과를 알림, Phase 24). notFound(찾았는데 링크 없음 — 등록 폼 자리표시)
-    useNotifications.ts # 기기 안 알림 저장소 구독(useSyncExternalStore — 탭 배지·타일 흐림/점·알림 목록, Phase 24)
+    useAnalysis.ts            # 분석 상태 머신: idle → imageReceived → ocrRunning → (parsing | regionSelect → imageParsing) → filled → submitted, 실패는 error
+    usePurchaseLinkSearch.ts  # 구매처 링크 찾기 호출·결과 보관, 저장 뒤 3분 안에 도착하면 빈 링크에만 붙임
+    useItemSelection.ts       # 다중 선택·일괄 이동·삭제
+    useNotifications.ts       # 기기 안 알림 저장소 구독(탭 배지·타일 상태·알림 목록)
   lib/
-    supabase.ts         # createClient<Database> (타입 클라이언트)
-    analytics.ts        # 계측 캡슐화(Phase 10): PostHog 초기화·capture(이벤트 타입 강제)·identifyUser·옵트인/아웃·app_error 전역 핸들러(체이닝). 키 미설정 시 전부 no-op
-    monitoring.ts       # 오류·크래시 수집 캡슐화(Phase 14): Sentry 초기화(사용자 내용 거르기·네이티브 자동 기록 끔)·wrapRoot(렌더 오류 경계 + Sentry.wrap)·개발용 크래시 테스트. DSN 미설정·__DEV__(검증 플래그 제외)면 no-op
-    normalize.ts        # normalizeName(brand,productName) — 중복 판정 정규화(단일 소스)
-    imageBytes.ts       # uri → ArrayBuffer(File.arrayBuffer) + file:// 정규화
-    shareIntent.ts      # 공유 값 판정(순수 함수, Phase 24): isShareIntentUrl(공유 딥링크인지)·wasLaunchedByShare(첫 URL로 공유 실행 판단)·toShareTarget(URL 우선 → 링크 저장 모드, 이미지 → 등록 폼)
-    photoLibrary.ts     # 앨범 접근(Phase 7, expo-media-library/legacy, 순수 JS). getRecentPhotoAsset: 최근 사진 1장의 읽을 수 있는 localUri(ph://→file://)+assetId, 적시 권한. deletePhotoAsset(Batch C): 전체 접근 요청→deleteAssetsAsync([assetId]) (OS 확인창 불가피), 반환 'deleted'|'denied'|'error'. canOfferAlbumDelete: 무프롬프트로 제안 여부 판별(미결정 or 전체 접근이면 true, 제한/거부면 false)
-    purchaseChannel.ts  # 입구 채널 판별(Phase 21, 순수 함수): OCR 원문 → 판매처 도메인(주소창 줄·강한 근거만, SNS 계정명·끊긴 주소·공용 접미사 거름) 또는 몰 id(몰 고유 문구 사전, 상품명·브랜드 글자 제외). mallLabel(몰 표시 이름)
-    emptyCategory.ts    # promptDeleteIfCategoryEmpty — 이동·편집·삭제로 카테고리가 0이 되면 삭제/유지 안내(응답 대기 후 반환)
-    notifications.ts    # 기기 안 알림 저장소(Phase 24, AsyncStorage wishshot.notifications — 서버 미전송): 알림(link_attached, 최근 20개·14일, 안 읽음 = 탭 배지·타일 점, 상세에서 보면 읽음) + 찾는 중 위시(메모리 — 타일 흐림). 위시 삭제 시 함께 지움, 알림 목록이 없는 위시 정리. NOTIFICATION_TITLE(종류별 문구 한 곳)
-    snackbar.ts         # 앱 전체 스낵바 대기열(Phase 24): showSnackbar(화면 밖에서도 호출)·하나씩 차례로
-    formatDate.ts / formatPrice.ts  # formatRelativeTime(알림 상대 시각 — 방금/N분 전/N시간 전/어제/N일 전)
-    ocr/                # OcrEngine 인터페이스 + VisionOcrEngine(Apple Vision)·MockOcrEngine + index(환경별 엔진 선택). 화면은 @/lib/ocr만 import
-    queries/            # 데이터 레이어: auth(getCurrentUserId·getCurrentUserEmail·signOut), categories, items(updateItem·moveItemCategory·findDuplicateItem·setSourceLinkIfEmpty), storage, errors(DuplicateItemError·DuplicateCategoryError), analysisLogs, parse, purchaseLinks(findPurchaseLink — Phase 21, 실패해도 던지지 않고 null) (+ index 배럴)
-  types/database.ts     # supabase gen types 자동 생성 (직접 수정 금지)
-modules/
-  expo-vision-ocr/      # 자작 로컬 Expo 네이티브 모듈(iOS/Apple Vision). ko-KR+en-US 인식. 네이티브라 변경 시 EAS 재빌드
+    queries/                  # 데이터 레이어(아래 절). 화면·훅은 @/lib/queries 만 import
+    ocr/                      # OcrEngine 인터페이스 + VisionOcrEngine·MockOcrEngine. 화면은 @/lib/ocr 만 import
+    supabase.ts               # 타입 클라이언트
+    analytics.ts              # PostHog 캡슐화(키 없으면 no-op)
+    monitoring.ts             # Sentry 캡슐화(DSN 없으면 no-op)
+    normalize.ts              # 중복 판정 정규화(단일 소스)
+    imageBytes.ts             # uri → 바이트, ensureFileReady(iCloud 미다운로드 폴링)·ImageNotReadyError·logImageDiag(__DEV__ 진단)
+    imageResize.ts            # 저장용 압축(긴 변 1600px q0.8)·썸네일(400px q0.6)
+    photoLibrary.ts           # 최근 사진 가져오기·앨범 원본 삭제(expo-media-library/legacy)
+    purchaseChannel.ts        # 입구 채널 판별(순수 함수 — Deno 테스트가 import)
+    shareIntent.ts            # 공유 값 판정(순수 함수)
+    notifications.ts          # 기기 안 알림 저장소(AsyncStorage, 서버 미전송) + 링크 찾는 중인 위시(메모리)
+    snackbar.ts               # 스낵바 대기열(화면 밖에서도 호출)
+    emptyCategory.ts          # 카테고리가 비면 삭제/유지 묻기
+    formatDate.ts, formatPrice.ts
+  constants/
+    theme.ts                  # 디자인 토큰(라이트) + colorsDark(상세 뷰어·스낵바의 어두운 면에만)
+    privacy.ts                # 개인정보 안내 문구 단일 소스(바꿔서 다시 보이려면 register 의 PRIVACY_NOTICE_KEY 도 바꾼다)
+  types/database.ts           # supabase gen types 자동 생성(직접 수정 금지)
+modules/expo-vision-ocr/      # 자작 OCR 네이티브 모듈. ios/ 아래는 fingerprint 에 들어간다
 supabase/
-  config.toml           # supabase init + [functions.cleanup-orphan-images] verify_jwt=false(스케줄러 전용)
-  migrations/
-    0001_init.sql       # 스키마 + GRANT + RLS + Storage 버킷/정책 (계약 기준선)
-    0002_cleanup_anon_users.sql  # 빈 익명 계정(아이템 0·30일+) 주 1회 삭제 pg_cron 잡 (Phase 11)
-    0003_orphan_images_fn.sql    # 고아 이미지 키 열거 함수 list_orphan_item_images (원본∪썸네일 union, service_role 전용)
-    0004_internal_users.sql      # 지표 제외용 개발자 uid 테이블 ops.internal_users (API 비노출·SQL Editor 전용, uid는 git 밖에서 insert)
-    0005_parse_quota.sql         # AI 정제 요청 한도 카운터(ops.parse_quota_user/global) + 실패 기록(ops.parse_failures, 계정 정리 뒤에도 유지) + 함수 consume_parse_quota·record_parse_failure (service_role 전용)
-    0006_permissions_and_retention.sql  # 권한 정리(public 테이블 CRUD 외 권한 회수·새 함수 기본 실행 권한 끔·set_updated_at search_path 고정) + item-images 3MB·JPEG 제한 + 위시 삭제 시 분석 로그 원문·AI 결과 비움(트리거 ops.clear_analysis_log_content, 개발자 계정 제외)
-    0007_purchase_link_quota.sql # 구매처 링크 찾기 전용 한도 카운터(ops.purchase_link_quota_user/global) + 실패 기록(ops.purchase_link_failures, 계정 정리 뒤에도 유지) + 함수 consume_purchase_link_quota·record_purchase_link_failure (service_role 전용, Phase 21)
-  rollback/             # 마이그레이션별 되돌리기 SQL(000N_*_down.sql) — 운영 DB 하나라 새 마이그레이션마다 함께 둔다
+  config.toml                 # init 템플릿 + [functions.cleanup-orphan-images] verify_jwt=false(스케줄러 전용)
+  migrations/                 # 0001(기준선) ~ 0007. 적용한 파일은 고치지 않는다(아래 절)
+  rollback/                   # 0005부터 마이그레이션마다 되돌리기 SQL
   functions/
-    parse-screenshot-text/  # Edge Function(Deno): OCR 원문 → Claude Haiku 정제 → {productName,price,brand,confidence}. prompt.ts(모델·스키마·프롬프트 단일 소스) + samples/(회귀 케이스 + eval.ts 배포 전 자동 검증 + goldset-eval.ts 정답셋 정확도 측정·goldset-holdout.ts 홀드아웃 지정(시드 고정)·prompt-2026-10-04.ts 비교용 고정 사본·goldset/LABELING.md 라벨 규칙·goldset/REPORT.md 기준선·재측정 리포트. 원문 goldset/data·결과 goldset/out 은 git 제외)
-    cleanup-orphan-images/  # Edge Function(Deno, service_role): 고아 이미지 주 1회 스윕 — x-cron-secret 보호·dryRun 지원·Storage API로만 삭제 (Phase 11)
-    find-purchase-links/    # Edge Function(Deno): 구매처 링크 찾기(Phase 21) — index(흐름·한도·실패 기록) · logic(순수 판정: 채널·검색 범위·후보·카페24 추출·몰 검색 주소) · malls(몰 사전·확인된 검색 주소) · prompt(모델·검색/고르기 지시) · site(카페24 사이트 검색 페이지 읽기) · safety(Web Risk) · verify(접속 확인)
-  tests/                # rls.sql(RLS/권한 검증 — 테스트 4 Storage 폴더 격리·anon 거부, 테스트 5 0006 적용 확인) + audit.sql(RLS·GRANT·함수 권한·Storage 정책 점검 — 읽기 전용 한 문장, 결과 한 표) + metrics.sql(테스트 지표 4종, Phase 10) + quota.sql(요청 한도 권한·동작 검증, rollback) + parse_failures.sql(AI 정제 실패 원인 조회) — 대시보드 SQL Editor 에서 사람이 실행. parse_quota_live.ts(요청 한도 실제 동작 시험, Deno — 공개 anon 키만, 사람이 터미널에서 실행) + purchase_link_quota.sql(구매처 한도 권한·동작 검증, rollback) + find_purchase_links_test.ts(구매처 함수 순수 로직 단위 시험, `deno test` — 네트워크 없음) + purchase_channel_test.ts(앱 입구 채널 판별 단위 시험 — 앱엔 테스트 실행기가 없어 Deno로)
-assets/                 # 아이콘·스플래시, logo-v1(참고용)
-app.json                # Expo 설정 = 운영(스토어) 정본 (플러그인: share-intent/image-picker/media-library/localization(ko)/Sentry, iOS 공유확장, privacy manifest, CFBundleDevelopmentRegion ko, EAS projectId)
-app.config.js           # 앱 변형(Phase 14): APP_VARIANT=development 일 때만 이름(WishShot Dev)·번들 ID(.dev)·scheme(wishshot-dev)·공유 확장 블록을 덮어씀. 그 외엔 app.json 그대로
-metro.config.js         # getSentryExpoConfig(번들 Debug ID·LogBox 프레임 접기). Babel 변환기는 Expo 기본 그대로
-eas.json                # EAS 빌드 프로파일 (development=APP_VARIANT development/preview/production)
-.env / .env.example     # Supabase URL·anon 키, PostHog·Sentry 공개 키 (.env는 커밋 금지)
-docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이션 스크립트, v1 로고/토큰)
+    parse-screenshot-text/    # AI 정제. prompt.ts + samples/(회귀 케이스·eval.ts, 정답셋 측정 goldset-eval.ts·goldset-holdout.ts·goldset/LABELING.md·REPORT.md, 비교용 고정 사본 prompt-2026-10-04.ts). 정답셋 원문·결과(goldset/data·out)는 git 제외
+    find-purchase-links/      # 구매처 링크: index(흐름·한도) · logic(순수 판정) · malls(몰 사전) · prompt · site(카페24 검색) · safety(Web Risk) · verify(접속 확인)
+    cleanup-orphan-images/    # 고아 이미지 주간 스윕(service_role, x-cron-secret)
+  tests/                      # SQL Editor 용 검증 SQL(rls·audit·quota·purchase_link_quota·metrics·parse_failures) + Deno 시험(find_purchase_links_test·purchase_channel_test·parse_quota_live)
+docs/
+  development.md              # 개발 가이드 — 절차·명령·수치 정본
+  phases/                     # Phase별 작업 지시·결과 기록
+  design/                     # 디자인 정본(색 토큰·화면 명세·목업 이미지)
+  testing/tracking-plan.md    # 계측 이벤트 정본
+  legal/                      # 개인정보처리방침·지원 페이지 원본
+  readme/                     # README 이미지
+  archive/                    # 폐기·참고 자산(지시 아님)
+assets/                       # 아이콘·스플래시·헤더 로고, logo-v1(참고용)
+app.json                      # Expo 설정 = 운영(스토어) 정본(플러그인·공유 확장·privacy manifest·CFBundleDevelopmentRegion ko)
+app.config.js                 # APP_VARIANT=development 일 때만 개발용 앱(이름·번들 ID·scheme·공유 확장)으로 덮어씀
+eas.json                      # EAS 빌드 프로필(development / preview / production)
+metro.config.js               # Sentry 메트로 설정(Babel 변환기는 Expo 기본 그대로)
+eslint.config.js              # PostHog·Sentry 직접 import 금지 규칙
+tsconfig.json, .npmrc, .gitattributes, .env.example, .github/
 ```
 
 - 경로 별칭: `@/*` → `src/*` (예: `import { colors } from '@/constants/theme'`).
 
 ## 명령어
 
-- `npx expo start --tunnel` — 개발 서버. **이 환경은 LAN 접속이 안 되므로 `--tunnel` 필수** (아래 개발 환경 주의 참고).
-- `$env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wishshot-dev` (PowerShell) — 개발용 앱(`WishShot Dev`)으로 접속. `APP_VARIANT`가 없으면 운영 scheme이 앱에 넘어가 공유 시트로 받은 사진을 인식하지 못한다(`expo-share-intent`가 scheme으로 찾음). `--scheme`은 QR 링크 기본값 `exp+wish-shot`(slug에서 파생, 스토어 앱도 가짐) 대신 개발용 앱 scheme을 쓰게 한다. `$env:` 값은 그 창에서만 유지된다. Sentry까지 검증할 땐 `.env`에 `EXPO_PUBLIC_SENTRY_DEV=1`을 넣고 `--clear`로 띄운다.
-- `npx tsc --noEmit` — 타입 체크.
-- `npx expo lint` — ESLint.
-- `npx expo-doctor` — 프로젝트 설정·의존성 정합성 점검.
-- `npx eas-cli build --platform ios --profile development` — 개발 빌드 (Apple 인증 프롬프트가 있어 사람이 실행). `eas.json`의 `env.APP_VARIANT=development`로 **개발용 앱 변형**이 만들어져 스토어 앱과 한 기기에 나란히 설치된다(별도 익명 계정 — uid는 `ops.internal_users`에 넣는다).
-- `npx eas-cli build --platform ios --profile production` → `npx eas-cli submit --platform ios --profile production --latest` — TestFlight 배포 (사람이 실행, Apple 인증). production 프로필은 `channel: "production"` = **OTA 사용**(Phase 9 F, `expo-updates`). 네이티브 변경이 없는 **JS-only 수정은 새 빌드·재심사 없이** `eas update`로 배포한다. 네이티브를 바꾸면 `runtimeVersion(fingerprint)`이 자동으로 달라져 새 빌드가 필요하다(불일치 크래시 방지).
-- `npx eas-cli update --branch production --message "..."` — JS-only OTA 배포(Phase 9 F). production 채널이 이 branch를 구독한다. **먼저 preview/internal 채널로 확인 후** production에 올린다(깨진 번들은 마지막 정상/내장 번들로 폴백, 고친 업데이트를 다시 publish해 롤백).
-- `npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist` — OTA 뒤 Sentry 소스맵 업로드(사람). `eas update`가 export할 때 `dist`에 소스맵을 이미 만든다(eas-cli `--dump-sourcemap` 기본). org·project는 `app.json` Sentry 플러그인에서 읽고, `SENTRY_AUTH_TOKEN`은 그 셸에서만 환경 변수로 넣는다(`.env`·명령어 기록에 남기지 않는다). 스코프 패키지 `@sentry/expo-upload-sourcemaps`는 8.9.0 이상 전용이라 쓰지 않는다.
-- `npx eas-cli env:set` / `env:push` / `env:list production` — EAS 환경 변수 관리(클라우드 빌드용 `EXPO_PUBLIC_*` 등록). `env:create`는 deprecated(`env:set`이 만들기·수정을 겸함). 비밀 값은 터미널 대신 expo.dev 웹(Project settings → Environment variables)에서 넣는다(PowerShell이 명령어를 기록 파일에 남김).
-- `npx supabase login` → `npx supabase gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts` — DB 스키마에서 타입 재생성 (마이그레이션 변경 시마다). 로그인은 최초 1회.
-- `npx supabase secrets set ANTHROPIC_API_KEY=...` — Edge Function 시크릿 등록(Claude 키). **앱·커밋·채팅엔 절대 넣지 않는다.**
-- `npx supabase secrets set PARSE_LIMIT_USER_HOURLY=30 PARSE_LIMIT_USER_DAILY=100 PARSE_LIMIT_GLOBAL_DAILY=300 PARSE_IMAGE_WEIGHT=1` — AI 정제 요청 한도 조정(선택 — 미설정이면 코드 기본값과 같다). 함수가 요청마다 읽어 **재배포 없이 반영**된다.
-- `npx supabase functions deploy parse-screenshot-text` — Edge Function 배포(정제 프롬프트/로직 변경 시). **앱 재빌드와 무관**(서버 측). Docker 없이도 클라우드 번들로 배포됨(경고는 무시).
-- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY supabase/functions/parse-screenshot-text/samples/eval.ts 3` — 정제 프롬프트 **배포 전 회귀 검증**(`prompt.ts`를 그대로 써서 API 직접 호출, 케이스당 3회). 키는 사람이 셸 환경 변수로만 설정 — 에이전트는 키를 다루지 않는다. 가격 원칙: 원화 금액만, 애매하면 null(틀린 값보다 빈칸), 정가 우선 — 단 중고거래 매물은 판매자 등록가(정가 우선 미적용, Phase 17). 샘플링은 `temperature 0`(추출 일관성 — 함수·eval 공통, `prompt.ts`).
-- `deno run --allow-net=api.anthropic.com --allow-env=ANTHROPIC_API_KEY --allow-read=supabase/functions/parse-screenshot-text/samples --allow-write=supabase/functions/parse-screenshot-text/samples/goldset/out supabase/functions/parse-screenshot-text/samples/goldset-eval.ts --runs 3 --dry-run` — **정답셋 가격 정확도 측정**. 사람이 붙인 정답(`goldset/data/labels.csv`)으로 변형 5개(v0 10/04 프롬프트·v1 운영·v2 운영 프롬프트+온도 1.0·v1h/v1h-think 최신 Haiku)를 잰다. 결과는 `goldset/out/`의 results.csv·summary.md(Phase 13 기준선 — 덮어쓰지 않는다). 재측정은 `--variants v1`과 `--exclude-holdout`(고치는 동안) 또는 `--only-holdout`(최종 1회)로 하고, `--out supabase/functions/parse-screenshot-text/samples/goldset/out/<하위 폴더>`에 쓴다(부분 측정 결과 파일엔 접미사가 붙고, 다시 잴 땐 이전 결과를 옮긴 뒤 실행 — `--force` 금지). `--dry-run`은 키 없이 입력 검증과 호출 수만 본다. 원문 데이터(`goldset/data/`)·결과는 **git 제외**(OCR 원문에 타인 계정명이 섞일 수 있음). 라벨 규칙: `samples/goldset/LABELING.md`. 가상 fixture 검증: `--data supabase/functions/parse-screenshot-text/samples/goldset/fixture --dry-run`. 홀드아웃(`holdout` 열)은 `samples/goldset-holdout.ts`가 유형마다 25%를 시드 고정으로 지정한다(`--write`일 때만 파일을 쓰고, 이미 지정돼 있으면 `--force` 없이 중단).
-- `npx supabase functions deploy find-purchase-links` — 구매처 링크 찾기 함수 배포(사람, 앱 재빌드와 무관). **`0007`을 먼저 적용**한다(한도 없이 배포하지 않는다). 시크릿 `npx supabase secrets set WEB_RISK_API_KEY=...`(Google Cloud Web Risk API 키 — 없으면 링크를 항상 비움, 비밀 값이라 사람이 넣는다). 한도 조정(선택, 요청마다 읽어 재배포 없이 반영): `PURCHASE_LIMIT_USER_HOURLY=10 PURCHASE_LIMIT_USER_DAILY=30 PURCHASE_LIMIT_GLOBAL_DAILY=100`. **함수 이름을 꼭 붙인다** — 이름 없이 `functions deploy`를 하면 이 폴더의 함수가 전부 올라간다.
-- `deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts` — 구매처 함수 순수 로직 + 앱 입구 채널 판별(`src/lib/purchaseChannel.ts`) 단위 시험(네트워크·키 없음). 타입 검사는 `deno check --no-lock supabase/functions/find-purchase-links/index.ts`.
-- `npx supabase functions deploy cleanup-orphan-images` — 고아 이미지 스윕 함수 배포(`config.toml`의 `verify_jwt = false`가 함께 적용됨). 시크릿: `npx supabase secrets set CRON_SECRET=<임의 난수>`. dry-run 확인·주간 스케줄 등록은 사람이 대시보드에서(Phase 11 지시서 참고).
+전체 명령과 순서는 [개발 가이드](docs/development.md). 여기엔 에이전트가 직접 쓰는 것과 지킬 점만 둔다.
+
+- 검증: `npx tsc --noEmit` · `npx expo lint` · `npx expo-doctor` · `deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts` · `deno check --no-lock supabase/functions/find-purchase-links/index.ts`
+- runtimeVersion 확인: `npx expo-updates runtimeversion:resolve --platform ios`(`APP_VARIANT`가 없는 셸에서). 원인 찾기는 `npx expo-updates fingerprint:generate --platform ios --debug`.
+- 개발 서버: `npx expo start --tunnel`(이 환경은 LAN 접속이 안 된다). 개발용 앱으로 접속: `$env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wishshot-dev` (PowerShell) — `APP_VARIANT`가 없으면 공유 시트로 받은 사진을 인식하지 못하고, `--scheme`이 없으면 QR이 스토어 앱도 가진 기본 scheme을 쓴다.
+- **사람이 실행하는 것**(Apple 인증·비밀 값·운영 DB): EAS 빌드·제출, `eas update`(OTA), Edge Function 배포·시크릿 등록, 마이그레이션 적용, 소스맵 업로드, 정답셋 측정. 에이전트는 명령을 안내만 하고 키를 다루지 않는다.
+- 지킬 점:
+  - production 빌드 전 같은 창에 남은 `APP_VARIANT`를 지운다(`Remove-Item Env:APP_VARIANT -ErrorAction SilentlyContinue`) — 남아 있으면 개발용 앱 설정으로 빌드돼 실패한다.
+  - Edge Function 배포는 **함수 이름을 꼭 붙인다**(이름 없이 하면 폴더의 함수가 전부 올라간다). `find-purchase-links`는 `0007`을 적용한 뒤 배포한다.
+  - Supabase CLI는 `npx supabase@2.121.0`으로 쓴다(3.x는 검증하지 않음).
+  - 정답셋 측정 결과(`goldset/out`)는 덮어쓰지 않는다(`--force` 금지). 원문 데이터는 git에 넣지 않는다(OCR 원문에 타인 계정명이 섞일 수 있음).
+  - 마이그레이션을 바꾸면 타입을 재생성한다(`src/types/database.ts`).
 
 ## 환경 변수
 
-- `.env`에 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`. `.env`는 gitignore, `.env.example`만 커밋.
-- 계측(Phase 10, 선택): `EXPO_PUBLIC_POSTHOG_KEY`, `EXPO_PUBLIC_POSTHOG_HOST`. **미설정이면 계측만 전부 no-op**(앱 동작 불변)이라 키 없이도 빌드·실행된다. write-only 공개 키라 `EXPO_PUBLIC_` 노출 안전 — Supabase anon 키와 같은 패턴으로 EAS 환경에도 등록한다.
-- 오류 수집(Phase 14, 선택): `EXPO_PUBLIC_SENTRY_DSN`(공개 값 — `.env`와 EAS production, Plain text). **미설정이면 Sentry만 no-op.** `EXPO_PUBLIC_SENTRY_DEV=1`은 `__DEV__`에서 Sentry를 켜는 검증용 플래그(로컬 `.env`만). `SENTRY_AUTH_TOKEN`(소스맵 업로드)은 **EAS 환경 변수 Secret(production·preview·development 모두)에만** 둔다 — 앱·`.env`·커밋·채팅 금지. EAS 빌드에 토큰이 없으면 Xcode 업로드 단계가 실패해 빌드가 멈춘다(`SENTRY_DISABLE_AUTO_UPLOAD=true`로만 건너뜀). EAS는 프로필에 `environment`가 없으면 개발 클라이언트=development, internal 배포=preview, 그 외=production 환경 변수를 쓴다(eas-cli 코드 확인).
-- `APP_VARIANT`: `development`면 개발용 앱 변형(`app.config.js`). EAS는 `eas.json` development 프로필이 넣고, 로컬 개발 서버는 셸에서 넣는다(명령어 참고). 커밋하는 파일에는 두지 않는다.
-- `EXPO_PUBLIC_` 접두사가 붙은 값은 앱 번들에 포함된다. **anon(공개용) 키만** 넣는다. `.env` 변경 후에는 `npx expo start --clear`로 재시작해야 반영된다.
-- **EAS 클라우드 빌드는 로컬 `.env`를 읽지 않는다**(gitignore). `EXPO_PUBLIC_*`를 **EAS 환경(production 등)에 등록**해야 한다(`eas env:set`/`env:push` 또는 대시보드). 미등록이면 빌드는 되지만 앱이 켜지자마자 Supabase 환경 변수 없음으로 실패한다(공개 anon 값이라 EAS 등록은 안전).
-- **Edge Function 시크릿(앱 `.env`와 무관, `npx supabase secrets set`)**: `ANTHROPIC_API_KEY`(필수), `CRON_SECRET`(고아 이미지 스윕), AI 정제 요청 한도 `PARSE_LIMIT_USER_HOURLY`(기본 30)·`PARSE_LIMIT_USER_DAILY`(100)·`PARSE_LIMIT_GLOBAL_DAILY`(300)·`PARSE_IMAGE_WEIGHT`(1, 1~3 — 선택, 잘못된 값이면 기본값), 구매처 링크 찾기 `WEB_RISK_API_KEY`(필수 — 없으면 링크를 비움)·한도 `PURCHASE_LIMIT_USER_HOURLY`(기본 10)·`PURCHASE_LIMIT_USER_DAILY`(30)·`PURCHASE_LIMIT_GLOBAL_DAILY`(100)·`PURCHASE_DEBUG_LOG`(`1`이면 후보 주소·제목을 함수 로그에 남기는 시험용 — 시험 뒤 삭제). `SUPABASE_URL`·`SUPABASE_ANON_KEY`·`SUPABASE_SERVICE_ROLE_KEY`는 런타임이 자동 주입한다.
+목록과 등록 방법은 개발 가이드. 원칙:
+
+- 앱 번들엔 **`EXPO_PUBLIC_*` 공개 값만** 넣는다(Supabase anon 키·URL, PostHog 키, Sentry DSN). `.env`는 커밋 금지, `.env.example`만 커밋한다.
+- 비밀 값(Claude·Web Risk 키, `CRON_SECRET`, `SENTRY_AUTH_TOKEN`)은 Edge Function 시크릿 또는 EAS Secret에만 둔다. 앱·`.env`·커밋·채팅 금지.
+- EAS 클라우드 빌드는 로컬 `.env`를 읽지 않는다 → `EXPO_PUBLIC_*`를 EAS 환경에 등록한다. 프로필에 `environment`가 없으면 개발 클라이언트 = development, internal 배포 = preview, 그 밖 = production 환경 변수를 쓴다(eas-cli 코드 확인).
+- `APP_VARIANT`는 셸과 `eas.json`에서만 넣고, 커밋하는 파일에는 두지 않는다. `.env`를 바꾸면 `npx expo start --clear`로 재시작한다.
 
 ## 작업 규칙
 
 1. **Next.js·Express·Vite를 도입하지 않는다.** 서버가 필요해 보이면 Supabase Edge Function 또는 DB 함수로 해결하고, 그것도 애매하면 사람에게 묻는다.
 2. **비밀 값은 앱에 넣지 않는다.** 앱에는 Supabase `anon` 키만. `service_role` 키, Claude API 키는 Edge Function 환경 변수에만 존재한다. `.env*`는 커밋 금지, `.env.example`만 커밋.
-3. **네이티브 의존성 변경은 재빌드를 의미한다.** 네이티브 모듈(config plugin이 있는 패키지, 예: `expo-share-intent`, `expo-dev-client`, `@react-native-async-storage/async-storage`)을 추가·제거·업그레이드하면 EAS 재빌드가 필요하다. 모아서 추가하고 임의로 늘리지 않는다. JS 전용 패키지는 자유.
+3. **네이티브 패키지도 구현 선택지에 넣되, 비교해 보고하고 승인받아 추가한다.** 네이티브 모듈(config plugin이 있는 패키지, 예: `expo-share-intent`, `expo-dev-client`, `@react-native-async-storage/async-storage`)을 추가·제거·업그레이드하면 EAS 재빌드가 필요하다. 구현 방법을 고를 때 ① 이미 설치된 패키지·JS ② 로컬 모듈(`modules/`) 직접 구현 ③ 새 네이티브 패키지를 비교해 보고하고, 사람이 고른다. 비교 항목: 재빌드 여부와 배포 경로 변화(JS만 바꾸는 작업은 OTA로 나가지만, 네이티브를 넣으면 스토어 빌드·심사로 바뀌고 앱 지문(fingerprint)이 달라져 이후 OTA는 새 빌드 사용자만 받는다), Expo SDK 57·RN 0.86·New Architecture 호환 근거, 개인정보 매니페스트·방침 영향, 유지보수 상태(최근 릴리스·열린 이슈), 구현·검증 비용. 승인 없이 추가하지 않고, 추가는 한 빌드에 모은다(버전은 규칙 10). JS 전용 패키지는 자유.
 4. **모든 사용자 노출 문자열은 한국어 — 간결한 단답형(iOS 기본 앱 톤).** 에러·라벨·플레이스홀더·접근성 라벨 포함. 대화체("~예요/~해요")를 쓰지 않는다.
    - 라벨·버튼·탭·플레이스홀더: **명사 또는 동사 원형의 단답**. 예: "저장", "삭제", "취소", "편집", "카테고리 이동", "다른 사진 선택".
    - 안내·에러: 짧은 서술("~습니다") 또는 명사구. 예: "불러오지 못했어요" → "불러오지 못했습니다"(또는 더 짧게 "불러오기 실패"). 감탄·수다·군더더기 배제.
    - 확인 다이얼로그: 제목은 짧은 질문 가능("삭제할까요?"), 본문은 담백하게("복구할 수 없습니다").
-   - ※ Phase 5에서 기존 대화체("~예요/~해요/~어요") 문자열을 이 톤(단답/"~습니다")으로 **정리 완료**(데이터 레이어 `queries/*` 에러 문자열·공유 컴포넌트 포함).
-5. **디자인 토큰을 쓴다.** 색상은 `src/constants/theme.ts`의 시맨틱 토큰(`primary`, `accent`, `error`, `textMain`, `textSub`, `textDisabled`, `bgCard`, `silver` 등 — 세이지 그린/테라코타/실버 그레이)만 사용. 컴포넌트에 원시 hex를 직접 쓰지 않는다.
+5. **디자인 토큰을 쓴다.** 색상은 `src/constants/theme.ts`의 시맨틱 토큰(`primary`(검정), `accent`(와인 — 제한 사용), `error`, `textMain`, `textSub`, `textDisabled`, `bgCard`, `silver`(iOS 시스템 그레이) 등)만 사용. 컴포넌트에 원시 hex를 직접 쓰지 않는다.
 6. **모르면 만들어내지 않는다.** 패키지 버전·Expo SDK 호환·EAS 설정 필드가 불확실하면 공식 문서를 확인하거나 사람에게 묻는다. 아이폰 설치·공유 시트 동작은 에이전트가 검증할 수 없으므로 "확인해달라"고 명시적으로 요청한다.
 7. **커밋 메시지는 기존 컨벤션**: `feat:`, `fix:`, `chore:`, `docs:`, `style:`, `refactor:`, `test:` + 한국어 요약.
-8. **문서를 현실에 맞춘다.** 구조나 명령어가 바뀌면 이 파일과 `docs/development.md`(개발 가이드)를 같은 커밋에서 갱신한다. `README.md`는 서비스 소개라 기능·구조가 크게 바뀔 때만 함께 고친다.
+8. **문서를 현실에 맞춘다.** 구조나 명령어가 바뀌면 이 파일과 `docs/development.md`(개발 가이드)를 같은 커밋에서 갱신한다. 절차·명령·수치는 개발 가이드가 정본이고, 이 파일엔 규칙·구조·원칙과 링크만 둔다. `README.md`는 서비스 소개라 기능·구조가 크게 바뀔 때만 함께 고친다.
 9. **새 테이블엔 GRANT를 명시한다.** 이 Supabase 프로젝트는 `public` 테이블 권한을 자동 부여하지 않는다. 마이그레이션에 `grant select, insert, update, delete on public.<table> to authenticated;`를 직접 쓴다(RLS는 행 필터일 뿐, 테이블 접근은 GRANT가 먼저 통과해야 함). 로그인 전용 데이터는 `anon`에 부여하지 않는다. **함수도 같다** — `0006`부터 postgres가 만드는 새 함수는 기본으로 아무도 실행할 수 없으니, 앱·Edge Function이 부를 함수는 `grant execute on function ... to authenticated`(또는 `service_role`)를 직접 쓴다(트리거 함수는 권한 없이도 발화). `security definer` 함수는 `set search_path = ''`로 고정한다.
 10. **패키지 버전은 임의로 올리지 않는다.** 검증된 현재 버전을 유지한다. `expo`/`expo-router`/`@expo/ui`/`expo-glass-effect`는 정확히 고정하고 `package.json`의 `expo.install.exclude`로 자동 변경을 막았다. `expo-doctor`가 패치 미스매치를 지적해도 임의로 `expo install --fix` 하지 말고, 필요하면 사람에게 묻는다. 새 패키지는 `npx expo install`로 SDK 호환 버전만 추가한다.
 11. **데이터는 데이터 레이어(`src/lib/queries`)로만 접근한다.** 화면에서 `supabase.from(...)`을 직접 부르지 않는다. `user_id`는 앱에서 신뢰하지 말고 RLS가 강제하게 한다(INSERT의 `user_id`는 편의로 채울 뿐).
 
 ## 데이터 레이어 · Supabase 접근
 
-- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름변경/삭제), `items`(전체·카테고리별·**태그별 listItemsByTag**/**전체 태그 listAllTags**/단건/생성/**수정 updateItem**/**카테고리 이동 moveItemCategory**/삭제/중복조회), `storage`(업로드/서명URL/배치 서명URL/삭제), `auth`(getCurrentUserId·getCurrentUserEmail·signOut), `errors`(DuplicateItemError·DuplicateCategoryError), `analysisLogs`(분석 로그 기록·item_id 연결 — 실패는 삼켜 저장을 막지 않음), `parse`(parseScreenshotText(text, image?) — Edge Function 호출. 기본은 **텍스트 + 카테고리 이름 목록만** 전송. OCR 텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 고른 **제품 영역 크롭**만 '분석' 때 함께 전송 — Phase 6. 함수가 `429`(요청 한도)·`400`(입력 상한)을 돌려줘도 앱은 다른 실패와 같은 E-2 경로), `purchaseLinks`(findPurchaseLink(productName, brand, channel) — 구매처 링크 찾기 Edge Function 호출, Phase 21. **제품명·브랜드·입구 채널만** 전송, https 링크만 받고, 실패·한도·시간 초과는 던지지 않고 null). 저장 뒤 링크 붙이기는 `items.setSourceLinkIfEmpty`(`source_link`가 비어 있을 때만 바꾸는 조건부 업데이트 — 사용자가 넣은 링크를 덮지 않음). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
-- **편집·이동의 중복 판정.** `updateItem`은 `normalizeName`을 재계산하고, 편집으로 **다른 아이템**과 정규화명이 겹치면 23505 → `DuplicateItemError`로 변환해 화면이 **차단·안내**(덮어쓰기 없음). `moveItemCategory`는 `category_id`만 바꿔(정규화명 불변) 중복 위험이 없다. 카테고리 생성/이름변경 중복은 `DuplicateCategoryError`("동일한 이름의 카테고리가 있어요")로 변환(원본 메시지는 콘솔).
-- **빈 카테고리 표시(Phase 4 UX 결정).** 카테고리 탭은 개수 0인 카테고리도 노출한다(Phase 2의 "빈 카테고리 비노출" 규칙을 뒤집음 — 삭제 여부를 사용자가 인지하도록). 대신 이동·편집·삭제로 카테고리가 0이 되면 `promptDeleteIfCategoryEmpty`로 삭제/유지를 묻는다.
-- **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`(hooks)로만 다룬다. `analysis_logs`는 Phase 2에서 만든 테이블을 **쓰기만** 한다(스키마 변경 없음). `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문). **위시를 지우면** 외래 키가 `item_id`를 비울 때 트리거(`0006`, `ops.clear_analysis_log_content`)가 그 로그의 `raw_text`·`parsed`를 비우고 상태·시각과 분석 경로 표시(`parsed.source`)만 남긴다. 개발자 계정(`ops.internal_users`)은 건너뛴다(정답셋·재현 사례용) — 측정 기록이 필요하면 개발자 uid가 목록에 있는지 먼저 확인한다.
+- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름 변경/삭제), `items`(전체·카테고리별·태그별 목록, 전체 태그, 단건, 생성, 수정 `updateItem`, 카테고리 이동 `moveItemCategory`, 일괄 이동·삭제 `moveItems`·`deleteItems`, 삭제, 중복 조회, 빈 링크에만 붙이기 `setSourceLinkIfEmpty`), `storage`(업로드/signed URL/삭제), `auth`(`getCurrentUserId`·`signInAnonymouslyIfNeeded`, `signOut`은 `__DEV__`만), `errors`(`DuplicateItemError`·`DuplicateCategoryError`), `analysisLogs`(분석 로그 기록 — 실패는 삼켜 저장을 막지 않음), `parse`(`parseScreenshotText(text, image?)` — 정제 함수 호출), `purchaseLinks`(`findPurchaseLink` — 실패·한도·시간 초과는 던지지 않고 null, https 링크만 받음). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
+- **편집·이동의 중복 판정.** `updateItem`은 `normalizeName`을 재계산하고, 편집으로 **다른 아이템**과 정규화명이 겹치면 23505 → `DuplicateItemError`로 변환해 화면이 **차단·안내**한다(덮어쓰기 없음). `moveItemCategory`는 `category_id`만 바꿔(정규화명 불변) 중복 위험이 없다. 카테고리 생성/이름 변경 중복은 `DuplicateCategoryError`('같은 이름의 카테고리가 있습니다.')로 변환한다(원본 메시지는 콘솔).
+- **빈 카테고리 표시.** 카테고리 탭은 개수 0인 카테고리도 노출한다(삭제 여부를 사용자가 알아차리도록). 대신 이동·편집·삭제로 카테고리가 비면 `promptDeleteIfCategoryEmpty`로 삭제/유지를 묻는다.
+- **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`로만 다룬다. `analysis_logs`는 **쓰기만** 한다. `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문). **위시를 지우면** 외래 키가 `item_id`를 비울 때 트리거(`0006`, `ops.clear_analysis_log_content`)가 그 로그의 `raw_text`·`parsed`를 비우고 상태·시각과 분석 경로 표시(`parsed.source`)만 남긴다. 개발자 계정(`ops.internal_users`)은 건너뛴다(정답셋·재현 사례용) — 측정 기록이 필요하면 개발자 uid가 목록에 있는지 먼저 확인한다.
 - **RLS가 최종 방어선.** 세 테이블 모두 `user_id = (select auth.uid())`로 SELECT/INSERT/UPDATE/DELETE 강제. `anon`은 권한 없음. API 롤(anon·authenticated·service_role)엔 CRUD 외 테이블 권한(TRUNCATE·REFERENCES·TRIGGER·MAINTAIN)이 없다(`0006` — 새 public 테이블에도 자동으로 붙지 않음). 검증 쿼리는 `supabase/tests/rls.sql`, 권한·정책 전체 점검은 `supabase/tests/audit.sql`.
 - **`normalized_name`은 서버 전용 중복 판정 컬럼.** 값 = `normalizeName(brand, product_name)`(NFC·소문자·문자/숫자만). `UNIQUE(user_id, normalized_name)`로 재저장을 하드 차단. 저장·사전조회·수정이 **모두 `src/lib/normalize.ts` 한 곳**을 써야 판정이 일치한다. 화면엔 `product_name`·`brand`만 노출.
 - **Storage 규칙.** private 버킷 `item-images`, 키 `{user_id}/{item_id}.jpg`. 렌더는 signed URL로만. DB엔 객체 키만 저장. 중복 덮어쓰기는 같은 키에 `upsert`. 버킷은 **파일 3MB·`image/jpeg`만** 받는다(`0006`, 업로드할 때만 검사) — 다른 형식이나 더 큰 파일을 올리려면 마이그레이션으로 버킷 설정부터 바꾼다.
-- **Storage · Egress 규칙(Phase 9 — Free 5GB 유지).** 이미지 전송량을 코드로 줄여 정식 출시·성장까지 Free 플랜을 유지한다(플랜 업그레이드로 해결하지 않는다). 데이터는 **모두 `src/lib/queries/storage.ts` 경유**(화면에서 `supabase.storage` 직접 호출 금지).
-  - **업로드 전 리사이즈 필수.** 저장 시점에만 원본을 **긴 변 1600px · JPEG q0.8**로 최적화한다(`src/lib/imageResize.ts` — `compressForUpload`). **OCR·AI 분석·원본 확대 보기는 사용자가 고른 원본 uri 그대로** 쓴다(압축은 저장 시점에만, 품질 저하 금지). 압축 전 `ensureFileReady`로 iCloud 미다운로드를 흡수한다.
-  - **목록은 썸네일 객체만.** 아이템 1개 = 원본 `{uid}/{id}.jpg` + **파생 썸네일** `{uid}/{id}_thumb.jpg`(긴 변 400px q0.6, DB에 저장하지 않는 파생 키 — `thumbKeyFromImageKey`). 그리드(전체·폴더·태그·홈 모자이크)는 `getItemThumbSignedUrls`로 썸네일을, **상세 뷰어만 원본**(`getItemImageSignedUrl(s)`)을 쓴다. Supabase **Image Transformation은 Pro 전용**이라 Free에선 못 써 별도 썸네일 객체로 대체한다.
-  - **thumb 부재 시 원본 폴백.** 썸네일이 없는 레거시 아이템은 그리드에서 원본으로 폴백해 화면이 비지 않게 한다(`Thumbnail`의 `fallbackUrl` + `onError` 스왑 — 대규모 백필 없이 안전). 신규·재저장은 자동으로 썸네일이 생기고, `settings.tsx`의 `__DEV__` "썸네일 백필"로 자기 데이터를 채울 수 있다.
-  - **signed URL 영속 캐시 재사용.** `SIGNED_URL_TTL_SEC = 1일`. 발급한 signed URL을 AsyncStorage에 영속(`wishshot.signedurl.` 접두사)해 앱 콜드스타트·리로드 후에도 같은 URL을 재사용한다 → `expo-image` 디스크 캐시가 살아남아 **재방문 다운로드 ≈ 0**. 앱 시작 시 `hydrateSignedUrlCache()` 1회(`_layout.tsx`). 업로드는 `cacheControl: 604800`(7일).
-  - **삭제·덮어쓰기·교체는 원본+썸네일을 항상 함께.** `deleteItemImage(s)`가 원본과 썸네일 키를 함께 remove하고 **둘 다 캐시 무효화**(고아 객체 없음). 담기·덮어쓰기·이미지 교체는 원본과 썸네일을 **모두 재업로드**한다.
-- **익명 계정 수명주기(Phase 11 — 전부 서버 측, 앱 코드 무관).** 익명 로그인 특성상 앱 재설치마다 접근 불가능한 옛 계정·파일이 서버에 쌓이므로 "잃을 게 없는 것만" 자동 정리한다. (1) **빈 익명 계정**(아이템 0건·생성 30일+)은 pg_cron 주 1회 잡 `delete-empty-anon-users`(`0002`)가 삭제 → FK cascade로 `categories/items/analysis_logs` 정리. **데이터(아이템) 있는 계정은 절대 삭제하지 않는다**(`not exists items` 조건 필수). (2) **고아 Storage 객체**(살아있는 키 = `items.image_key` ∪ 파생 썸네일 키 — 이 union 밖)는 DB 함수 `list_orphan_item_images`(`0003`)가 열거하고 Edge Function `cleanup-orphan-images`가 주 1회 **Storage API(`.remove()`)로만** 삭제한다(`storage.objects` 직접 DELETE 금지). 썸네일 키는 DB 미저장 파생이라 union을 빼면 전 썸네일이 오삭제된다. (3) **"재설치 시 데이터 미보존"은 의도된 동작** — 복원은 미래 계정 연결(Apple/이메일 linkIdentity) Phase 소관. 마이그레이션 적용·dry-run·cron 등록·functions deploy는 사람이 수행.
-- **마이그레이션.** 계약은 `supabase/migrations/0001_init.sql`. 적용은 대시보드 SQL Editor에 붙여넣기(또는 `supabase link` 후 `supabase db push`). **스키마를 바꾸면 새 `000N_*.sql`을 추가**하고(기존 파일 재실행 아님), 타입을 재생성한다. 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/000N_*_down.sql`로 함께 둔다(`0005`부터). `ops` 테이블은 API 비노출이라 타입에 없고, `0005`의 `public` 함수 2개(`consume_parse_quota`·`record_parse_failure`)와 `0007`의 2개(`consume_purchase_link_quota`·`record_purchase_link_failure`)는 다음 재생성 때 타입에 들어가지만 service_role 전용이라 앱에서 쓰지 않는다.
+- **Storage · Egress 규칙(Free 플랜 월 5GB 유지).** 이미지 전송량을 코드로 줄여 Free 플랜을 유지한다(플랜 업그레이드로 해결하지 않는다). 모두 `src/lib/queries/storage.ts` 경유(화면에서 `supabase.storage` 직접 호출 금지).
+  - **업로드 전 리사이즈 필수.** 저장 시점에만 원본을 긴 변 1600px JPEG로 최적화한다(`compressForUpload`). **OCR·AI 분석·원본 확대 보기는 사용자가 고른 원본 uri 그대로** 쓴다(품질 저하 금지). 압축 전 `ensureFileReady`로 iCloud 미다운로드를 흡수한다.
+  - **목록은 썸네일 객체만.** 아이템 1개 = 원본 `{uid}/{id}.jpg` + 파생 썸네일 `{uid}/{id}_thumb.jpg`(DB에 저장하지 않는 파생 키 — `thumbKeyFromImageKey`). 그리드는 `getItemThumbSignedUrls`로 썸네일을, **상세 뷰어만 원본**을 쓴다. Supabase Image Transformation은 Pro 전용이라 별도 썸네일 객체로 대체한다.
+  - **썸네일이 없으면 원본 폴백.** 썸네일이 없는 옛 아이템은 그리드에서 원본으로 폴백한다(`Thumbnail`의 `fallbackUrl` + `onError`). 신규·재저장은 자동으로 썸네일이 생긴다.
+  - **signed URL 영속 캐시 재사용.** 발급한 signed URL을 AsyncStorage에 영속해 콜드스타트 뒤에도 같은 URL을 재사용한다 → `expo-image` 디스크 캐시가 살아남아 재방문 다운로드 ≈ 0. 앱 시작 시 `hydrateSignedUrlCache()` 1회.
+  - **삭제·덮어쓰기·교체는 원본+썸네일을 항상 함께.** `deleteItemImage(s)`가 두 키를 함께 지우고 둘 다 캐시를 무효화한다(고아 객체 없음). 담기·덮어쓰기·이미지 교체는 둘 다 다시 올린다.
+- **익명 계정 수명주기(전부 서버 측, 앱 코드 무관).** 앱 재설치마다 접근할 수 없는 옛 계정·파일이 쌓이므로 "잃을 게 없는 것만" 자동 정리한다. (1) **빈 익명 계정**(아이템 0건·생성 30일+)은 pg_cron 주간 잡 `delete-empty-anon-users`(`0002`)가 삭제한다 → FK cascade로 정리. **아이템이 있는 계정은 절대 삭제하지 않는다**(`not exists items` 조건 필수). (2) **고아 Storage 객체**(살아 있는 키 = `items.image_key` ∪ 파생 썸네일 키 — 이 union 밖)는 `list_orphan_item_images`(`0003`)가 열거하고 `cleanup-orphan-images`가 주 1회 **Storage API(`.remove()`)로만** 지운다(`storage.objects` 직접 DELETE 금지). 썸네일 키는 DB에 없는 파생 키라 union을 빼면 썸네일이 전부 오삭제된다. (3) **재설치 시 데이터 미보존은 의도된 동작** — 복원은 계정 연결 작업 소관.
+- **마이그레이션.** 기준선은 `0001_init.sql`이고, 그 뒤 `0002`~`0007`을 번호순으로 적용한다(방법은 개발 가이드). **스키마를 바꾸면 새 `000N_*.sql`을 추가**하고(적용한 파일은 고치지 않음), 타입을 재생성한다. 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/000N_*_down.sql`로 함께 둔다(`0005`부터). `ops` 테이블은 API 비노출이라 타입에 없고, `public`의 한도·실패 기록 함수(`0005`·`0007`)는 service_role 전용이라 앱에서 쓰지 않는다.
 - **타입은 자동 생성.** `src/types/database.ts`는 `supabase gen types`로 만든다. 손으로 고치지 않는다.
 
-## 개발 환경 주의 (Windows, Mac 없음)
+## 개발 환경 주의 (Windows 개발 머신)
 
-- **개발 서버는 `--tunnel` 필수.** 이 PC/네트워크에서 기본 LAN 모드는 아이폰이 접속 실패("Could not connect to the server")한다. `@expo/ngrok`은 devDependency로 설치돼 있다.
+- **개발 서버는 `--tunnel` 필수.** 이 PC/네트워크에서 기본 LAN 모드는 아이폰이 접속하지 못한다("Could not connect to the server"). `@expo/ngrok`은 devDependency로 설치돼 있다.
 - **React Compiler가 켜져 있다(`app.json` `experiments.reactCompiler`).** 컴포넌트·훅 안에서 모듈 수준 `let` 변수를 직접 읽거나 쓰지 않는다 — 컴파일러가 모듈 변수를 바뀌지 않는 값으로 보고 `const next = queued; queued = null; open(next)`를 `queued = null; open(queued)`로 바꿔 `null`을 넘긴 실제 사례가 있다(공유 처리기, 2026-11-10). 모듈 상태는 컴포넌트 밖 함수(예: `takeQueued()`)로만 다룬다. 변환 결과는 `@babel/core`로 `babel-preset-expo`를 caller `{ name: 'metro', platform: 'ios', supportsReactCompiler: true }`로 돌려 확인할 수 있다.
-- **iOS prebuild는 Windows에서 불가.** `npx expo prebuild --platform ios`는 스킵/실패한다. config plugin 검증은 `npx expo config --type introspect`로 하고, 실제 iOS 네이티브 생성·빌드는 **EAS 클라우드**에서 일어난다.
+- **runtimeVersion(fingerprint)에 들어가는 파일.** `.gitignore`·`eas.json`(파일 전체), `modules/expo-vision-ocr/ios/`, `app.json`·`app.config.js`의 **값**(주석은 아님), 의존성, `package.json` scripts의 `start`·`web`·`lint`, 아이콘·스플래시 이미지가 바뀌면 값이 달라져 이후 OTA가 기존 스토어 빌드 사용자에게 가지 않는다. JS만 바꾸는 작업에 이 파일들이 섞이면 멈추고 알린다. 확인 명령은 위 "명령어".
+- **iOS prebuild는 Windows에서 불가.** `npx expo prebuild --platform ios`는 스킵/실패한다. config plugin 검증은 `npx expo config --type introspect`로 하고, 실제 iOS 네이티브 생성·빌드는 **EAS 클라우드**에서 일어난다. Mac은 Xcode Organizer 크래시 열람 같은 보조 용도로만 쓴다.
 - iOS 설치·공유 시트 동작 등 실기기 검증은 사람이 한다.
 - **EAS `npm ci` peer 충돌 방지**: `react-native-awesome-gallery`(peer `reanimated@^3`) ↔ 설치된 `reanimated@4` 충돌로 EAS 설치(Install dependencies)가 즉시 실패한다. 루트 **`.npmrc`(`legacy-peer-deps=true`)를 커밋**해 로컬·EAS 동일하게 통과시킨다(삭제 금지).
 - **iOS 빌드 크레덴셜**: 앱 본체 + `share-extension` 두 타깃 + App Group(`group.com.k0nghaa.wishshot`)의 프로비저닝이 필요하다 — EAS가 Apple 로그인 시 자동 생성. 배포 인증서는 다른 앱과 공유(재사용 권장). 개발용 앱 변형은 별도 식별자(`com.k0nghaa.wishshot.dev`, `com.k0nghaa.wishshot.dev.share-extension`, `group.com.k0nghaa.wishshot.dev`)라 첫 development 빌드에서 따로 만든다. 운영 식별자는 절대 바꾸지 않는다(기존 사용자의 공유 확장·데이터가 깨진다).
@@ -193,9 +198,9 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
 ## 참고 (보존된 옛 코드)
 
 - `web-v0` 태그: 옛 웹 코드(Vite SPA + Express + SQLite)의 영구 보존점. 필요하면 `git show web-v0:<path>`로 읽는다. 되살리거나 수정하지 않는다.
-- `docs/archive/`: 폐기된 Next.js 계획, 재사용 예정 자산(`migrate-sqlite-to-supabase.ts` — Phase 4, v1 로고/디자인 토큰). **참고용이며 지시가 아니다.**
+- `docs/archive/`: 폐기된 Next.js 계획과 보존용 자산(v1 데이터 이관 스크립트 `migrate-sqlite-to-supabase.ts` — 이관은 하지 않기로 함, v1 로고·디자인 토큰). **참고용이며 지시가 아니다.**
 
-## 데이터 흐름 (목표)
+## 데이터 흐름
 
 ```
 [iOS 공유 시트 (이미지) / 앱 내 사진 선택]
@@ -203,17 +208,17 @@ docs/archive/           # 폐기·참고 자산 (Next.js 계획, 마이그레이
        ├ (텍스트 충분) 텍스트만 → Edge Function(Claude Haiku 정제)
        └ (텍스트 부족 시 자동 / "제품 영역으로 분석" 버튼) 제품 영역 지정 시트 → 선택 영역 크롭만('분석' 때) → Edge Function
   (Edge Function: 입력 상한 → 요청 한도(사용자·전체, 0005 카운터) → Claude. 실패 원인은 ops.parse_failures 에 기록)
-  → 폼 자동채움("AI가 채웠습니다. 확인하세요.") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL 1일 영속캐시, 원본 1600px 최적화 저장 + 400px 썸네일)
-  → (제품명이 채워지고 링크 칸이 비면 — Phase 21) 입구 채널 판별(기기, OCR 원문 → 도메인 또는 몰 id)
+  → 폼 자동채움("AI가 채웠습니다. 확인하세요.") → supabase-js → Supabase Postgres (RLS) / Storage (private, signed URL 영속 캐시, 원본 1600px 최적화 저장 + 400px 썸네일)
+  → (제품명이 채워지고 링크 칸이 비면) 입구 채널 판별(기기, OCR 원문 → 도메인 또는 몰 id)
        → 제품명·브랜드·채널만 → Edge Function find-purchase-links
          (전용 한도 0007 → 카페24 사이트 안 검색 또는 Claude 웹 검색 → 후보 번호 고르기 → Web Risk·접속 확인
           → 상품 페이지 / 몰·사이트 검색 결과 링크 / 없음)
        → 링크 칸 자동채움(저장 뒤 도착하면 3분 안·빈 링크에만 붙이고 스낵바·알림 탭·타일 점으로 알림 — 찾는 동안 타일 흐림)
 
-[iOS 공유 시트 (URL/웹페이지) — Phase 7]  ※ 스크린샷 원본 URL 자동추출은 불가, 페이지 직접 공유만
+[iOS 공유 시트 (URL/웹페이지)]  ※ 스크린샷 원본 URL 자동추출은 불가, 페이지 직접 공유만
   → 루트 공유 처리기가 분기(어느 탭·화면에서든, 폼 작성 중이면 지금 열기/저장 후 열기) → '전체' 탭 링크붙이기 모드
        ├ 기존 위시 탭 → 편집(링크 프리필) → 저장
        └ 새로 담기 → 등록(링크 프리필 + "방금 캡처한 사진" 제안) → 위 등록 흐름
 ```
 
-Phase 4까지 **전 구간**이 동작한다 — 공유 시트/앱 내 사진 선택 → 온디바이스 OCR → 텍스트(+카테고리 이름)만 Edge Function으로 전송해 정제·**카테고리 추천(FR-8)**(**텍스트가 부족하거나 "제품 영역으로 분석"을 누르면 사용자가 고른 제품 영역 크롭만 '분석' 때 전송 — Phase 6**) → 폼 자동채움·추천 미리선택(확인·수정 가능) → supabase-js → Postgres(RLS)/Storage(private, signed URL). OCR 없음/정제 실패/저신뢰는 수동 입력으로 폴백(NFR-2). 저장 후에는 **편집·카테고리 이동**, **하단 탭바(카테고리/전체/알림/검색 — 앱을 열면 전체, Phase 24)** 이동, **상세 풀스크린 뷰어·정보(i) 하프시트** 열람이 가능하고, **로그인 벽 없이 익명 세션**으로 바로 쓴다(설정=개인정보 열람). **기존 v1 데이터 이관은 범위에서 제외**(archive 보존만). Phase 5는 리스킨·탭바·정보 시트·익명 로그인 모두 **JS/설정 변경**이라 새 네이티브 모듈 없음(브랜딩 아이콘/스플래시 반영 + TestFlight 빌드만 EAS).
+OCR 결과 없음·정제 실패·저신뢰는 수동 입력으로 폴백한다(AI 실패가 저장을 막지 않는다). v1(웹) 데이터 이관은 범위 밖이다.

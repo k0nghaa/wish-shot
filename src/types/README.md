@@ -9,8 +9,8 @@
 재생성 명령 (마이그레이션을 원격 DB에 적용한 뒤):
 
 ```bash
-npx supabase login            # 최초 1회 (브라우저 인증)
-npx supabase gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts
+npx supabase@2.121.0 login            # 최초 1회 (브라우저 인증)
+npx supabase@2.121.0 gen types typescript --project-id vcvzuiyxcmvrkxscgvwp > src/types/database.ts
 ```
 
-생성 후 `npx tsc --noEmit`로 타입 정합성 확인.
+생성 후 `npx tsc --noEmit`로 타입 정합성 확인. 마이그레이션 적용 순서는 [개발 가이드](../../docs/development.md)의 "데이터베이스".
