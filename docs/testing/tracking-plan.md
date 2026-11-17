@@ -74,7 +74,7 @@
 
 | 항목 | 추가 조건 |
 |---|---|
-| `source_link_opened` | AI 구매 링크 기능 검토·출시 결정 시 품질 퍼널(`link_suggested → accepted → opened`)로 확장 |
+| `source_link_opened` | AI 구매 링크 기능 검토·출시 결정 시 품질 퍼널(`link_suggested → accepted → opened`)로 확장 — **2026-11-16: 심기로 함.** 조건(구매처 링크 찾기, 1.1.0)이 충족됐다. 답하려는 질문과 구현은 별도 작업에서 정하고, 그 전까지는 `link_attached`(저장 뒤 붙은 수)만 본다 |
 | `tab_viewed`, 폴더/태그 CRUD, `settings_opened` | 해당 영역에 구체적 질문이 생길 때 (OTA로 추가 가능) |
 | 온보딩→활성화 상관 분석 | 하지 않음(자기선택 편향 + 소표본) — 완주율만 본다 |
 | 세션 리플레이 | 화면에 사용자 사진이 상시 노출되는 앱 특성상 비권장 |
@@ -110,7 +110,7 @@
 
 ## 6. 실발화 확인 체크리스트 (dev client — 사람 확인)
 
-준비: ① `.env`에 PostHog 키·호스트 기입 후 `npx expo start --dev-client --tunnel --clear` ② 설정 → **계측 토글(개발용)** 켬(`__DEV__`는 기본 옵트아웃) ③ PostHog → Activity 열기. `__DEV__`에선 이벤트가 즉시 전송된다(flushAt 1).
+준비: ① `.env`에 PostHog 키·호스트 기입 후 개발용 앱으로 접속 — PowerShell에서 `$env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wishshot-dev --clear`(1.0.2부터 개발용 앱은 별도 앱이라 `APP_VARIANT`·`--scheme`이 없으면 공유 시트 사진을 인식하지 못한다. 2026-10-03 확인 때는 `npx expo start --dev-client --tunnel --clear`) ② 설정 → **계측 토글(개발용)** 켬(`__DEV__`는 기본 옵트아웃) ③ PostHog → Activity 열기. `__DEV__`에선 이벤트가 즉시 전송된다(flushAt 1).
 
 ※ 2026-10-03 dev client(빌드 6 + Metro)에서 전 항목 확인 완료.
 
@@ -135,7 +135,7 @@
   - **대응**: 1.0.1 = 현 JS를 내장한 재빌드(네이티브 변경 없음 → OTA 줄기 유지) + 백그라운드 진입 시 `flush()`. 출시일에 PostHog Annotation을 남기고 여기 날짜를 기입한다: **2026-10-20 출시**(Annotation 동일 날짜). 업데이트 공지·설문 재공유는 하지 않았다 — 자연 업데이트로 반영되므로 전환 초기엔 1.0.0·1.0.1 사용자가 섞인다.
   - **flush 검증 방법**: dev client로는 검증하지 않는다 — 1.0.1까지는 모든 프로필이 같은 번들 ID라 설치 시 App Store 앱을 덮어썼고(재설치하면 익명 계정이 새로 생김. 1.0.2부터 개발용 앱은 별도 번들 ID라 덮어쓰지 않는다), `__DEV__`는 `flushAt 1`이라 큐가 쌓이지 않아 백그라운드 flush 상황 자체가 재현되지 않는다. 대신 OTA 전 `tsc`·`lint`·`expo export --platform ios`(production 번들 생성)로 번들 무결성을 확인하고, OTA 후 **개발자의 production 앱**(internal 플래그라 지표 오염 없음)에서 백그라운드 진입 직후 PostHog Activity 도착을 확인한다.
 - **1.0.2 출시(2026-11-06, PostHog Annotation 같은 날짜)**: 수동 출시, 단계적 출시 안 함. 자연 업데이트라 한동안 1.0.0~1.0.2 사용자가 섞인다. 1.0.2부터 이벤트에 `$app_version`이 붙어 버전별로 나눠 볼 수 있다(값이 없으면 1.0.1 이하). 1.0.2는 네이티브가 바뀌어 `runtimeVersion`이 달라졌으므로 이후 OTA는 1.0.2 사용자에게만 간다 — OTA 전후 비교에는 1.0.1 이하를 섞지 않는다.
-- **1.1.0 출시(2026-11-11)**: 일반 심사, 승인되면 자동 출시, 단계적 출시 안 함. `link_attached`·`notification_opened`는 1.1.0부터 나온다(1.0.x에는 링크 찾기·알림 탭이 없음). 1.1.0도 `runtimeVersion`이 1.0.2와 달라서 이후 OTA는 1.1.0 사용자에게만 간다. 자연 업데이트라 한동안 1.0.x 사용자가 섞이므로 `$app_version`으로 나눠 본다.
+- **1.1.0 출시(2026-11-11, PostHog Annotation 같은 날짜)**: 일반 심사, 승인되면 자동 출시, 단계적 출시 안 함. `link_attached`·`notification_opened`는 1.1.0부터 나온다(1.0.x에는 링크 찾기·알림 탭이 없음). 1.1.0도 `runtimeVersion`이 1.0.2와 달라서 이후 OTA는 1.1.0 사용자에게만 간다. 자연 업데이트라 한동안 1.0.x 사용자가 섞이므로 `$app_version`으로 나눠 본다.
 - **전송 지연·유실**: production은 이벤트를 20개 단위로 묶어 전송한다(배터리 절약). 미전송 큐는 로컬에 영속돼 다음 실행 때 전송되지만, 앱 삭제 직전 이벤트는 유실될 수 있다.
 - **`app_error`는 JS 에러의 클래스명만** 잡는 집계용이다. 오류 상세와 네이티브 크래시는 **1.0.2부터 Sentry**가 맡는다. RN 0.86은 렌더 오류를 전역 핸들러에 보내지 않는다. 그래서 렌더 오류는 Sentry DSN이 있는 빌드(루트 경계가 켜짐)에서만 `app_error`에 잡히고, 1.0.1 이하에서는 빠져 있었다.
 - **개발 기기 미수집(의도)**: `__DEV__` 기본 옵트아웃. production 빌드를 쓰는 개발자 uid는 §1 제외 목록으로 거른다.

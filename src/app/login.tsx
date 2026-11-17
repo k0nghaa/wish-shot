@@ -15,8 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
-// Phase 1 Step 3: 이메일 + 비밀번호 로그인. 가입 링크는 없다 (본인 계정은 대시보드에서 수동 생성).
-// Phase 5 Step 6: 익명 로그인 도입으로 정상 흐름에선 도달하지 않는다. 개발용 왕복(설정의
+// 이메일 + 비밀번호 로그인. 가입 링크는 없다 (본인 계정은 대시보드에서 수동 생성).
+// 익명 로그인 도입으로 정상 흐름에선 도달하지 않는다. 개발용 왕복(설정의
 // "이메일 로그인(개발용)")으로 열려, 이메일 계정으로 되돌아오는 경로를 연다.
 export default function LoginScreen() {
   const router = useRouter();

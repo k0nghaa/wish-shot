@@ -6,9 +6,6 @@
       "@/*": [
         "./src/*"
       ],
-      "@/assets/*": [
-        "./assets/*"
-      ],
       "expo-vision-ocr": [
         "./modules/expo-vision-ocr"
       ]

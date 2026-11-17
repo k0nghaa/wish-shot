@@ -12,7 +12,7 @@ import { CATEGORIES_TAB_TARGET, useOnboardingTarget } from './Onboarding/onboard
 import { useTabBarVisibility } from './tabBarVisibility';
 
 /**
- * 하단 플로팅 알약 탭바 (카테고리 / 전체 / 알림 / 검색). JS 전용 — 재빌드 없음.
+ * 하단 플로팅 알약 탭바 (카테고리 / 전체 / 알림 / 검색).
  * 활성 = label(검정, 굵게), 비활성 = inactive. 알림 탭엔 안 읽은 알림 수 배지(wine — 디자인 정본 '탭바 배지').
  */
 type TabDef = { route: string; label: string; icon: SFSymbol };
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.two,
     ...shadow.floating,
   },
-  // 4탭이 320pt 폭(확대 보기)에서도 들어가도록 탭 좌우 여백 16pt — 알약 전체 약 260pt(3탭 때 약 252pt).
+  // 4탭이 320pt 폭(확대 보기)에서도 들어가도록 탭 좌우 여백 16pt — 알약 전체 약 260pt.
   tab: {
     alignItems: 'center',
     justifyContent: 'center',

@@ -135,7 +135,7 @@ begin
     end;
     assert failed, '4-4: 다른 사용자 폴더로 옮기기가 거부돼야 한다';
 
-    -- 4-5 다른 사용자 객체를 지우거나 이름을 바꿀 수 없다(대상 0행)
+    -- 4-5·4-6 다른 사용자 객체를 지우거나 이름을 바꿀 수 없다(대상 0행)
     delete from storage.objects where bucket_id = 'item-images' and name = ub || '/b.jpg';
     get diagnostics n = row_count;
     assert n = 0, format('4-5: 다른 사용자 객체 삭제는 0행이어야 한다(실제 %s)', n);

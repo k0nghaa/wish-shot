@@ -1,5 +1,5 @@
 -- =============================================================================
--- 테스트 지표 SQL (Phase 10) — 이벤트 없이 DB에서 나오는 지표 4종
+-- 테스트 지표 SQL — 이벤트 없이 DB에서 나오는 지표 4종
 -- 실행: Supabase 대시보드 SQL Editor 에 블록 단위로 붙여넣어 실행(사람이 확인).
 -- 정본: docs/testing/tracking-plan.md §3. 스키마 기준: src/types/database.ts·supabase/migrations/.
 --
@@ -39,7 +39,7 @@ select
 from scope;
 
 -- -----------------------------------------------------------------------------
--- §2 AI 정제 성공률·상태 분포 — analysis_logs.status 집계 (질문 4: AI 작동률)
+-- §2 AI 정제 성공률·상태 분포 — analysis_logs.status 집계 (AI 작동률)
 -- 유의: analysis_logs 는 "저장 성공 시"에만 기록된다. 저장 전 이탈 포함 전체 분포는
 --       PostHog 의 analysis_completed 이벤트로 보고, 이 쿼리와 교차 검증한다.
 -- status enum: parsed / low_confidence / parse_failed / ocr_empty (4종)
@@ -118,9 +118,9 @@ select
 from pairs;
 
 -- -----------------------------------------------------------------------------
--- §4 카테고리 추천 채택률 (FR-8) — parsed->>'suggestedCategory'(추천 이름) vs 최종 카테고리
+-- §4 카테고리 추천 채택률 — parsed->>'suggestedCategory'(추천 이름) vs 최종 카테고리
 -- 추천값은 analysis_logs.parsed JSON 에 저장돼 있다(스키마 변경 불필요 — 확인 완료).
--- 채택 = 최종 category 의 "이름"이 추천 이름과 일치. 폴더 이름변경 시 과거 건은 불일치로
+-- 채택 = 최종 category 의 "이름"이 추천 이름과 일치. 카테고리 이름 변경 시 과거 건은 불일치로
 -- 집계될 수 있다(소규모 테스트에선 무시 가능한 수준 — 해석 시 유의).
 -- -----------------------------------------------------------------------------
 with cohort as (

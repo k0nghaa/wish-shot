@@ -18,7 +18,3 @@ const FORCE_MOCK = false;
  */
 export const ocrEngine: OcrEngine =
   !FORCE_MOCK && isVisionAvailable() ? new VisionOcrEngine() : new MockOcrEngine();
-
-export type { OcrEngine, OcrResult } from './OcrEngine';
-export { VisionOcrEngine, isVisionAvailable } from './VisionOcrEngine';
-export { MockOcrEngine } from './MockOcrEngine';

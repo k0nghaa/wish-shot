@@ -464,7 +464,6 @@ const styles = StyleSheet.create({
   feedHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.two },
   avatar: { width: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.placeholder },
   line60: { height: 8, width: '60%', borderRadius: radius.pill, backgroundColor: colors.silver },
-  line80: { height: 8, width: '80%', borderRadius: radius.pill, backgroundColor: colors.silver },
   feedImage: { flex: 1, borderRadius: radius.sm, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center' },
   feedActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.three },
 
@@ -563,7 +562,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   orgGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.two },
-  // 실제 CategoryCard 처럼 정사각 + 2×2 모자이크 + 하단 이름 오버레이(테두리 있는 폴더형).
+  // 실제 CategoryCard 처럼 정사각 + 2×2 모자이크 + 하단 이름 오버레이(테두리 있는 카드).
   catCard: {
     width: '48%',
     aspectRatio: 1,

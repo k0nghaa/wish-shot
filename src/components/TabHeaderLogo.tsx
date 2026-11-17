@@ -5,8 +5,8 @@ import { StyleSheet, View } from 'react-native';
 import { spacing } from '@/constants/theme';
 
 /**
- * 모든 탭(전체·폴더·검색) 타이틀 위에 공통으로 얹는 로고 슬롯.
- * right 슬롯은 폴더 탭의 설정 기어처럼 우측 액세서리를 넣을 때 쓴다.
+ * 모든 탭(카테고리·전체·알림·검색) 타이틀 위에 공통으로 얹는 로고 슬롯.
+ * right 슬롯은 카테고리·전체 탭의 설정 기어처럼 우측 액세서리를 넣을 때 쓴다.
  */
 export function TabHeaderLogo({ right }: { right?: ReactNode }) {
   return (

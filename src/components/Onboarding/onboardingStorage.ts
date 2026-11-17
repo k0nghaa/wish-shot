@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 첫 실행 온보딩을 1회만 보여주기 위한 플래그. register.tsx 의 PRIVACY_NOTICE_KEY 와 같은 패턴.
-export const ONBOARDING_KEY = 'wishshot.onboardingShown';
+const ONBOARDING_KEY = 'wishshot.onboardingShown';
 
 /** 온보딩을 이미 봤는지. 읽기 실패는 "봤음"으로 취급해(플래그 손상 시) 반복 노출을 막는다. */
 export async function hasSeenOnboarding(): Promise<boolean> {

@@ -6,7 +6,7 @@
 //   3) 짧은 가짜 텍스트를 (한도 + 1)번 보낸다 → 한도까지 200, 마지막은 429(scope=user) + Retry-After 기대.
 //   실제 사진·OCR 원문은 쓰지 않는다. LLM 호출은 허용된 요청 수만큼만 나간다(--limit 2 면 2번).
 //
-// 실행(사람, 이 워크트리 루트에서 — 키는 .env 의 공개 값만 읽는다):
+// 실행(사람, 저장소 루트에서 — 키는 .env 의 공개 값만 읽는다):
 //   npx supabase@2.121.0 secrets set PARSE_LIMIT_USER_HOURLY=2        # 시험용으로 낮춤(재배포 불필요)
 //   deno run --allow-net --allow-env=EXPO_PUBLIC_SUPABASE_URL,EXPO_PUBLIC_SUPABASE_ANON_KEY --env-file=.env supabase/tests/parse_quota_live.ts --limit 2
 //   npx supabase@2.121.0 secrets unset PARSE_LIMIT_USER_HOURLY        # 바로 되돌림(기본값 30)

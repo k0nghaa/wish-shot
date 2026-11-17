@@ -1,7 +1,8 @@
 // find-purchase-links 의 순수 로직(네트워크·환경 변수 없음).
 // index.ts(배포 함수)와 supabase/tests/find_purchase_links_test.ts(단위 검증)가 쓴다.
+// 근거: docs/phases/phase-21-purchase-finder.md
 //
-// 불변식 1(실제 URL만): 화면에 나가는 URL 은 harvestCandidates 가 웹 검색 결과 블록에서
+// 실제 URL만: 화면에 나가는 URL 은 harvestCandidates 가 웹 검색 결과 블록에서
 //   꺼낸 것뿐이다. 모델이 고르는 것은 후보 "번호"이고, URL 은 pickToLink 가 후보에서 꺼낸다.
 
 import { MALLS, type Mall, type MallId, NON_SELLER_DOMAINS, isMallId } from './malls.ts';
@@ -9,7 +10,7 @@ import { MALLS, type Mall, type MallId, NON_SELLER_DOMAINS, isMallId } from './m
 export const MAX_PRODUCT_NAME_LEN = 200;
 export const MAX_BRAND_LEN = 100;
 // 검색 1회 결과는 보통 10개 안팎 — 검색 3회분을 담을 수 있게.
-export const MAX_CANDIDATES = 30;
+const MAX_CANDIDATES = 30;
 const MAX_URL_LEN = 2048;
 
 // 입구 채널: 그 사이트(들) 안에서 찾는다 / 채널을 모른다(공식 홈페이지를 찾는다)
@@ -57,12 +58,12 @@ export function normalizeDomain(raw: string): string | null {
   return d;
 }
 
-export function hostMatches(host: string, domain: string): boolean {
+function hostMatches(host: string, domain: string): boolean {
   return host === domain || host.endsWith(`.${domain}`);
 }
 
 // 도메인이 사전의 몰이면 그 몰 id
-export function mallForDomain(domain: string): MallId | null {
+function mallForDomain(domain: string): MallId | null {
   for (const [id, mall] of Object.entries(MALLS) as [MallId, (typeof MALLS)[MallId]][]) {
     if (mall.domains.some((md) => hostMatches(domain, md))) return id;
   }
@@ -95,7 +96,7 @@ export function resolveChannel(domain: unknown, mall: unknown): ChannelResult {
 }
 
 // 브랜드 비교용 정규화(앱 normalizeName 과 같은 방향: NFC·소문자·문자/숫자만)
-export function normalizeBrand(brand: string): string {
+function normalizeBrand(brand: string): string {
   return brand.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
@@ -212,7 +213,7 @@ export function hasRealToolError(errorCodes: readonly string[]): boolean {
 }
 
 // 2차 호출(고르기)의 구조화 출력 → 링크. 번호는 1부터. 범위 밖·형식 오류는 null.
-// 채널이 없을 때는 공식 판매처일 때만 채운다(불변식 4).
+// 채널이 없을 때는 공식 판매처일 때만 채운다.
 export function pickToLink(parsed: unknown, candidates: Candidate[], channel: Channel): Link | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const { index, isOfficial } = parsed as { index?: unknown; isOfficial?: unknown };
@@ -248,7 +249,7 @@ export function stripBracketTags(name: string): string {
   return stripped || original;
 }
 
-// 상품 페이지를 못 찾았을 때 넣는 그 몰 검색 결과 링크(사람 결정 2026-11-09 — "링크가 들어가는 게 더 중요").
+// 상품 페이지를 못 찾았을 때 넣는 그 몰 검색 결과 링크("링크가 들어가는 게 더 중요").
 // 채널이 사전의 몰이고 그 몰의 검색 주소 형식이 확인돼 있을 때만. 도메인은 사전에 고정하고 검색어만
 // URL 인코딩해 넣는다(사용자 입력이 호스트·경로를 바꿀 수 없다). 검색어 = 브랜드 + 상품명(상품명이 이미
 // 브랜드로 시작하면 브랜드를 다시 붙이지 않는다). 상품명의 한글 대괄호 표기([오늘의집 단독]·[추가쿠폰] 등)는 몰 검색에서
@@ -276,7 +277,7 @@ export function mallSearchLink(channel: Channel, productName: string, brand: str
 }
 
 // ---------------------------------------------------------------------------
-// 카페24 사이트 안 검색(사람 결정 2026-11-09) — 캡처에 주소가 보이는 쇼핑몰(몰 사전에 없는 곳)은
+// 카페24 사이트 안 검색 — 캡처에 주소가 보이는 쇼핑몰(몰 사전에 없는 곳)은
 // 웹 검색 색인에 상품 페이지가 없는 경우가 많아, 그 사이트의 카페24 공통 검색 페이지를 읽어 상품 링크를 모은다.
 // 링크 주소는 그 사이트가 검색 결과로 직접 준 실제 상품 주소다(모델이 쓰지 않음).
 // ---------------------------------------------------------------------------
@@ -332,7 +333,7 @@ function stripTags(s: string): string {
 // 검색 결과 영역(카페24 공통 모듈 xans-search-result ~ 페이지 번호 xans-search-paging). 머리말·추천 상품 등
 // 검색 결과가 아닌 상품 링크는 읽지 않는다. 영역이 없으면 null(검색 결과 없음으로 본다).
 const MAX_AREA_CHARS = 300_000;
-export function cafe24ResultArea(html: string): string | null {
+function cafe24ResultArea(html: string): string | null {
   // class 속성 안에서만 찾는다(머리말 CSS·JS 에 같은 이름이 있어도 영역이 앞당겨지지 않게)
   const start = html.search(/class\s*=\s*"[^"<>]{0,200}\bxans-search-result(?![\w-])/);
   if (start < 0) return null;

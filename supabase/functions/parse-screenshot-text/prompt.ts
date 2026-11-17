@@ -1,11 +1,11 @@
 // parse-screenshot-text 의 모델·출력 스키마·시스템 프롬프트.
 // index.ts(배포 함수)와 samples/eval.ts(로컬 회귀 검증)가 같은 정의를 쓰도록 분리했다.
 
-// 정제 모델: 텍스트만 보내는 저비용 정제(지시서 §Edge Function 계약).
+// 정제 모델: 저비용 정제용 소형 모델.
 export const MODEL = 'claude-haiku-4-5';
 
 // 샘플링 온도 0: 추출은 "같은 입력 → 같은 출력"이어야 한다. 기본값(1.0)에선 같은 스크린샷이어도
-// confidence 가 0.4~0.6 으로 흔들려 "확인이 필요해요"(<0.5) 안내가 떴다 안 떴다 했다(2026-10-20 eval).
+// confidence 가 0.4~0.6 으로 흔들려 저신뢰 확인 안내(<0.5)가 떴다 안 떴다 했다(samples/eval.ts 측정).
 // 정확도가 아니라 일관성을 위한 값 — 틀린 추출은 프롬프트 규칙으로 막는다.
 export const TEMPERATURE = 0;
 
@@ -56,7 +56,7 @@ export const SYSTEM_PROMPT = [
   'Ignore UI noise: clock/time, carrier/battery, buttons (구매하기, 후기, 팔로우, Follow, Add comment), banners, view/like counts, URLs.',
 ].join('\n');
 
-// 이미지 분기(Phase 6): 사용자가 잘라낸 제품 영역이 함께 온다. 피사체·패키지·로고로 추정하되 가격은 추측 금지.
+// 이미지 분기: 사용자가 잘라낸 제품 영역이 함께 온다. 피사체·패키지·로고로 추정하되 가격은 추측 금지.
 export const IMAGE_PROMPT = [
   'An image is ALSO provided: a rectangular product region the user cropped (the OCR text may be empty or sparse — rely on the image).',
   'Identify productName and brand from the image itself — the subject, packaging, label, or logo.',
@@ -66,7 +66,7 @@ export const IMAGE_PROMPT = [
 
 /**
  * 이미지 유무·categories 유무에 따라 시스템 프롬프트를 조립한다.
- * FR-8: 목록 밖 값·새 이름 금지.
+ * 카테고리 추천: 목록 밖 값·새 이름 금지.
  */
 export function buildSystemPrompt(categories: string[], hasImage: boolean): string {
   const parts = [SYSTEM_PROMPT];

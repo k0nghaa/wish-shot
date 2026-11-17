@@ -1,5 +1,7 @@
 # Phase 9 — 이미지 egress 최적화 (Free 플랜을 출시·성장까지 유지)
 
+> **2026-11 기준**: Phase 24에서 탭 라우트 이름이 바뀌었다 — 전체 탭 `(tabs)/all.tsx` → `(tabs)/index.tsx`, 옛 카테고리 홈 `(tabs)/index.tsx` → `(tabs)/categories.tsx`. 아래 파일명·줄 번호는 작성 당시 기준이다.
+>
 > **이 문서 사용법**: Claude Code에 이 파일 전체를 컨텍스트로 넘기고 "**A/B/C/D를 진행해달라**"고 요청한다. 네 갈래(A·B·C·D)는 **한 브랜치·한 세션**에서 순서대로 구현하는 것을 전제로 자족적으로 적었다(서로 같은 파일 `storage.ts`·`register.tsx`를 공유하므로 병렬로 쪼개지 않는다). iOS 실기기에서의 업로드/썸네일 표시/앨범 동작은 **에이전트가 검증할 수 없으므로 사람이 dev client로 확인**한다.
 >
 > **브랜치·워크트리**: 이 작업은 `feat/phase-9-image-egress`(= `dev`에서 분기, Phase 8 릴리스 커밋 없음)에서 한다. 이미 별도 워크트리 `../wish-shot-phase9`가 만들어져 있다. 세션 시작 시 `git status --short --branch`로 브랜치를 먼저 확인한다. **release/v1.0.0에 직접 작업 금지**(새 기능은 release 금지 — dev 경유). 완료 후 PR로 `dev`에 머지한다.

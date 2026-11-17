@@ -29,8 +29,7 @@ export default function SettingsScreen() {
   const [renderErrorTest, setRenderErrorTest] = useState(false);
   if (renderErrorTest) throw new Error('렌더 오류 검증용 테스트 에러');
 
-  // 의견 보내기(Phase 10 F-1): 실제 앱(App Store) 배포에선 TestFlight 스크린샷 피드백이 없어
-  // 메일이 피드백 채널이다. 모든 사용자 노출.
+  // 의견 보내기: 앱 안 피드백 경로는 메일 하나다. 모든 사용자에게 보인다.
   function handleSendFeedback() {
     Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('WishShot 의견')}`).catch(() => {
       Alert.alert('메일 열기 실패', `${SUPPORT_EMAIL} 으로 보내주세요.`);
@@ -57,7 +56,7 @@ export default function SettingsScreen() {
     Alert.alert('온보딩 초기화', '앱을 다시 시작하면 온보딩이 표시됩니다.');
   }
 
-  // 썸네일 백필(Phase 9 D, __DEV__ 전용): 기존 아이템의 원본에서 400px 썸네일을 만들어 올린다.
+  // 썸네일 백필(__DEV__ 전용): 기존 아이템의 원본에서 400px 썸네일을 만들어 올린다.
   // RLS 로 본인 아이템만 대상(전역 백필 불가·불필요 — 실사용자 레거시는 그리드 원본 폴백으로 커버).
   async function handleBackfillThumbs() {
     try {
@@ -82,7 +81,7 @@ export default function SettingsScreen() {
     }
   }
 
-  // 계측 토글(Phase 10, __DEV__ 전용): 개발 기기는 기본 옵트아웃이라 실발화 검증 때만 수동으로 켠다.
+  // 계측 토글(__DEV__ 전용): 개발 기기는 기본 옵트아웃이라 실발화 검증 때만 수동으로 켠다.
   // 상태는 PostHog 가 영속하므로(optIn/optOut) 재시작 후에도 유지된다.
   async function handleDevToggleAnalytics() {
     if (!isAnalyticsAvailable()) {
@@ -94,7 +93,7 @@ export default function SettingsScreen() {
     Alert.alert('계측(개발용)', next ? '이벤트 수집 켜짐' : '이벤트 수집 꺼짐');
   }
 
-  // app_error 검증용(Phase 10 F-2, __DEV__ 전용): 의도적 미처리 throw —
+  // app_error 검증용(__DEV__ 전용): 의도적 미처리 throw —
   // redbox 가 정상 표시되고(핸들러 체이닝 확인) PostHog 에 app_error 가 수신돼야 한다.
   function handleDevTestError() {
     setTimeout(() => {
@@ -115,8 +114,8 @@ export default function SettingsScreen() {
     ]);
   }
 
-  // 익명 로그인(Phase 5 Step 6)이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
-  // 이메일 가입/계정 승격·로그아웃은 Phase 6.
+  // 익명 로그인이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
+  // 이메일 가입·계정 연결·로그아웃은 로그인을 도입할 때 넣는다.
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>

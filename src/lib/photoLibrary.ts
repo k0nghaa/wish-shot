@@ -3,15 +3,14 @@
 import * as MediaLibrary from 'expo-media-library/legacy';
 
 /**
- * 사진 앨범 접근 유틸(기능 1·2 공용). 네이티브 준비는 Batch A(expo-media-library)에서 끝났고,
- * 이 파일은 순수 JS 다(재빌드 없음).
+ * 사진 앨범 접근 유틸("방금 캡처한 사진" 제안·앨범 원본 삭제 공용). 이 파일은 순수 JS 다.
  *
- * - `getRecentPhotoAsset`(Batch B): "방금 캡처한 사진" 제안용 최근 1장 읽기.
- * - `deletePhotoAsset`(Batch C): 앱 내에서 고른 원본 스크린샷을 앨범에서 삭제.
+ * - `getRecentPhotoAsset`: "방금 캡처한 사진" 제안용 최근 1장 읽기.
+ * - `deletePhotoAsset`: 앱 내에서 고른 원본 스크린샷을 앨범에서 삭제.
  */
 
 /**
- * 최근 사진 1장의 읽을 수 있는 로컬 uri 와 자산 id 를 돌려준다("방금 캡처한 사진" 제안, 기능 1).
+ * 최근 사진 1장의 읽을 수 있는 로컬 uri 와 자산 id 를 돌려준다("방금 캡처한 사진" 제안).
  *
  * iOS 자산 uri 는 `ph://…` 라 `expo-file-system` 으로 바로 못 읽는다 → `getAssetInfoAsync` 의
  * `localUri`(file://)를 확보해 반환한다. 이 uri 로 기존 OCR·업로드 파이프라인이 그대로 돈다.
@@ -70,12 +69,12 @@ export async function getRecentPhotoAsset(): Promise<{ uri: string; assetId: str
 }
 
 /**
- * 앨범 삭제 옵션을 제안해도 되는지 무프롬프트로 판별한다(기능 2, 호출부가 헛제안을 막는 게이트).
+ * 앨범 삭제 옵션을 제안해도 되는지 무프롬프트로 판별한다(호출부가 헛제안을 막는 게이트).
  *
  * - **미결정(`undetermined`)**: 아직 안 물어봄 → 제안한다(사용자가 수락하면 그때가 최초 권한 획득 시점).
  * - **전체 접근(`all`)**: 바로 삭제 가능 → 제안한다.
  * - **제한(`limited`)/거부(`denied`)**: 전체 접근이 아니라 삭제 불가 → 제안하지 않는다.
- *   (이미 "전체 접근 필요"를 최초에 안내했으므로, 저장할 때마다 헛제안으로 나그하지 않는다.)
+ *   (이미 "전체 접근 필요"를 최초에 안내했으므로, 저장할 때마다 헛제안을 되풀이하지 않는다.)
  *
  * `getPermissionsAsync` 는 권한창을 띄우지 않는다(순수 조회).
  */
@@ -85,7 +84,7 @@ export async function canOfferAlbumDelete(): Promise<boolean> {
 }
 
 /**
- * 앱 내에서 고른 원본 스크린샷을 아이폰 앨범에서 삭제한다(기능 2, 앱 내 picker 경로 한정).
+ * 앱 내에서 고른 원본 스크린샷을 아이폰 앨범에서 삭제한다(앱 내 picker 경로 한정).
  *
  * - **전체 접근이 필수**다. 제한 접근(`limited`)이면 특정 자산을 삭제할 수 없고, 앨범 단위 권한은
  *   iOS 에 없다 → 전체 접근이 아니면 `'denied'` 로 돌려 호출부가 안내하게 한다.

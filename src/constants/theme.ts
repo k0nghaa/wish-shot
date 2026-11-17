@@ -1,23 +1,22 @@
 /**
- * WishShot 디자인 토큰 (Phase 5 — 목업 팔레트)
+ * WishShot 디자인 토큰
  *
  * 흰 배경(#FFFFFF) + iOS 시스템 그레이 모노톤. 버튼·활성 = 검정(label).
  * 색 정본: docs/design/color_tokens.md, 매핑: docs/design/phase-5-visual-spec.md
  *
- * ⚠️ 토큰 "이름"은 현행을 유지하고 "값"만 교체했다(전 화면 자동 전파, 소비부 무변경 원칙).
+ * 토큰 이름은 쓰임새로 짓는다 — 값을 바꾸면 쓰는 화면 전체에 그대로 퍼진다.
  *    - primary = 검정(주요 버튼·활성·선택)
- *    - accent  = wine(#7A2231) — 찜·New·탭바 배지 전용(Phase 6). Phase 5 화면엔 거의 미노출.
- *    - primaryHover·primaryLight 는 제거됨(세이지 전용이었음).
+ *    - accent  = wine(#7A2231) — 탭바 배지·새 링크 점 전용
  *
- * 컴포넌트에는 원시 hex를 직접 쓰지 말고 이 시맨틱 토큰만 사용한다. (CLAUDE.md 규칙 5)
+ * 컴포넌트에는 원시 hex를 직접 쓰지 말고 이 시맨틱 토큰만 사용한다(그림자 색의 검정은 예외). (CLAUDE.md 규칙 5)
  */
 
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 export const colors = {
   // 브랜드 포인트
   primary: '#000000', // label — 주요 버튼·활성·선택 (검정)
-  accent: '#7A2231', // wine — 찜·New·탭바 배지 전용(Phase 6). 강조가 꼭 필요할 때만.
+  accent: '#7A2231', // wine — 탭바 배지·새 링크 점 전용. 강조가 꼭 필요할 때만.
 
   // 배경
   bg: '#FFFFFF', // background — 화면 배경(흰색)
@@ -38,7 +37,6 @@ export const colors = {
 
   // 기능성
   success: '#34C759', // systemGreen — 저장 완료 등(현재 미소비)
-  warning: '#FF9500', // systemOrange — 주의 상태(현재 미소비)
   error: '#FF3B30', // destructive(systemRed) — 삭제·에러
 
   // 오버레이 (모달 배경 딤)
@@ -48,8 +46,8 @@ export const colors = {
 export type ColorToken = keyof typeof colors;
 
 /**
- * 다크 토큰 — 준비만 하고 Phase 5는 소비하지 않는다(스위칭은 Phase 6).
- * 현행 이름을 그대로 미러링해 나중에 드롭인 교체가 되게 한다.
+ * 다크 토큰 — 상세 뷰어·스낵바·사진 확대창의 어두운 면이 쓴다. 앱 전체 다크 모드 전환은 아직 없다.
+ * 라이트 토큰과 이름을 맞춰 나중에 그대로 바꿔 끼울 수 있게 한다.
  */
 export const colorsDark: Record<ColorToken, string> = {
   primary: '#FFFFFF',
@@ -64,7 +62,6 @@ export const colorsDark: Record<ColorToken, string> = {
   textSub: '#8E8E93',
   textDisabled: '#636366',
   success: '#30D158',
-  warning: '#FF9F0A',
   error: '#FF453A',
   overlay: 'rgba(0,0,0,0.6)',
 };
@@ -98,7 +95,6 @@ export const hairlineWidth = StyleSheet.hairlineWidth;
 export const type = {
   largeTitle: { fontSize: 34, fontWeight: '700' as const, letterSpacing: 0.37 },
   title: { fontSize: 22, fontWeight: '700' as const },
-  title3: { fontSize: 20, fontWeight: '600' as const },
   headline: { fontSize: 17, fontWeight: '600' as const },
   body: { fontSize: 17, fontWeight: '400' as const },
   subhead: { fontSize: 15, fontWeight: '400' as const },
@@ -123,23 +119,8 @@ export const shadow = {
     elevation: 6,
   },
   // 사진 위 작은 표시(새 링크 점 등) — 정본 color_tokens 규칙 4(검정 20%, y 1pt, blur 2pt) + 스프레드 1pt(작은 점이라
-  // 조금 넓게 펼침, 실기기 확인 뒤 사람 결정). 스프레드는 boxShadow 에만 있다(RN New Architecture — iOS shadow* 속성엔 없음).
+  // 조금 넓게 펼침, 실기기 확인 뒤 정함). 스프레드는 boxShadow 에만 있다(RN New Architecture — iOS shadow* 속성엔 없음).
   onPhoto: {
     boxShadow: '0px 1px 2px 1px rgba(0, 0, 0, 0.2)',
   },
 } as const;
-
-export const fonts = Platform.select({
-  ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-});

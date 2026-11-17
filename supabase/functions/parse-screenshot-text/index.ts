@@ -1,32 +1,33 @@
 // parse-screenshot-text — 온디바이스 OCR 원문을 Claude Haiku로 정제해
-// { productName, price, brand, confidence } 를 돌려주는 Edge Function (Deno).
+// { productName, price, brand, confidence, suggestedCategory } 를 돌려주는 Edge Function (Deno).
 //
-// 계약(Phase 3 + Phase 4 FR-8 + Phase 6 이미지 분기 + 요청 한도):
+// 계약(텍스트 정제 + 카테고리 추천 + 이미지 분기 + 요청 한도):
 //   입력:  { "text": string, "categories"?: string[],
 //           "image"?: { "base64": string, "mediaType": "image/jpeg" | "image/png" } }
 //     - text:       OCR 원문. 이미지가 있으면 비어 있어도 된다(텍스트 부족 폴백). 최대 2,000자.
-//     - categories: 사용자의 기존 카테고리 이름들(FR-8 추천용). 프롬프트에 들어가는 형태
+//     - categories: 사용자의 기존 카테고리 이름들(카테고리 추천용). 프롬프트에 들어가는 형태
 //                   (정리 후 JSON.stringify)로 최대 2,000자.
-//     - image:      사용자가 직접 고른 "제품 영역 크롭"만(Phase 6). OCR 텍스트가 부족하면 앱이
+//     - image:      사용자가 직접 고른 "제품 영역 크롭"만. OCR 텍스트가 부족하면 앱이
 //                   영역 지정 시트를 자동으로 열고(또는 사용자가 '제품 영역으로 분석'을 누르면),
 //                   사용자가 고른 영역만 '분석'을 누를 때 온다(통이미지·자동 전송 아님).
 //                   로그·저장하지 않고 Anthropic 요청에만 쓴다.
 //   출력:  { productName, price, brand, confidence, suggestedCategory }  (스키마 불변)
-//     - productName: string | null       못 뽑으면 null (앱에서 E-3 수동 입력). 브랜드명 미포함(brand 필드로 분리)
-//     - price:       number | null       원 단위 정수(KRW). 정가 우선(할인 전 가격, 2026-10 변경) — 하나만 보이면 그 가격, 없으면 null.
-//                                        원화 금액만 인정(리뷰·관심 수 등 숫자·외화 배제), 애매하면 null(2026-10-19)
+//     - productName: string | null       못 뽑으면 null (앱이 제품명 입력을 안내). 브랜드명 미포함(brand 필드로 분리)
+//     - price:       number | null       원 단위 정수(KRW). 정가 우선(할인 전 가격) — 하나만 보이면 그 가격, 없으면 null.
+//                                        중고거래 매물은 판매자 등록가(정가 우선 미적용).
+//                                        원화 금액만 인정(리뷰·관심 수 등 숫자·외화 배제), 애매하면 null
 //     - brand:       string | null       없으면 null. 통용되는 한국어 공식 표기 우선(나이키), 없으면 영문 공식 표기(Aesop)
-//     - confidence:  number              0~1. 낮으면 앱에서 "확인이 필요해요"
-//     - suggestedCategory: string | null 입력 categories 중 하나거나 null(FR-8 경량 추천)
+//     - confidence:  number              0~1. 낮으면 앱이 "AI가 채운 값을 확인하세요." 안내
+//     - suggestedCategory: string | null 입력 categories 중 하나거나 null(경량 카테고리 추천)
 //                                        categories 가 비면 항상 null(하위호환)
 //
 // 규칙:
 //   - Claude API 키(ANTHROPIC_API_KEY)는 이 함수의 시크릿에만 존재. 앱엔 없음.
-//   - 로그인 사용자만 호출(anon 거부).
-//   - NFR-3(개정): AI 정제엔 인식된 "텍스트"를 보내고, 이미지는 사용자가 직접 고른
+//   - 세션 있는 호출만 받는다(익명 로그인 세션 포함, 세션 없는 anon 호출은 거부).
+//   - 개인정보: AI 정제엔 인식된 "텍스트"를 보내고, 이미지는 사용자가 직접 고른
 //     "제품 영역 크롭"만 보낸다(통이미지 아님). 미저장·미로깅.
-//   - image 없는 요청은 Phase 5와 바이트 단위로 동일 동작(하위호환).
-//   - LLM 오류/타임아웃은 명확한 실패 응답으로 → 앱이 E-2(원문+재시도+수동 폴백) 처리.
+//   - image 없는 요청엔 이미지 프롬프트·블록을 넣지 않는다(텍스트만 — 하위호환).
+//   - LLM 오류/타임아웃은 명확한 실패 응답으로 → 앱이 정제 실패(원문+재시도+수동 입력)로 처리.
 //   - 입력 크기 상한: 넘으면 LLM 을 부르지 않고 400(text_too_long / categories_too_long).
 //     자르지 않는다 — 상한 안의 요청은 Anthropic 요청 바디가 이전과 같다.
 //   - 요청 한도: 입력 검증을 통과한 뒤, Anthropic 을 부르기 전에 센다(검증 실패는 세지 않음).
@@ -55,9 +56,9 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 // 자동 주입한다(수동 등록 불필요). 앱·커밋엔 절대 없음.
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-// LLM 호출 타임아웃(ms). 초과 시 앱이 E-2로 폴백할 수 있게 실패 응답을 준다.
+// LLM 호출 타임아웃(ms). 초과 시 앱이 정제 실패로 폴백할 수 있게 실패 응답을 준다.
 const LLM_TIMEOUT_MS = 20_000;
-// 이미지 분기(Phase 6): 이미지 입력은 처리 지연이 커 타임아웃을 상향한다.
+// 이미지 분기: 이미지 입력은 처리 지연이 커 타임아웃을 상향한다.
 const IMAGE_LLM_TIMEOUT_MS = 25_000;
 // 허용 이미지 타입(화이트리스트). 크롭본은 JPEG.
 const ALLOWED_MEDIA_TYPES = ['image/jpeg', 'image/png'] as const;
@@ -285,7 +286,7 @@ Deno.serve(async (req) => {
   }
   const text = typeof body?.text === 'string' ? body.text : '';
 
-  // image(Phase 6): 있으면 검증. 타입 화이트리스트 + base64 길이 상한. 크롭본이 아니어도 여기선 형식만 본다.
+  // image: 있으면 검증. 타입 화이트리스트 + base64 길이 상한. 크롭본이 아니어도 여기선 형식만 본다.
   let image: { base64: string; mediaType: string } | null = null;
   if (body?.image != null) {
     const raw = body.image;
@@ -322,7 +323,7 @@ Deno.serve(async (req) => {
     return fail(user.id, 'categories_too_long', { error: 'categories_too_long' }, 400, { len: categoriesJsonLen });
   }
 
-  // 관측용: 이미지 "데이터"는 남기지 않고 길이만 기록한다(NFR-3).
+  // 관측용: 이미지 "데이터"는 남기지 않고 길이만 기록한다.
   console.log(`parse: textLen=${text.length} hasImage=${!!image} imgB64Len=${image?.base64.length ?? 0} cats=${categories.length}`);
 
   // 요청 한도: 검증을 통과한 요청만, Anthropic 을 부르기 전에 센다.

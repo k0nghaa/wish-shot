@@ -11,12 +11,12 @@ import { getItemImageSignedUrls, getItemThumbSignedUrls, listItemsByTag, type It
 
 const COLUMNS = 3;
 
-// 태그별 모아보기(FR-15a): 카테고리와 무관하게 그 태그가 달린 아이템만 최신순으로 보여준다.
+// 태그별 모아보기: 카테고리와 무관하게 그 태그가 달린 아이템만 최신순으로 보여준다.
 export default function TagItemsScreen() {
   const router = useRouter();
   const linkState = useNotifications(); // 저장 뒤 링크 찾기 상태(타일 흐림·새 링크 점)
   const { width } = useWindowDimensions();
-  const tileSize = width / COLUMNS; // 여백 없이 화면 폭 3등분(전체·폴더와 동일)
+  const tileSize = width / COLUMNS; // 여백 없이 화면 폭 3등분(전체·카테고리 목록과 동일)
   const { name } = useLocalSearchParams<{ name: string }>();
 
   const [items, setItems] = useState<Item[] | null>(null); // null = 로딩 중

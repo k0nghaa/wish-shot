@@ -124,7 +124,7 @@ function beforeSend(event: ErrorEvent): ErrorEvent | null {
  * 네이티브(sentry-cocoa) 전용 키. RN 타입에는 없지만 함수가 아닌 옵션은 네이티브로 그대로 전달된다.
  * 네이티브 크래시 보고에는 JS 필터(beforeBreadcrumb·beforeSend)가 적용되지 않으므로 네이티브 자동 기록을 끈다.
  * - enableNetworkBreadcrumbs: 네이티브는 요청마다 URL 과 쿼리(http.query, signed URL token 포함)를 기록한다.
- * - enableAutoBreadcrumbTracking: 화면 제목(navigationItem.title)·버튼 제목을 기록한다(폴더·태그 이름 유입 가능).
+ * - enableAutoBreadcrumbTracking: 화면 제목(navigationItem.title)·버튼 제목을 기록한다(카테고리·태그 이름 유입 가능).
  * JS 기록(터치·fetch/xhr)은 걸러진 뒤 네이티브로 동기화되므로 네이티브 크래시에도 남는다.
  */
 const NATIVE_ONLY_OPTIONS = {

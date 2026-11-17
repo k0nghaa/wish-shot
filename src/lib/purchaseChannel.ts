@@ -1,8 +1,8 @@
 /**
  * 링크 찾기의 입구 채널(어디서 캡처했나)을 OCR 원문에서 판별한다 — 기기 안에서만.
- * 결과로 도메인 또는 몰 id 하나만 함수(find-purchase-links)에 보내고, OCR 원문은 보내지 않는다(불변식 2).
+ * 결과로 도메인 또는 몰 id 하나만 함수(find-purchase-links)에 보내고, OCR 원문은 보내지 않는다.
  *
- * 판별 순서(지시서 '입구 채널 확인'):
+ * 판별 순서:
  *   1. 캡처에 판매처 주소가 보임(사파리 주소창·앱 안 브라우저 상단·찍힌 주소) → { domain }
  *      서로 다른 사이트 주소가 여럿이면 판별하지 않는다(null).
  *      포털·블로그·SNS 주소만 보이면 판매처가 아니므로 바로 null(공식 홈페이지 찾기).
@@ -14,7 +14,8 @@
  *
  * 틀리게 판별하면 검색 범위가 엉뚱한 사이트 하나로 좁혀지므로, 애매하면 판별하지 않는 쪽(null)을 택한다.
  * 몰 id·판매처가 아닌 도메인·접미사 목록은 서버 supabase/functions/find-purchase-links/{malls,logic}.ts 와 같아야 한다.
- * 식별 문구는 초안 — 실제 캡처 OCR 로 확인해 고친다.
+ * 식별 문구는 실제 캡처 OCR 로 확인하며 보강한다.
+ * 근거: docs/phases/phase-21-purchase-finder.md
  */
 
 export type MallId =
@@ -34,8 +35,8 @@ export type MallId =
 
 export type PurchaseChannel = { domain: string } | { mall: MallId } | null;
 
-/** 몰 표시 이름(몰 검색 결과 링크 안내 문구용). */
-export const MALL_LABELS: Record<MallId, string> = {
+/** 몰 id 전체(값은 몰 이름). `findMalls` 가 이 순서로 찾는다. */
+const MALL_LABELS: Record<MallId, string> = {
   naver: '네이버',
   coupang: '쿠팡',
   musinsa: '무신사',
@@ -51,11 +52,7 @@ export const MALL_LABELS: Record<MallId, string> = {
   ably: '에이블리',
 };
 
-export function mallLabel(mall: string | undefined): string {
-  return mall && Object.prototype.hasOwnProperty.call(MALL_LABELS, mall) ? MALL_LABELS[mall as MallId] : '몰';
-}
-
-// 몰 고유 문구. 다른 맥락에도 흔한 글자는 넣지 않는다(지시서 '입구 채널 사전'):
+// 몰 고유 문구. 다른 맥락에도 흔한 글자는 넣지 않는다:
 //   결제 수단 '네이버페이'·일반 표현 '브랜드스토어'·치수와 겹치는 '29cm'·'IKEA 호환' 같은 'IKEA'·'컬리수' 같은 '컬리'.
 //   이케아는 주소(ikea.com)로만, 29CM 은 주소(29cm.co.kr)와 아래 MALL_STRONG_PHRASES 로만 판별한다.
 // 비교: 원문을 소문자로 바꾸고 연속 공백을 한 칸으로 줄인 뒤, 문구가 그대로 들어 있는지 본다(공백을 지우지 않는다 —
@@ -80,8 +77,8 @@ const MALL_PHRASES: Partial<Record<MallId, readonly string[]>> = {
 // 확실한 것만(브랜드 이름은 넣지 않는다 — 예: '무신사 스탠다드'는 다른 몰 캡처에도 브랜드로 나온다). 상품명이
 // '[오늘의집 단독] 토리 서랍장'이면 위 문구는 상품명 글자를 빼고 찾느라 놓치므로 따로 둔다. 29CM 은 치수 표기('29cm')와
 // 겹쳐 위 사전에 문구가 없고 여기서만 판별한다 — 단독 표기도 '[29cm 단독'처럼 대괄호로 시작할 때만('가로 29cm 단독 설치' 제외).
-//   근거(2026-11-10): '[오늘의집 단독]' — 정답셋 오늘의집 앱 캡처. '무신사 단독'·'[29cm 단독' — 같은 몰 단독 표기 형식.
-//   '29cm.official' — 정답셋 29CM 인스타 게시물 캡처. '이구패션위크' — Phase 21 개발용 앱 시험의 29CM 앱 캡처(정제가 브랜드로
+//   근거: '[오늘의집 단독]' — 정답셋 오늘의집 앱 캡처. '무신사 단독'·'[29cm 단독' — 같은 몰 단독 표기 형식.
+//   '29cm.official' — 정답셋 29CM 인스타 게시물 캡처. '이구패션위크' — 구매처 찾기 개발용 앱 시험의 29CM 앱 캡처(정제가 브랜드로
 //   뽑아 상품명·브랜드 글자를 빼고 찾는 위 사전에 넣으면 놓친다). '이구위크' — 29CM 정기 행사 이름.
 const MALL_STRONG_PHRASES: Partial<Record<MallId, readonly string[]>> = {
   musinsa: ['무신사 단독'],

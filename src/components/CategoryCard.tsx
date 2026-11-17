@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   deleteBadge: {
     position: 'absolute',
     top: 0,
-    left: 0, // 좌상단 모서리에 완전히 붙임(오버행 없음 → 옆 폴더에 안 닿음)
+    left: 0, // 좌상단 모서리에 완전히 붙임(오버행 없음 → 옆 카드에 안 닿음)
     width: 22,
     height: 22,
     borderRadius: 11,

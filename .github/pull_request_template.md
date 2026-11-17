@@ -27,6 +27,7 @@
 ## 검증 (자동)
 <!-- 기계로 확인한 것 -->
 - `npx tsc --noEmit` /  `npx expo lint` / `npx expo-doctor`
+- (Edge Function·`src/lib/purchaseChannel.ts` 변경 시) `deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts` / `deno check --no-lock supabase/functions/find-purchase-links/index.ts`
 -
 
 ## 실기기 테스트 (직접 확인)

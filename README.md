@@ -12,7 +12,7 @@
 
 흩어진 캡처를 단순한 사진이 아닌 내 취향과 관심사 리스트로 바꿔보면 어떨까요?
 
-👉 [App Store에서 다운로드](https://apps.apple.com/kr/app/wishshot-위시샷-스크린샷-위시리스트/id6812149556)
+👉 [App Store에서 다운로드](https://apps.apple.com/app/apple-store/id6812149556?pt=129399010&ct=github_readme_about&mt=8)
 
 ## 서비스 소개
 
@@ -46,7 +46,6 @@ SNS에서 찍은 스크린샷을 공유 시트로 바로 보내면 더 간편하
   <img src="https://img.shields.io/badge/Expo-000020?style=for-the-badge&amp;logo=expo&amp;logoColor=white" height="28" alt="Expo" />
   <img src="https://img.shields.io/badge/Swift-F05138?style=for-the-badge&amp;logo=swift&amp;logoColor=white" height="28" alt="Swift" />
   <img src="https://img.shields.io/badge/ESLint-4B32C3?style=for-the-badge&amp;logo=eslint&amp;logoColor=white" height="28" alt="ESLint" />
-  <img src="https://img.shields.io/badge/Prettier-F7B93E?style=for-the-badge&amp;logo=prettier&amp;logoColor=black" height="28" alt="Prettier" />
 </p>
 
 ### 백엔드
@@ -88,7 +87,8 @@ SNS에서 찍은 스크린샷을 공유 시트로 바로 보내면 더 간편하
 
 | 주제 | 문서 |
 | :--- | :--- |
-| 로컬 실행, DB, Edge Function 배포·운영 | [개발 가이드](docs/development.md) |
+| 읽는 순서, 작업 기록 목록, 용어 | [문서 안내](docs/README.md) |
+| 로컬 실행, 빌드·출시, DB, Edge Function 배포·운영 | [개발 가이드](docs/development.md) |
 | 단계별 작업 지시와 결과 | [작업 기록](docs/phases/) |
 | 디자인 명세 | [비주얼 스펙](docs/design/phase-5-visual-spec.md) |
 | 계측 이벤트 정의 | [트래킹 플랜](docs/testing/tracking-plan.md) |
