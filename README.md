@@ -12,7 +12,7 @@
 
 흩어진 캡처를 단순한 사진이 아닌 내 취향과 관심사 리스트로 바꿔보면 어떨까요?
 
-👉 [App Store에서 다운로드](https://apps.apple.com/kr/app/wishshot-위시샷-스크린샷-위시리스트/id6812149556)
+👉 [App Store에서 다운로드](https://apps.apple.com/app/apple-store/id6812149556?pt=129399010&ct=github_readme_about&mt=8)
 
 ## 서비스 소개
 
