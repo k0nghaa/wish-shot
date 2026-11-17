@@ -1,7 +1,8 @@
 // find-purchase-links 의 순수 로직(네트워크·환경 변수 없음).
 // index.ts(배포 함수)와 supabase/tests/find_purchase_links_test.ts(단위 검증)가 쓴다.
+// 근거: docs/phases/phase-21-purchase-finder.md
 //
-// 불변식 1(실제 URL만): 화면에 나가는 URL 은 harvestCandidates 가 웹 검색 결과 블록에서
+// 실제 URL만: 화면에 나가는 URL 은 harvestCandidates 가 웹 검색 결과 블록에서
 //   꺼낸 것뿐이다. 모델이 고르는 것은 후보 "번호"이고, URL 은 pickToLink 가 후보에서 꺼낸다.
 
 import { MALLS, type Mall, type MallId, NON_SELLER_DOMAINS, isMallId } from './malls.ts';
@@ -212,7 +213,7 @@ export function hasRealToolError(errorCodes: readonly string[]): boolean {
 }
 
 // 2차 호출(고르기)의 구조화 출력 → 링크. 번호는 1부터. 범위 밖·형식 오류는 null.
-// 채널이 없을 때는 공식 판매처일 때만 채운다(불변식 4).
+// 채널이 없을 때는 공식 판매처일 때만 채운다.
 export function pickToLink(parsed: unknown, candidates: Candidate[], channel: Channel): Link | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const { index, isOfficial } = parsed as { index?: unknown; isOfficial?: unknown };
@@ -248,7 +249,7 @@ export function stripBracketTags(name: string): string {
   return stripped || original;
 }
 
-// 상품 페이지를 못 찾았을 때 넣는 그 몰 검색 결과 링크(사람 결정 2026-11-09 — "링크가 들어가는 게 더 중요").
+// 상품 페이지를 못 찾았을 때 넣는 그 몰 검색 결과 링크("링크가 들어가는 게 더 중요").
 // 채널이 사전의 몰이고 그 몰의 검색 주소 형식이 확인돼 있을 때만. 도메인은 사전에 고정하고 검색어만
 // URL 인코딩해 넣는다(사용자 입력이 호스트·경로를 바꿀 수 없다). 검색어 = 브랜드 + 상품명(상품명이 이미
 // 브랜드로 시작하면 브랜드를 다시 붙이지 않는다). 상품명의 한글 대괄호 표기([오늘의집 단독]·[추가쿠폰] 등)는 몰 검색에서
@@ -276,7 +277,7 @@ export function mallSearchLink(channel: Channel, productName: string, brand: str
 }
 
 // ---------------------------------------------------------------------------
-// 카페24 사이트 안 검색(사람 결정 2026-11-09) — 캡처에 주소가 보이는 쇼핑몰(몰 사전에 없는 곳)은
+// 카페24 사이트 안 검색 — 캡처에 주소가 보이는 쇼핑몰(몰 사전에 없는 곳)은
 // 웹 검색 색인에 상품 페이지가 없는 경우가 많아, 그 사이트의 카페24 공통 검색 페이지를 읽어 상품 링크를 모은다.
 // 링크 주소는 그 사이트가 검색 결과로 직접 준 실제 상품 주소다(모델이 쓰지 않음).
 // ---------------------------------------------------------------------------

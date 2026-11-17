@@ -1,7 +1,7 @@
 // 정답셋 홀드아웃 지정 — 시드 고정. labels.csv 의 holdout 열만 채운다(1 = 홀드아웃, 0 = 나머지).
 // 유형(type)마다 25%(반올림)를 고른다. 순서는 SHA-256(시드 + ':' + id) 값의 오름차순이라
 // 행 순서나 다른 칸과 상관없이 같은 id·유형이면 언제 다시 돌려도 같은 결과가 나온다.
-// 홀드아웃은 프롬프트를 고칠 때 보지 않고 마지막 확인에만 쓴다(지시서 Step 4).
+// 홀드아웃은 프롬프트를 고칠 때 보지 않고 마지막 확인에만 쓴다(docs/phases/phase-13-goldset-eval.md).
 //
 // 실행(Deno):
 //   deno run --allow-read=supabase/functions/parse-screenshot-text/samples \

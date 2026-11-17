@@ -1,9 +1,9 @@
 // find-purchase-links 의 모델·도구·프롬프트·출력 스키마.
-// index.ts(배포 함수)와 이후 측정 스크립트가 같은 정의를 쓰도록 분리했다.
+// 모델·프롬프트를 바꿀 때 이 파일만 보면 되도록 index.ts(배포 함수)에서 분리했다.
 
 import type { Candidate, Channel, SearchScope } from './logic.ts';
 
-// 모델: Haiku 5.5(사람 결정). temperature 는 보내지 않는다(Haiku 5.5 는 기본값만 받는다).
+// 모델: Haiku 5.5. temperature 는 보내지 않는다(Haiku 5.5 는 기본값만 받는다).
 export const MODEL = 'claude-haiku-5-5';
 export const ANTHROPIC_VERSION = '2023-06-01';
 
@@ -20,7 +20,7 @@ export const PICK_MAX_TOKENS = 2048;
 export const MAX_USES_SCOPED = 2;
 export const MAX_USES_OPEN = 3;
 
-// 웹 검색 기본 버전(결과가 web_search_result 목록으로 바로 온다 — 지시서 '알려진 사실').
+// 웹 검색 기본 버전(결과가 web_search_result 목록으로 바로 온다).
 export function buildSearchTool(scope: SearchScope, maxUses: number) {
   return {
     type: 'web_search_20250305',

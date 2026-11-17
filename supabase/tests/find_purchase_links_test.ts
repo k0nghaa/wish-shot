@@ -1,5 +1,5 @@
 // find-purchase-links 순수 로직 단위 검증(네트워크·키 없음).
-// 실행: deno test supabase/tests/find_purchase_links_test.ts
+// 실행: deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts
 import {
   type Channel,
   type Harvest,

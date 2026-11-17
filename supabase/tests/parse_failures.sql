@@ -6,11 +6,9 @@
 --       성공은 세지 않는다. 텍스트·이미지 내용은 없다. 계정이 정리(0002)돼도 기록은 남는다 —
 --       에러를 만나고 저장 없이 떠난 사용자도 집계에 들어간다.
 -- 제외: 개발자 uid 는 0004 의 ops.internal_users 로 뺀다(§1·§2·§4). 비어 있으면 아무도 제외되지 않는다.
--- 사유: invalid_json / invalid_text / invalid_image / invalid_media_type / image_too_large /
---       text_too_long / categories_too_long / rate_limited_user / rate_limited_global /
---       quota_unavailable(카운터 응답 3초 초과로 503 — 몰아치기 공격이나 DB 지연) /
---       llm_timeout / llm_unreachable / llm_error / llm_refusal / llm_empty / llm_bad_json /
---       llm_read_error(LLM 응답 본문 읽기 실패 — 앱은 런타임 500 을 받음)
+-- 사유: 목록 정본은 supabase/functions/parse-screenshot-text/index.ts 의 FailureReason(DB CHECK 는 0005).
+--       quota_unavailable = 카운터 응답 3초 초과로 503(몰아치기 공격이나 DB 지연).
+--       llm_read_error = LLM 응답 본문 읽기 실패(앱은 런타임 500 을 받음).
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -79,7 +77,7 @@ group by g.day, g.count
 order by g.day desc;
 
 -- -----------------------------------------------------------------------------
--- §4 한 사용자의 오늘 기록 — 실제 동작 시험(Step 5) 확인용
+-- §4 한 사용자의 오늘 기록 — 실제 동작 시험(parse_quota_live.ts) 확인용
 --   <UID> 를 시험 스크립트가 출력한 사용자 id 로 바꿔 실행한다.
 --   기대(사용자 시간당 한도 2로 낮춘 parse_quota_live.ts 시험): rate_limited_user 1건, text_too_long 1건(max_len 2001).
 -- -----------------------------------------------------------------------------

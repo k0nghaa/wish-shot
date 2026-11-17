@@ -23,9 +23,9 @@
 //   --crlf-to-lf           원문의 CR(\r)을 LF 로 바꿔 보낸다. 기본은 CR 이 있으면 중단 — 앱 OCR 원문엔 CR 이 없어
 //                          내보내기 과정에서 생긴 것이기 때문(그대로 보내면 운영과 바디가 달라진다). 쓰면 summary 에 기록
 //
-// 출력(goldset/out — git 제외): results.csv(행 = 장 × 변형 × 회차), summary.md(지시서 3절 지표 — 전체·유형별·품목별, 'b장 중 a장').
+// 출력(goldset/out — git 제외): results.csv(행 = 장 × 변형 × 회차), summary.md(docs/phases/phase-13-goldset-eval.md 3절 지표 — 전체·유형별·품목별, 'b장 중 a장').
 // 원문·상품명은 콘솔·summary 에 찍지 않는다(id·숫자만). results.csv 엔 모델 출력(상품명 등)이 있어 git 제외 폴더에만 쓴다.
-// export 된 함수는 API 없이 판정·파싱을 검증하기 위한 것이다. 직접 실행할 때만 main() 이 돈다(import.meta.main).
+// parseCsv·loadInputs 는 goldset-holdout.ts 가 함께 쓴다(export). 직접 실행할 때만 main() 이 돈다(import.meta.main).
 
 import {
   MODEL as CURRENT_MODEL,
@@ -59,22 +59,22 @@ const OCR_MIN_CHARS = 20;
 const MAX_TOKENS = 400;
 /** thinking 을 켠 변형은 생각 토큰이 상한을 같이 쓰므로 넉넉히 둔다(잘리면 TRUNCATED 로 따로 센다). */
 const THINK_MAX_TOKENS = 4000;
-/** 앱의 "확인이 필요해요" 기준(src/hooks/useAnalysis.ts LOW_CONFIDENCE_THRESHOLD). 바꾸지 않고 재기만 한다. */
+/** 앱의 저신뢰 확인 안내 기준(src/hooks/useAnalysis.ts LOW_CONFIDENCE_THRESHOLD). 바꾸지 않고 재기만 한다. */
 const LOW_CONFIDENCE_THRESHOLD = 0.5;
 const THRESHOLDS = [0.3, 0.4, 0.5, 0.6, 0.7];
 /** 측정용 호출 타임아웃. 운영(20초)보다 넉넉히 — 정확도를 재는 것이지 지연을 재는 게 아니다. */
 const CALL_TIMEOUT_MS = 60_000;
-/** 화면 유형(LABELING.md 2절). G = 중고거래 상세(2026-11-05 추가 — 정답은 판매자 등록가, 정가 우선 미적용). */
+/** 화면 유형(LABELING.md 2절). G = 중고거래 상세(정답은 판매자 등록가, 정가 우선 미적용). */
 const TYPES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'] as const;
 type LabelType = (typeof TYPES)[number];
 /**
  * 라벨 선택 열 price_foreign 형식: ISO 통화 코드 + 공백 + 화면의 숫자(자릿수 구분 기호 없이, 소수점은 '.'). 예: `JPY 3980`, `USD 17.51`,
  * 유럽식 `1.299,90 €` → `EUR 1299.90`.
- * 채점에는 쓰지 않는다 — 다음 Phase 에서 외화 처리를 바꿀 때 같은 정답셋으로 다시 재기 위한 기록(2026-11-05 결정).
+ * 채점에는 쓰지 않는다 — 외화 처리를 바꿀 때 같은 정답셋으로 다시 재기 위한 기록.
  */
 const FOREIGN_RE = /^[A-Z]{3} \d+(\.\d+)?$/;
 /**
- * 품목(라벨 item_category, 2026-11-04 추가). 판정엔 쓰지 않고 품목별 집계에만 쓴다.
+ * 품목(라벨 item_category). 판정엔 쓰지 않고 품목별 집계에만 쓴다.
  * 입력은 norm() 으로 비교해 가운뎃점·슬래시·공백 차이를 같은 값으로 받는다('가구/인테리어' → '가구·인테리어').
  */
 const CATEGORIES = ['생활용품', '가구·인테리어', '패션', '뷰티', '전자', '기타'] as const;
@@ -521,7 +521,7 @@ export async function loadInputs(dataDir: string | URL, crlfToLf = false): Promi
 function selectSubset(items: Item[], subset: Options['subset'], errors: string[]): Item[] {
   if (subset === 'all') return items;
   const unassigned = items.filter((it) => it.label.holdout === null);
-  if (unassigned.length) errors.push(`holdout 미지정 ${unassigned.length}행 — --${subset} 를 쓰려면 Step 4 지정이 먼저입니다`);
+  if (unassigned.length) errors.push(`holdout 미지정 ${unassigned.length}행 — --${subset} 를 쓰려면 goldset-holdout.ts --write 로 holdout 을 먼저 지정하세요`);
   return subset === 'only-holdout' ? items.filter((it) => it.label.holdout === true) : items.filter((it) => it.label.holdout !== true);
 }
 
@@ -530,7 +530,7 @@ function selectSubset(items: Item[], subset: Options['subset'], errors: string[]
 /**
  * OK          정상 응답
  * ERROR       API·네트워크 오류(1회 재시도 후에도 실패) → --retry-errors 로 다시 부를 대상
- * BAD_OUTPUT  응답은 왔지만 text 블록이 없거나 JSON 이 깨짐(재시도 안 함 — 운영에선 E-2 폴백)
+ * BAD_OUTPUT  응답은 왔지만 text 블록이 없거나 JSON 이 깨짐(재시도 안 함 — 운영에선 정제 실패 폴백)
  * TRUNCATED   stop_reason=max_tokens(재시도 안 함)
  * REFUSAL     stop_reason=refusal(재시도 안 함)
  * SKIP_OCR_SHORT 원문 20자 미만 — 앱처럼 호출하지 않음
@@ -777,7 +777,7 @@ const frac = (a: number, b: number) => `${a}/${b}`;
 
 type EvalMap = Map<string, RowEval[]>; // variant key → 측정 장별 판정
 
-/** 지시서 3절 지표 표(변형별 열). subset = 이 표가 다루는 측정 장들(전체 또는 유형 하나). */
+/** docs/phases/phase-13-goldset-eval.md 3절 지표 표(변형별 열). subset = 이 표가 다루는 측정 장들(전체 또는 유형 하나). */
 function metricTable(opts: Options, evals: EvalMap, subset: Item[]): string[] {
   const ids = new Set(subset.map((it) => it.id));
   const N = subset.length;
@@ -1038,7 +1038,7 @@ async function main() {
     loaded = await loadInputs(opts.dataDir, opts.crlfToLf);
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) {
-      console.error(`입력 파일이 없습니다: ${showPath(opts.dataDir)}raw.csv·labels.csv (Step 3·4에서 만든다. 가상 검증은 --data .../goldset/fixture)`);
+      console.error(`입력 파일이 없습니다: ${showPath(opts.dataDir)}raw.csv·labels.csv (원문 내보내기·라벨링으로 만든다 — goldset/LABELING.md. 가상 검증은 --data .../goldset/fixture)`);
     } else {
       console.error(`입력 오류: ${(e as Error).message}`); // CSV 형식·인코딩 오류 — 원문은 담지 않는다
     }

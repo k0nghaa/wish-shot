@@ -1,6 +1,6 @@
 // find-purchase-links — 등록 폼에서 분석된 제품명·브랜드와 캡처의 입구 채널로
 // 그 상품의 판매 페이지 링크를 찾아 돌려주는 Edge Function (Deno).
-// 지시서: docs/phases/phase-21-purchase-finder.md
+// 근거: docs/phases/phase-21-purchase-finder.md
 //
 // 계약:
 //   입력:  { "productName": string, "brand"?: string | null, "domain"?: string, "mall"?: string }
@@ -28,8 +28,8 @@
 //   웹 검색 인용은 항상 켜져 있고 인용과 구조화 출력은 한 요청에 쓸 수 없어(400) 두 번 부른다.
 //
 // 규칙:
-//   - 불변식 1: 돌려주는 URL 은 검색 결과 블록에서 꺼낸 것뿐(모델이 쓴 URL·OCR 로 읽은 주소는 쓰지 않음).
-//   - 불변식 2: 제품명·브랜드·입구 채널만 받는다. 이미지·OCR 원문은 받지 않는다.
+//   - 돌려주는 URL 은 검색 결과 블록에서 꺼낸 것뿐(모델이 쓴 URL·OCR 로 읽은 주소는 쓰지 않음).
+//   - 제품명·브랜드·입구 채널만 받는다. 이미지·OCR 원문은 받지 않는다.
 //   - 로그엔 채널 종류·후보 수·채웠는지·검색 횟수·토큰만. 제품명·브랜드·도메인·URL 은 남기지 않는다.
 //   - Claude API 키(ANTHROPIC_API_KEY)는 이 함수의 시크릿에만.
 //   - 요청 한도: 입력 검증을 통과한 요청만, Anthropic 을 부르기 전에 센다. 카운터는 DB 함수
@@ -587,12 +587,12 @@ Deno.serve(async (req) => {
   if (link) link = await ensureSafe(link, '');
 
   // 7) 상품 페이지를 못 찾았거나 확인을 통과하지 못했으면, 채널이 사전의 몰이고 검색 주소 형식이 확인된
-  //    몰일 때 그 몰 검색 결과 링크를 넣는다(사람 결정 — 링크가 들어가는 게 더 중요). 같은 안전 확인을 거친다.
+  //    몰일 때 그 몰 검색 결과 링크를 넣는다(링크가 들어가는 게 더 중요). 같은 안전 확인을 거친다.
   if (!link) {
     const fallback = mallSearchLink(channel, productName, brand);
     if (fallback) link = await ensureSafe(fallback, 'search_');
   }
-  //    캡처에 주소가 보인 카페24 쇼핑몰이면 그 사이트 검색 결과 링크(사람 결정 — 쿠팡과 같은 방식).
+  //    캡처에 주소가 보인 카페24 쇼핑몰이면 그 사이트 검색 결과 링크(쿠팡과 같은 방식).
   if (!link && siteSearchUrl) {
     const host = safeHttpsUrl(siteSearchUrl)?.host;
     if (host) link = await ensureSafe({ url: siteSearchUrl, domain: host, kind: 'search' }, 'site_search_');
