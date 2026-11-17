@@ -46,7 +46,6 @@ SNS에서 찍은 스크린샷을 공유 시트로 바로 보내면 더 간편하
   <img src="https://img.shields.io/badge/Expo-000020?style=for-the-badge&amp;logo=expo&amp;logoColor=white" height="28" alt="Expo" />
   <img src="https://img.shields.io/badge/Swift-F05138?style=for-the-badge&amp;logo=swift&amp;logoColor=white" height="28" alt="Swift" />
   <img src="https://img.shields.io/badge/ESLint-4B32C3?style=for-the-badge&amp;logo=eslint&amp;logoColor=white" height="28" alt="ESLint" />
-  <img src="https://img.shields.io/badge/Prettier-F7B93E?style=for-the-badge&amp;logo=prettier&amp;logoColor=black" height="28" alt="Prettier" />
 </p>
 
 ### 백엔드

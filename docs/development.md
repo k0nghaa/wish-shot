@@ -83,6 +83,7 @@ npx eas-cli submit --platform ios --profile production --latest   # App Store Co
 업로드한 빌드는 App Store Connect에서 심사에 제출합니다(TestFlight 테스트 단계는 거치지 않음).
 
 - production 프로필은 `channel: "production"`(OTA 사용)·`autoIncrement`(빌드 번호 자동 증가)입니다.
+- 앱 버전(App Store에 보이는 버전)은 `app.json`의 `expo.version` 하나가 정본입니다. 출시마다 이 값만 올립니다. `package.json`의 `version`은 쓰지 않습니다 — Expo는 앱 설정에 버전이 없을 때만 그 값을 읽습니다.
 - 네이티브를 바꾸면 `runtimeVersion`(`app.json`의 `policy: "fingerprint"`)이 달라집니다. 그 빌드를 받은 사용자만 이후 OTA를 받습니다(불일치 크래시 방지).
 
 **OTA(JS만 바뀐 수정)** — 새 빌드·재심사 없이 배포:
