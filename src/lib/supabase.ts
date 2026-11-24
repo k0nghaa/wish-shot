@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
+import { createSessionVault } from '@/lib/sessionVault';
 import type { Database } from '@/types/database';
 
 // URL/키는 .env의 EXPO_PUBLIC_* 에서 읽는다. anon 키만 사용하며 service_role 키는
@@ -17,9 +18,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// 세션 저장소: AsyncStorage 를 감싸 세션 사본·보관 목록을 두고, auth-js 가 세션을 스스로 지우는 것을 막는다.
+// 저장 키는 supabase-js 기본값(sb-<프로젝트>-auth-token) 그대로 — 바꾸면 기존 사용자의 세션이 사라진다.
+export const sessionVault = createSessionVault(AsyncStorage);
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage, // 세션을 기기에 저장 → 앱 재시작 후에도 로그인 유지
+    storage: sessionVault.storage, // 세션을 기기에 저장 → 앱 재시작 후에도 로그인 유지
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false, // React Native에서는 꺼둔다 (브라우저 전용 옵션)
