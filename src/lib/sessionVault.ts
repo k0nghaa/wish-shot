@@ -226,6 +226,16 @@ export function createSessionVault(kv: KeyValueStore) {
       if (copy) await addToArchive(copy);
     },
 
+    /** 개발용: 저장된 세션의 만료 시각을 지나게 해 다음 확인 때 재발급하게 한다. 세션이 없으면 false. */
+    async expireStoredSessionForDev(): Promise<boolean> {
+      const key = (await kv.getAllKeys()).find(isSessionKey);
+      const raw = key ? await kv.getItem(key) : null;
+      const session = raw ? parseSession(raw) : null;
+      if (!key || !session) return false;
+      await storage.setItem(key, JSON.stringify({ ...session, expires_at: 1 }));
+      return true;
+    },
+
     /** 사용자가 고른 로그아웃: fn 이 도는 동안만 세션과 사본을 지울 수 있다. */
     async allowRemoval<T>(fn: () => Promise<T>): Promise<T> {
       removalAllowed++;

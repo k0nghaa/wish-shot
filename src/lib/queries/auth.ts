@@ -1,3 +1,10 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import {
+  DEV_SIMULATION_KEY,
+  startDevSimulation,
+  type DevSimulationMode,
+} from '@/lib/devSessionSimulation';
 import { runSessionBootstrap, runStartOver, type BootResult } from '@/lib/sessionVault';
 import { sessionVault, supabase } from '@/lib/supabase';
 
@@ -58,4 +65,24 @@ export async function signInAnonymouslyIfNeeded(): Promise<void> {
   if (data.session) return;
   const { error } = await supabase.auth.signInAnonymously();
   if (error) throw new Error(`익명 로그인에 실패했습니다: ${error.message}`);
+}
+
+// ── 개발용(__DEV__) 확인 수단 — 설정 화면에서만 부른다. 부른 뒤 앱을 다시 시작해야 시작 판정을 다시 본다. ──
+
+/**
+ * 개발용: 저장된 세션을 만료된 것으로 바꾸고, 지금과 다음 실행 1회의 요청을 연결 실패(offline) 또는
+ * 서버 거절(reject)처럼 보이게 한다. 실제 refreshToken 은 서버로 가지 않아 그대로 쓸 수 있다.
+ */
+export async function devSimulateSessionProblem(mode: DevSimulationMode): Promise<void> {
+  await startDevSimulation(mode);
+  await sessionVault.expireStoredSessionForDev();
+}
+
+/** 개발용: 앱을 지운 것처럼 기기의 세션·기록(wishshot.*)을 모두 지우고, 다음 실행 1회를 연결 실패로 시작한다. */
+export async function devSimulateFreshInstall(): Promise<void> {
+  await startDevSimulation('offline');
+  const isAppKey = (k: string) => k.startsWith('wishshot.') && k !== DEV_SIMULATION_KEY;
+  const isSessionKey = (k: string) => /^sb-.+-auth-token/.test(k); // -code-verifier 등 딸린 키 포함
+  const keys = await AsyncStorage.getAllKeys();
+  await AsyncStorage.multiRemove(keys.filter((k) => isAppKey(k) || isSessionKey(k)));
 }

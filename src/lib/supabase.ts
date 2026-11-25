@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
+import { devFetch } from '@/lib/devSessionSimulation';
 import { createSessionVault } from '@/lib/sessionVault';
 import type { Database } from '@/types/database';
 
@@ -29,6 +30,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false, // React Native에서는 꺼둔다 (브라우저 전용 옵션)
   },
+  // 개발용 앱에서만: 설정의 연결 실패·서버 거절 흉내(src/lib/devSessionSimulation.ts)
+  ...(__DEV__ ? { global: { fetch: devFetch } } : {}),
 });
 
 // 앱이 포그라운드(active)일 때만 토큰을 자동 갱신한다. (Supabase 공식 가이드 권장)
