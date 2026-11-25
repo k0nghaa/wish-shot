@@ -17,13 +17,21 @@ export function feedbackMailUrl(): string {
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('WishShot 의견')}`;
 }
 
-/**
- * 끊긴 세션 화면의 "문의" 메일. 본문은 빈 줄 둘과 문의 번호뿐이다 — 전체 ID·토큰·원인 코드는 넣지 않는다.
- * 문의 번호를 모르면 본문을 비운다.
- */
-export function lostAccountMailUrl(userId: string | null): string {
+// 시작 화면의 "문의" 메일. 본문은 빈 줄 둘과 문의 번호뿐이다 — 전체 ID·토큰·원인 코드는 넣지 않는다.
+// 문의 번호를 모르면 본문을 비운다.
+function inquiryMailUrl(subject: string, userId: string | null): string {
   const number = inquiryNumber(userId);
-  const query = [`subject=${encodeURIComponent('WishShot 기존 위시 찾기')}`];
+  const query = [`subject=${encodeURIComponent(subject)}`];
   if (number) query.push(`body=${encodeURIComponent(`\n\n문의 번호: ${number}`)}`);
   return `mailto:${SUPPORT_EMAIL}?${query.join('&')}`;
+}
+
+/** 끊긴 세션 화면의 "문의" 메일. */
+export function lostAccountMailUrl(userId: string | null): string {
+  return inquiryMailUrl('WishShot 기존 위시 찾기', userId);
+}
+
+/** 연결 실패 화면의 "문의" 메일. */
+export function connectionMailUrl(userId: string | null): string {
+  return inquiryMailUrl('WishShot 연결 문의', userId);
 }

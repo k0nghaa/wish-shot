@@ -10,9 +10,14 @@ import {
   View,
 } from 'react-native';
 
-import { colors, spacing, type } from '@/constants/theme';
+import { colors, radius, spacing, type } from '@/constants/theme';
 import { startOver } from '@/lib/queries';
-import { inquiryNumber, lostAccountMailUrl, SUPPORT_EMAIL } from '@/lib/supportMail';
+import {
+  connectionMailUrl,
+  inquiryNumber,
+  lostAccountMailUrl,
+  SUPPORT_EMAIL,
+} from '@/lib/supportMail';
 
 // 앱 시작 때 세션을 확인하지 못했을 때의 두 화면(AuthGate 가 띄운다). 그 뒤 세션이 오면 AuthGate 가 저절로 앱으로 넘긴다.
 // 다시 시도 = 앱 새로고침. 같은 실행에서 시작 판정만 다시 부르면 auth-js 가 60초 동안 저장해 둔 실패를 돌려준다.
@@ -21,8 +26,22 @@ function reload() {
   reloadAppAsync().catch(() => {});
 }
 
-/** 연결 실패: 세션이나 사본이 있는데 확인하지 못함, 또는 새 설치의 가입 실패. */
-export function OfflineScreen() {
+// 문의: 메일 앱을 연다. 열지 못하면 주소와 문의 번호를 보여 준다.
+function openInquiry(url: string, userId: string | null) {
+  Linking.openURL(url).catch(() => {
+    const number = inquiryNumber(userId);
+    Alert.alert(
+      '메일 열기 실패',
+      `${SUPPORT_EMAIL} 으로 보내주세요.${number ? `\n문의 번호: ${number}` : ''}`
+    );
+  });
+}
+
+/**
+ * 연결 실패: 세션이나 사본이 있는데 확인하지 못함, 또는 새 설치의 가입 실패.
+ * 계속 실패하는 오류(서버 차단·풀리지 않는 사용량 제한·저장소 오류 등)에서도 연락할 수 있게 문의를 둔다.
+ */
+export function OfflineScreen({ userId }: { userId: string | null }) {
   return (
     <View style={styles.container}>
       <Text style={styles.title} accessibilityRole="header">
@@ -38,6 +57,15 @@ export function OfflineScreen() {
           accessibilityHint="앱을 다시 불러옵니다."
         >
           <Text style={styles.primaryText}>다시 시도</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.textButton}
+          onPress={() => openInquiry(connectionMailUrl(userId), userId)}
+          accessibilityRole="button"
+          accessibilityLabel="문의"
+          accessibilityHint="메일 앱을 엽니다."
+        >
+          <Text style={styles.textButtonText}>문의</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -65,16 +93,6 @@ export function LostSessionScreen({ userId }: { userId: string | null }) {
     ]);
   }
 
-  function handleInquiry() {
-    Linking.openURL(lostAccountMailUrl(userId)).catch(() => {
-      const number = inquiryNumber(userId);
-      Alert.alert(
-        '메일 열기 실패',
-        `${SUPPORT_EMAIL} 으로 보내주세요.${number ? `\n문의 번호: ${number}` : ''}`
-      );
-    });
-  }
-
   return (
     <View style={styles.container}>
       <Text style={styles.title} accessibilityRole="header">
@@ -89,6 +107,7 @@ export function LostSessionScreen({ userId }: { userId: string | null }) {
           accessibilityRole="button"
           accessibilityLabel="다시 시도"
           accessibilityHint="앱을 다시 불러옵니다."
+          accessibilityState={{ disabled: starting }}
         >
           <Text style={styles.primaryText}>다시 시도</Text>
         </TouchableOpacity>
@@ -108,12 +127,13 @@ export function LostSessionScreen({ userId }: { userId: string | null }) {
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.textButton}
-          onPress={handleInquiry}
+          style={[styles.textButton, starting && styles.disabled]}
+          onPress={() => openInquiry(lostAccountMailUrl(userId), userId)}
           disabled={starting}
           accessibilityRole="button"
           accessibilityLabel="문의"
           accessibilityHint="메일 앱을 엽니다."
+          accessibilityState={{ disabled: starting }}
         >
           <Text style={styles.textButtonText}>문의</Text>
         </TouchableOpacity>
@@ -136,7 +156,7 @@ const styles = StyleSheet.create({
   actions: { alignSelf: 'stretch', marginTop: spacing.four, gap: spacing.two },
   primary: {
     minHeight: 50,
-    borderRadius: 10,
+    borderRadius: radius.md,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -144,7 +164,7 @@ const styles = StyleSheet.create({
   primaryText: { ...type.headline, color: colors.bg },
   secondary: {
     minHeight: 50,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.silver,
     alignItems: 'center',

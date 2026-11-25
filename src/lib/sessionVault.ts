@@ -8,7 +8,9 @@
 // - 사용자 id 와 refreshToken 만 담은 사본을 따로 둔다(1024자 이하라 iOS AsyncStorage 목록 안에 저장돼
 //   세션 파일과 따로 남는다). 원래 값이 확실히 없거나 깨졌을 때만 사본으로 되살린다. 읽기에 실패했을
 //   때는 쓰지 않는다 — 낡은 refreshToken 을 쓰면 서버가 세션 전체를 끝낸다.
-// - 다른 사용자의 세션이 저장되면 옛 사본을 보관 목록으로 옮긴다.
+// - 다른 사용자의 세션이 저장되면 옛 사본을 보관 목록으로 옮긴다. 지금은 보관 목록을 읽어 되살리는 코드가 없다 —
+//   어떤 경로로든 덮어쓰인 계정의 refreshToken 을 기기에 남겨 두는 마지막 방어선이고(나중에 계정 연결·지원 도구가
+//   쓸 수 있게), 세션과 같은 저장소에만 두며 기기 밖으로 보내지 않는다.
 // - 사본·보관 처리의 실패는 원래 읽기·쓰기를 막지 않는다.
 
 export type KeyValueStore = {
@@ -32,6 +34,15 @@ const USAGE_KEY_PREFIXES = [
   'wishshot.notifications',
   'wishshot.privacyNoticeShown',
   'wishshot.regionNoticeShown',
+];
+
+// 위시를 저장해 봤을 수 있다는 흔적(등록 화면을 연 기록 포함). 없으면 끊긴 세션이어도 잃을 위시가 없다 —
+// 위시 없는 익명 계정은 서버가 30일 뒤 지우므로(0002), 이때는 화면 없이 새로 시작한다.
+const WISH_KEY_PREFIXES = [
+  'wishshot.privacyNoticeShown', // 등록 화면을 처음 열 때
+  'wishshot.regionNoticeShown', // 등록의 제품 영역 지정
+  'wishshot.signedurl.', // 위시 이미지 주소 캐시
+  'wishshot.notifications', // 저장 뒤 링크 알림
 ];
 
 const isSessionKey = (key: string) => /^sb-.+-auth-token$/.test(key);
@@ -94,6 +105,10 @@ function sessionFromCopy(copy: SessionCopy): string {
 export type SessionVault = ReturnType<typeof createSessionVault>;
 
 export function createSessionVault(kv: KeyValueStore) {
+  // 이번 실행이 시작할 때의 키 목록. 앱이 시작하며 지우는 키(만료된 이미지 주소 캐시 등)에 쓴 흔적 판단이
+  // 흔들리지 않게 먼저 찍어 둔다. 실패는 쓸 때 던진다.
+  const keysAtStart = kv.getAllKeys();
+  keysAtStart.catch(() => {});
   let copyMemo: SessionCopy | null | undefined; // undefined = 아직 읽지 않음
   let lastGood: { raw: string; copy: SessionCopy | null } | null = null; // 이번 실행에서 마지막으로 읽거나 쓴 세션
   let readFailed = false; // 세션 읽기가 실패한 뒤 성공한 읽기·쓰기가 아직 없음
@@ -132,6 +147,10 @@ export function createSessionVault(kv: KeyValueStore) {
     readFailed = false;
     state = 'present';
     return copy;
+  }
+
+  function knownUserId(): string | null {
+    return lastGood?.copy?.userId ?? copyMemo?.userId ?? null;
   }
 
   // 세션 키를 읽지 못함: auth-js 에는 "없음"을 돌려주되(던지면 auth-js 내부의 첫 세션 알림에서 처리되지 않은
@@ -209,15 +228,33 @@ export function createSessionVault(kv: KeyValueStore) {
     /** 이번 실행에서 세션 키를 읽은 결과. */
     state: (): StoredSessionState => state,
 
-    /** 이 기기에 저장된 계정의 사용자 id(세션 또는 사본). 모르면 null. */
-    knownUserId(): string | null {
-      return lastGood?.copy?.userId ?? copyMemo?.userId ?? null;
+    /** 이 기기에 저장된 계정의 사용자 id(이번 실행에서 읽은 세션 또는 사본). 모르면 null. */
+    knownUserId,
+
+    /**
+     * 문의 번호용 사용자 id. 세션을 읽지 못했어도 사본의 사용자 id 는 쓴다 — 사본의 refreshToken 은 쓰지 않으므로
+     * 읽기 실패 뒤에도 안전하다. 모르면 null.
+     */
+    async inquiryUserId(): Promise<string | null> {
+      const known = knownUserId();
+      if (known) return known;
+      try {
+        return (await readCopy())?.userId ?? null;
+      } catch {
+        return null;
+      }
     },
 
-    /** 이 기기에서 앱을 쓴 흔적이 있는지. 저장소 목록을 읽지 못하면 throw. */
+    /** 이번 실행이 시작할 때 이 기기에 앱을 쓴 흔적이 있었는지. 저장소 목록을 읽지 못하면 throw. */
     async hasUsageTrace(): Promise<boolean> {
-      const keys = await kv.getAllKeys();
+      const keys = await keysAtStart;
       return keys.some((k) => USAGE_KEY_PREFIXES.some((p) => k.startsWith(p)));
+    },
+
+    /** 이번 실행이 시작할 때 이 기기에 위시를 저장해 봤을 수 있다는 흔적이 있었는지. 읽지 못하면 throw. */
+    async hasWishTrace(): Promise<boolean> {
+      const keys = await keysAtStart;
+      return keys.some((k) => WISH_KEY_PREFIXES.some((p) => k.startsWith(p)));
     },
 
     /** 지금 계정을 보관 목록에 넣는다(새로 시작 전). */
@@ -258,11 +295,13 @@ export type SessionAuth = {
   }): Promise<{ data: { session: { user: { id: string } } | null }; error: unknown }>;
 };
 
+// userId: 이 기기에 저장된 계정의 사용자 id(문의 번호용). 모르면 null.
 export type BootResult =
   | { status: 'ready' } // 저장된 세션으로 쓸 수 있음
   | { status: 'created' } // 이 기기에서 처음 — 새 익명 계정을 만듦
-  | { status: 'offline' } // 확인하지 못함(통신·서버·저장소 오류). auth-js 의 자동 갱신이나 앱 새로고침으로 다시 확인한다
-  | { status: 'lost'; userId: string | null }; // 서버가 세션을 거절했거나 저장값이 사라짐. 새 계정을 만들지 않는다
+  | { status: 'restarted' } // 끊겼지만 위시를 저장한 흔적이 없어 화면 없이 새로 시작함(옛 계정은 보관·기록)
+  | { status: 'offline'; userId: string | null } // 확인하지 못함(통신·서버·저장소 오류). auth-js 의 자동 갱신이나 앱 새로고침으로 다시 확인한다
+  | { status: 'lost'; userId: string | null }; // 서버가 세션을 거절했거나 저장값이 사라짐. 새 계정은 사용자가 고를 때만 만든다
 
 // 다시 시도해도 같은 답이 오는 거절. 그 밖의 오류(403·429·402·409·5xx·통신 실패 등)는 일시적일 수 있어 offline 으로 본다.
 // session_not_found 는 auth-js 가 코드 없는 AuthSessionMissingError 로 바꿔 돌려준다.
@@ -284,32 +323,48 @@ export function isSessionRejected(error: unknown): boolean {
  * 같은 실행 안에서 다시 부르지 않는다 — 재발급 실패 뒤 60초 동안 auth-js 가 저장해 둔 실패를 돌려준다.
  */
 export async function runSessionBootstrap(auth: SessionAuth, vault: SessionVault): Promise<BootResult> {
+  const offline = async (): Promise<BootResult> => ({
+    status: 'offline',
+    userId: await vault.inquiryUserId(),
+  });
   let result: Awaited<ReturnType<SessionAuth['getSession']>>;
   try {
     result = await auth.getSession();
   } catch {
-    return { status: 'offline' };
+    return offline();
   }
   if (result.data.session) return { status: 'ready' };
-  if (result.error) {
-    return isSessionRejected(result.error) ? { status: 'lost', userId: vault.knownUserId() } : { status: 'offline' };
-  }
+  if (result.error) return isSessionRejected(result.error) ? lostOrRestart(auth, vault) : offline();
   const state = vault.state();
-  if (state === 'corrupt') return { status: 'lost', userId: vault.knownUserId() };
-  if (state !== 'none') return { status: 'offline' };
+  if (state === 'corrupt') return lostOrRestart(auth, vault);
+  if (state !== 'none') return offline();
   let used: boolean;
   try {
     used = await vault.hasUsageTrace();
   } catch {
-    return { status: 'offline' };
+    return offline();
   }
-  if (used) return { status: 'lost', userId: null };
+  if (used) return lostOrRestart(auth, vault);
   try {
     const { data, error } = await auth.signInAnonymously();
-    return !error && data.session ? { status: 'created' } : { status: 'offline' };
+    return !error && data.session ? { status: 'created' } : offline();
   } catch {
-    return { status: 'offline' };
+    return offline();
   }
+}
+
+// 끊긴 세션: 위시를 저장한 흔적이 있으면(모르면) 끊긴 세션 화면, 없으면 잃을 것이 없으니 새로 시작한다.
+// 새로 시작의 가입이 실패하면 offline — 다시 시도(앱 새로고침)하면 같은 판정을 다시 거친다.
+async function lostOrRestart(auth: SessionAuth, vault: SessionVault): Promise<BootResult> {
+  const userId = await vault.inquiryUserId();
+  let hadWishes: boolean;
+  try {
+    hadWishes = await vault.hasWishTrace();
+  } catch {
+    hadWishes = true;
+  }
+  if (hadWishes) return { status: 'lost', userId };
+  return (await runStartOver(auth, vault)) ? { status: 'restarted' } : { status: 'offline', userId };
 }
 
 /**

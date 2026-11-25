@@ -81,7 +81,7 @@ export default function SettingsScreen() {
   function handleDevSimulateReject() {
     Alert.alert(
       '서버 거절 흉내',
-      '다음 실행에서 서버가 세션을 거절한 것처럼 보입니다. 다시 시도하면 지금 계정으로 돌아옵니다. 새로 시작하면 새 계정이 됩니다.',
+      '다음 실행에서 서버가 세션을 거절한 것처럼 보입니다. 다시 시도하면 지금 계정으로 돌아오고, 새로 시작하면 새 계정이 됩니다. 이 기기에 위시를 저장한 흔적(등록 화면에서 사진을 고른 기록 등)이 없으면 화면 없이 바로 새 계정이 됩니다.',
       [
         { text: '취소', style: 'cancel' },
         {

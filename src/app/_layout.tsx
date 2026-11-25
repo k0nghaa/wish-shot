@@ -92,7 +92,9 @@ function AuthGate() {
   // "permission denied for table ..." 오류가 뜨는 것을 막는다. 이후 세션이 잠깐 null 이어도 네비게이터는 유지한다.
   if (!session && !everHadSession) {
     if (boot?.status === 'lost') return <LostSessionScreen userId={boot.userId} />;
-    if (boot?.status === 'offline' || slow) return <OfflineScreen />;
+    if (boot?.status === 'offline' || slow) {
+      return <OfflineScreen userId={boot?.status === 'offline' ? boot.userId : null} />;
+    }
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />

@@ -27,11 +27,12 @@ export async function getCurrentUserId(): Promise<string> {
 
 /**
  * 앱 시작 때 1회: 저장된 세션을 확인한다. 이 기기에서 세션을 쓴 적이 없을 때만 새 익명 계정을 만든다.
- * - `ready`·`created`: 세션이 있다.
+ * - `ready`·`created`: 세션이 있다. `restarted`: 끊겼지만 위시를 저장한 흔적이 없어 새로 시작했다(세션이 있다).
  * - `offline`: 확인하지 못했다(통신·서버·저장소 오류). auth-js 의 자동 갱신이 되살리면 onAuthStateChange 로
  *   세션이 온다. 다시 시도는 앱 새로고침으로 한다 — 같은 실행에서 이 함수를 다시 부르면 auth-js 가
  *   60초 동안 저장해 둔 실패를 돌려준다.
- * - `lost`: 서버가 세션을 거절했거나 저장값이 사라졌다. 새 계정은 사용자가 "새로 시작"을 고를 때만 만든다.
+ * - `lost`: 서버가 세션을 거절했거나 저장값이 사라졌고, 위시를 저장한 흔적이 있다. 새 계정은 사용자가
+ *   "새로 시작"을 고를 때만 만든다.
  * 판정 규칙은 src/lib/sessionVault.ts.
  */
 export function bootstrapSession(): Promise<BootResult> {
