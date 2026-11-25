@@ -638,6 +638,20 @@ Deno.test({
 });
 
 Deno.test({
+  name: '저장 어댑터: 개발용 만료 흉내는 만료 시각만 바꾼다',
+  ignore: BASELINE,
+  async fn() {
+    const kv = new FakeAsyncStorage();
+    const vault = createSessionVault(kv);
+    eq(await vault.expireStoredSessionForDev(), false, '세션 없음');
+    await vault.storage.setItem(KEY, stored('U1', 'r1'));
+    eq(await vault.expireStoredSessionForDev(), true);
+    const s = JSON.parse(kv.peek(KEY)!);
+    eq([s.expires_at, s.refresh_token, s.user.id], [1, 'r1', 'U1']);
+  },
+});
+
+Deno.test({
   name: '저장 어댑터: 쓴 흔적 판단',
   ignore: BASELINE,
   async fn() {
