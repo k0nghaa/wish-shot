@@ -1,6 +1,7 @@
 // 지원 메일 주소 만들기(src/lib/supportMail.ts — import 없는 순수 TS) 단위 검증. 네트워크·키 없음.
 // 실행: deno test --no-lock supabase/tests/support_mail_test.ts
 import {
+  connectionMailUrl,
   feedbackMailUrl,
   inquiryNumber,
   lostAccountMailUrl,
@@ -43,6 +44,17 @@ Deno.test('끊긴 세션 문의 메일: 계정 ID 를 모르면 본문 없음', 
   eq(parseMailto(lostAccountMailUrl(null)), {
     address: SUPPORT_EMAIL,
     params: { subject: 'WishShot 기존 위시 찾기' },
+  });
+});
+
+Deno.test('연결 실패 문의 메일: 제목만 다르고 본문 규칙은 같다', () => {
+  eq(parseMailto(connectionMailUrl(USER_ID)), {
+    address: SUPPORT_EMAIL,
+    params: { subject: 'WishShot 연결 문의', body: '\n\n문의 번호: 8C1F2A3B' },
+  });
+  eq(parseMailto(connectionMailUrl(null)), {
+    address: SUPPORT_EMAIL,
+    params: { subject: 'WishShot 연결 문의' },
   });
 });
 

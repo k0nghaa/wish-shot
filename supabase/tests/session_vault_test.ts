@@ -210,16 +210,30 @@ function launch(kind: Kind, kv: FakeAsyncStorage, server: FakeAuthServer, net: N
     },
     global: { fetch: fakeFetch },
   });
+  // AuthGate 처럼 onAuthStateChange 로 받은 마지막 세션의 사용자(앱 화면으로 넘어가는 근거).
+  let delivered = '(없음)';
+  let refreshedAt = -1; // 마지막 TOKEN_REFRESHED 시각(실행 시작부터, 가상 ms)
+  client.auth.onAuthStateChange((event, session) => {
+    if (session) delivered = session.user.id;
+    if (event === 'TOKEN_REFRESHED') refreshedAt = Date.now() - start;
+  });
   const boot = async (): Promise<string> => {
     try {
       if (kind === 'legacy') return await legacyBoot(client.auth);
       const r = await runSessionBootstrap(client.auth, vault);
-      return r.status === 'lost' ? `lost:${r.userId ?? '-'}` : r.status;
+      return 'userId' in r ? `${r.status}:${r.userId ?? '-'}` : r.status; // lost·offline 은 문의 번호용 id 도 본다
     } catch (e) {
       return `throw:${(e as Error).message}`;
     }
   };
-  return { client, vault, boot, stop: () => client.auth.stopAutoRefresh() };
+  return {
+    client,
+    vault,
+    boot,
+    delivered: () => delivered,
+    refreshedAt: () => refreshedAt,
+    stop: () => client.auth.stopAutoRefresh(),
+  };
 }
 type Launched = ReturnType<typeof launch>;
 
@@ -239,12 +253,24 @@ const archivedUsers = (kv: FakeAsyncStorage) =>
 
 // ── 사례 실행 ───────────────────────────────────────────────
 type Ctx = { kv: FakeAsyncStorage; server: FakeAuthServer };
-type Outcome = { boot: string; account: string; again: string; signups: number; staleUses: number; note: string };
+// delivered: 첫 실행 동안 onAuthStateChange 로 받은 마지막 세션의 사용자 — 시험이 getSession 을 부르기 전에 잰다
+//   (getSession 이 스스로 재발급하면 자동 갱신이 망가져도 account 는 통과하므로, 저절로 돌아오는지는 이것으로 본다).
+// account: 지켜본 뒤 그때의 통신 상태로 getSession 을 불러 얻은 사용자.
+type Outcome = {
+  boot: string;
+  delivered: string;
+  account: string;
+  again: string;
+  signups: number;
+  staleUses: number;
+  note: string;
+};
 type Case = {
   name: string;
   net?: Net;
   wait: number; // 첫 실행을 지켜보는 시간(가상 ms)
   seed?: boolean; // 기기에 OLD 계정 세션이 있음(기본 true)
+  wishes?: boolean; // 위시를 저장한 흔적(등록 화면을 연 기록)이 있음(기본 = seed)
   expiredSec?: number; // 저장된 세션이 만료된 지 몇 초(기본 2시간, 음수 = 아직 유효)
   before?: (c: Ctx, kind: Kind) => Promise<void>; // 앞선 실행
   setup?: (c: Ctx) => void;
@@ -276,6 +302,7 @@ async function runCase(kind: Kind, cs: Case): Promise<Outcome> {
     s.expires_at = Math.floor(Date.now() / 1000) - (cs.expiredSec ?? 7200);
     await kv.setItem(KEY, JSON.stringify(s));
   }
+  if (cs.wishes ?? cs.seed !== false) await kv.setItem('wishshot.privacyNoticeShown.v2', '1');
   if (cs.before) await cs.before({ kv, server }, kind);
   cs.setup?.({ kv, server });
   kv.relaunch();
@@ -284,6 +311,7 @@ async function runCase(kind: Kind, cs: Case): Promise<Outcome> {
   const booting = l.boot().then((b) => (boot = b));
   await sleep(cs.wait);
   await Promise.race([booting, sleep(1000)]);
+  const delivered = l.delivered();
   const note = cs.after ? await cs.after(l, { kv, server }, boot) : '';
   const account = await accountNow(l);
   l.stop();
@@ -295,7 +323,7 @@ async function runCase(kind: Kind, cs: Case): Promise<Outcome> {
     again = `${b2}/${await accountNow(l2)}`;
     l2.stop();
   }
-  return { boot, account, again, signups: server.signups, staleUses: server.staleUses, note };
+  return { boot, delivered, account, again, signups: server.signups, staleUses: server.staleUses, note };
 }
 
 // 사례를 한꺼번에 돌린다(시간이 겹치므로 전체 시간 = 가장 긴 사례). 어긋난 사례를 모두 모아 실패시킨다.
@@ -325,29 +353,41 @@ function scenario(name: string, cases: Case[]) {
 
 // ── 사례 ────────────────────────────────────────────────────
 const recovered = { again: 'ready/OLD', signups: 0 };
+const cameBack = { delivered: 'OLD', account: 'OLD', ...recovered }; // 저절로 돌아와 앱이 세션을 받음
 
 scenario('통신 실패·서버 오류: 새 계정을 만들지 않고 기존 계정으로 저절로 돌아온다', [
-  { name: '재발급 통신 실패 60초(가입은 됨)', net: tokenOnly(until(60e3, () => 'down')), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '재발급만 503 60초', net: tokenOnly(until(60e3, () => jres(503, {}))), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '완전 오프라인 40초', net: until(40e3, () => 'down'), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '403 HTML 40초', net: until(40e3, () => html(403)), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '429 40초', net: until(40e3, () => authError(429, 'over_request_rate_limit')), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '402 사용량 제한 40초', net: until(40e3, () => jres(402, { message: 'exceed_egress_quota' })), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '540 프로젝트 정지 40초', net: until(40e3, () => html(540)), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '409 conflict 1회', net: tokenOnly(until(5e3, () => authError(409, 'conflict'))), wait: 130e3, expect: { boot: 'offline', account: 'OLD', ...recovered } },
-  { name: '목록에 없는 400(user_banned)이 계속됨', net: tokenOnly(() => authError(400, 'user_banned')), wait: 20e3, relaunch: false, expect: { boot: 'offline', signups: 0 } },
-  { name: '정상 세션(만료 전)', expiredSec: -1800, wait: 5e3, expect: { boot: 'ready', account: 'OLD', ...recovered } },
+  { name: '재발급 통신 실패 60초(가입은 됨)', net: tokenOnly(until(60e3, () => 'down')), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '재발급만 503 60초', net: tokenOnly(until(60e3, () => jres(503, {}))), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '완전 오프라인 40초', net: until(40e3, () => 'down'), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '403 HTML 40초', net: until(40e3, () => html(403)), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '429 40초', net: until(40e3, () => authError(429, 'over_request_rate_limit')), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '402 사용량 제한 40초', net: until(40e3, () => jres(402, { message: 'exceed_egress_quota' })), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '540 프로젝트 정지 40초', net: until(40e3, () => html(540)), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '409 conflict 1회', net: tokenOnly(until(5e3, () => authError(409, 'conflict'))), wait: 130e3, expect: { boot: 'offline:OLD', ...cameBack } },
+  { name: '목록에 없는 400(user_banned)이 계속됨', net: tokenOnly(() => authError(400, 'user_banned')), wait: 20e3, relaunch: false, expect: { boot: 'offline:OLD', delivered: '(없음)', signups: 0 } },
+  { name: '정상 세션(만료 전)', expiredSec: -1800, wait: 5e3, expect: { boot: 'ready', ...cameBack } },
 ]);
 
 scenario('서버가 세션을 거절하면 lost: 새 계정을 만들지 않는다', [
-  { name: 'refresh_token_not_found', setup: ({ server }) => void (server.chains.get('OLD')!.dead = true), wait: 20e3, expect: { boot: 'lost:OLD', account: '(없음)', again: 'lost:OLD/(없음)', signups: 0 } },
+  { name: 'refresh_token_not_found', setup: ({ server }) => void (server.chains.get('OLD')!.dead = true), wait: 20e3, expect: { boot: 'lost:OLD', delivered: '(없음)', account: '(없음)', again: 'lost:OLD/(없음)', signups: 0 } },
   { name: 'session_expired', net: tokenOnly(() => authError(403, 'session_expired')), wait: 20e3, relaunch: false, expect: { boot: 'lost:OLD', signups: 0 } },
   { name: 'validation_failed', net: tokenOnly(() => authError(400, 'validation_failed')), wait: 20e3, relaunch: false, expect: { boot: 'lost:OLD', signups: 0 } },
   { name: '재발급 응답에 세션이 없음(AuthSessionMissingError)', net: tokenOnly(() => jres(200, {})), wait: 20e3, relaunch: false, expect: { boot: 'lost:OLD', signups: 0 } },
+  {
+    name: '저장소 목록을 읽지 못하면 위시 흔적을 모르니 lost(새로 시작하지 않음)',
+    setup: (c) => {
+      c.server.chains.get('OLD')!.dead = true;
+      c.kv.getAllKeys = () => Promise.reject(new Error('getAllKeys failed'));
+    },
+    wait: 20e3,
+    relaunch: false,
+    expect: { boot: 'lost:OLD', signups: 0 },
+    baseline: false,
+  },
 ]);
 
 scenario('저장소 읽기 실패·깨진 값은 "없음"이 아니다', [
-  { name: '세션 파일 읽기 1회 실패', setup: ({ kv }) => void (kv.failFileReads = 1), wait: 20e3, expect: { boot: 'offline', ...recovered } },
+  { name: '세션 파일 읽기 1회 실패', setup: ({ kv }) => void (kv.failFileReads = 1), wait: 20e3, expect: { boot: 'offline:-', delivered: '(없음)', ...recovered } },
   {
     name: '읽기 실패 뒤 다른 값 저장으로 목록에서 빠진 채 다시 켬(사본 있음)',
     before: async (c, kind) => {
@@ -358,9 +398,9 @@ scenario('저장소 읽기 실패·깨진 값은 "없음"이 아니다', [
       await c.kv.setItem('other', '1');
     },
     wait: 20e3,
-    expect: { boot: 'ready', account: 'OLD', ...recovered },
+    expect: { boot: 'ready', ...cameBack },
   },
-  { name: '저장값 깨짐, 사본 없음', setup: ({ kv }) => void kv.setItem(KEY, `{"access_token":"h.${'x'.repeat(1200)}`), wait: 20e3, expect: { boot: 'lost:-', again: 'lost:-/(없음)', signups: 0 } },
+  { name: '저장값 깨짐, 사본 없음', setup: ({ kv }) => void kv.setItem(KEY, `{"access_token":"h.${'x'.repeat(1200)}`), wait: 20e3, expect: { boot: 'lost:-', delivered: '(없음)', again: 'lost:-/(없음)', signups: 0 } },
   {
     name: '저장값 깨짐, 사본 있음',
     before: async (c, kind) => {
@@ -368,9 +408,9 @@ scenario('저장소 읽기 실패·깨진 값은 "없음"이 아니다', [
       await c.kv.setItem(KEY, `{"acc${'x'.repeat(1200)}`);
     },
     wait: 20e3,
-    expect: { boot: 'ready', account: 'OLD', ...recovered },
+    expect: { boot: 'ready', ...cameBack },
   },
-  { name: '사본 저장·읽기가 계속 실패', setup: ({ kv }) => { kv.failKeys.add(SESSION_COPY_KEY); kv.failKeys.add(SESSION_ARCHIVE_KEY); }, wait: 20e3, expect: { boot: 'ready', account: 'OLD', ...recovered } },
+  { name: '사본 저장·읽기가 계속 실패', setup: ({ kv }) => { kv.failKeys.add(SESSION_COPY_KEY); kv.failKeys.add(SESSION_ARCHIVE_KEY); }, wait: 20e3, expect: { boot: 'ready', ...cameBack } },
   {
     name: '사용 중(세션 확인 뒤) 세션 파일 읽기 실패',
     expiredSec: -1800,
@@ -388,9 +428,9 @@ scenario('저장소 읽기 실패·깨진 값은 "없음"이 아니다', [
 ]);
 
 scenario('새 설치: 지금처럼 새 익명 계정을 만든다', [
-  { name: '온라인', seed: false, wait: 10e3, expect: { boot: 'created', account: 'NEW1', again: 'ready/NEW1', signups: 1 } },
-  { name: '오프라인 → 다시 켬', seed: false, net: () => 'down', wait: 10e3, expect: { boot: 'offline', again: 'created/NEW1', signups: 1 } },
-  { name: '저장소 읽기가 처음부터 오류', seed: false, setup: ({ kv }) => void kv.failKeys.add(KEY), wait: 5e3, relaunch: false, expect: { boot: 'offline', signups: 0 } },
+  { name: '온라인', seed: false, wait: 10e3, expect: { boot: 'created', delivered: 'NEW1', account: 'NEW1', again: 'ready/NEW1', signups: 1 } },
+  { name: '오프라인 → 다시 켬', seed: false, net: () => 'down', wait: 10e3, expect: { boot: 'offline:-', delivered: '(없음)', again: 'created/NEW1', signups: 1 } },
+  { name: '저장소 읽기가 처음부터 오류', seed: false, setup: ({ kv }) => void kv.failKeys.add(KEY), wait: 5e3, relaunch: false, expect: { boot: 'offline:-', signups: 0 } },
   {
     name: '(한계) 저장소 목록 전체가 초기화되면 새 설치와 구분하지 못한다',
     before: async (c, kind) => {
@@ -412,7 +452,7 @@ scenario('사본이 없어도 쓴 흔적이 있으면 lost: 말없이 새 계정
       await kv.setItem('other', '1');
       return '';
     },
-    expect: { boot: 'offline', again: 'lost:-/(없음)', signups: 0 },
+    expect: { boot: 'offline:-', again: 'lost:-/(없음)', signups: 0 },
   },
   {
     name: '세션이 이미 지워진 채 첫 실행',
@@ -422,6 +462,43 @@ scenario('사본이 없어도 쓴 흔적이 있으면 lost: 말없이 새 계정
     },
     wait: 10e3,
     expect: { boot: 'lost:-', signups: 0 },
+  },
+]);
+
+const previousUserRecord = (server: FakeAuthServer) =>
+  server.signupBodies.at(-1)?.data?.previous_user_id ?? '없음';
+
+scenario('위시를 저장한 흔적이 없으면 끊겨도 화면 없이 새로 시작한다(잃을 위시가 없음)', [
+  {
+    name: '위시 없는 계정이 서버 정리로 지워짐(refresh_token_not_found)',
+    wishes: false,
+    setup: ({ server }) => void (server.chains.get('OLD')!.dead = true),
+    wait: 20e3,
+    after: (_l, { kv, server }) =>
+      Promise.resolve(`보관=${archivedUsers(kv)}, 이전 계정 기록=${previousUserRecord(server)}`),
+    expect: { boot: 'restarted', delivered: 'NEW1', again: 'ready/NEW1', signups: 1, note: '보관=OLD, 이전 계정 기록=OLD' },
+    baseline: false,
+  },
+  {
+    name: '흔적이 온보딩 기록뿐인데 세션이 이미 지워진 채 첫 실행',
+    wishes: false,
+    before: async ({ kv }) => {
+      await kv.setItem('wishshot.onboardingShown', '1');
+      await kv.removeItem(KEY);
+    },
+    wait: 10e3,
+    after: (_l, { server }) => Promise.resolve(`이전 계정 기록=${previousUserRecord(server)}`),
+    expect: { boot: 'restarted', delivered: 'NEW1', signups: 1, note: '이전 계정 기록=없음' },
+    baseline: false,
+  },
+  {
+    name: '새로 시작의 가입이 실패하면 연결 실패(다시 시도하면 같은 판정)',
+    wishes: false,
+    setup: ({ server }) => void (server.chains.get('OLD')!.dead = true),
+    net: signupOnly(() => 'down'),
+    wait: 20e3,
+    expect: { boot: 'offline:OLD', delivered: '(없음)', again: 'restarted/NEW1', signups: 1 },
+    baseline: false,
   },
 ]);
 
@@ -438,7 +515,7 @@ async function staleCopy(c: Ctx) {
 }
 
 scenario('낡은 사본을 쓰지 않는다(쓰면 서버가 세션을 끝낸다)', [
-  { name: '원래 값이 정상이면 원래 값을 쓴다', before: staleCopy, wait: 20e3, expect: { boot: 'ready', account: 'OLD', ...recovered } },
+  { name: '원래 값이 정상이면 원래 값을 쓴다', before: staleCopy, wait: 20e3, expect: { boot: 'ready', ...cameBack } },
   {
     name: '원래 값 읽기에 실패해도 사본을 쓰지 않는다',
     before: async (c) => {
@@ -446,12 +523,20 @@ scenario('낡은 사본을 쓰지 않는다(쓰면 서버가 세션을 끝낸다
       c.kv.failFileReads = 1;
     },
     wait: 20e3,
-    expect: { boot: 'offline', ...recovered },
+    expect: { boot: 'offline:OLD', delivered: '(없음)', ...recovered }, // 문의 번호는 사본의 사용자 id 로(토큰은 안 씀)
   },
 ]);
 
 scenario('사용 중 만료 + 403 이 이어져도 세션을 지우지 않는다', [
-  { name: '403 HTML 3분 → 회복', expiredSec: -60, net: (t) => (t > 0 && t < 180e3 ? html(403) : null), wait: 290e3, expect: { account: 'OLD', ...recovered } },
+  {
+    name: '403 HTML 3분 → 회복',
+    expiredSec: -60,
+    net: (t) => (t < 180e3 ? html(403) : null),
+    wait: 290e3,
+    // 시작 때는 아직 유효한 세션이 전달되므로, 403 이 끝난 뒤 실제로 재발급됐는지는 TOKEN_REFRESHED 시각으로 본다
+    after: (l) => Promise.resolve(l.refreshedAt() >= 180e3 ? '403이 끝난 뒤 재발급' : `재발급 시각=${l.refreshedAt()}`),
+    expect: { delivered: 'OLD', account: 'OLD', note: '403이 끝난 뒤 재발급', ...recovered },
+  },
 ]);
 
 scenario('다른 사용자의 세션이 저장되면 옛 계정을 보관한다', [
@@ -499,8 +584,25 @@ scenario('새로 시작·로그아웃', [
     baseline: false,
   },
   {
+    name: '보관 목록 저장이 실패해도 새로 시작은 된다',
+    setup: ({ kv, server }) => {
+      server.chains.get('OLD')!.dead = true;
+      kv.failKeys.add(SESSION_ARCHIVE_KEY);
+    },
+    wait: 20e3,
+    relaunch: false,
+    after: async (l, { kv }, boot) => {
+      if (!boot.startsWith('lost')) return '(lost 아님)';
+      const started = await runStartOver(l.client.auth, l.vault);
+      return `새로 시작=${started}, 저장된 계정=${storedUser(kv.peek(KEY))}`;
+    },
+    expect: { boot: 'lost:OLD', signups: 1, note: '새로 시작=true, 저장된 계정=NEW1' },
+    baseline: false,
+  },
+  {
     name: '사용자가 고른 로그아웃은 세션과 사본을 지운다',
     expiredSec: -1800,
+    wishes: false, // 위시 흔적이 있으면 다음 실행은 끊긴 세션으로 본다(로그아웃은 지금 개발용만)
     wait: 5e3,
     after: async (l, { kv }) => {
       await l.vault.allowRemoval(() => l.client.auth.signOut());
@@ -634,6 +736,9 @@ Deno.test({
     const second = await vault.storage.getItem(KEY); // 오류 없이 "없음"이 되지만 사본을 쓰지 않는다
     eq([first, second, vault.state()], [null, null, 'unreadable']);
     eq(JSON.parse(kv.peek(SESSION_COPY_KEY)!).userId, 'U1', '사본은 남아 있음');
+    // 문의 번호용으로는 사본의 사용자 id 를 읽지만, 그 뒤에도 세션 대신 사본을 돌려주지 않는다
+    eq([vault.knownUserId(), await vault.inquiryUserId()], [null, 'U1'], '문의 번호용 id');
+    eq(await vault.storage.getItem(KEY), null, '사본을 쓰지 않음');
   },
 });
 
@@ -656,13 +761,48 @@ Deno.test({
   ignore: BASELINE,
   async fn() {
     const kv = new FakeAsyncStorage();
+    await kv.setItem('ph_some_key', '1'); // 계측 SDK 키는 흔적이 아니다(흔적은 vault 를 만들 때의 키로 본다)
     const vault = createSessionVault(kv);
-    await kv.setItem('ph_some_key', '1'); // 계측 SDK 키는 흔적이 아니다
     eq(await vault.hasUsageTrace(), false, '흔적 없음');
     for (const k of ['wishshot.onboardingShown', 'wishshot.signedurl.u/1.jpg', SESSION_ARCHIVE_KEY]) {
       const one = new FakeAsyncStorage();
       await one.setItem(k, '1');
       eq(await createSessionVault(one).hasUsageTrace(), true, k);
     }
+  },
+});
+
+Deno.test({
+  name: '저장 어댑터: 위시를 저장한 흔적 판단(온보딩 기록·사본만으로는 아니다)',
+  ignore: BASELINE,
+  async fn() {
+    const none = new FakeAsyncStorage();
+    await none.setItem('wishshot.onboardingShown', '1');
+    await none.setItem(SESSION_COPY_KEY, '{}');
+    eq(await createSessionVault(none).hasWishTrace(), false, '흔적 없음');
+    const keys = [
+      'wishshot.privacyNoticeShown.v2',
+      'wishshot.privacyNoticeShown',
+      'wishshot.regionNoticeShown',
+      'wishshot.signedurl.u/1.jpg',
+      'wishshot.notifications',
+    ];
+    for (const k of keys) {
+      const one = new FakeAsyncStorage();
+      await one.setItem(k, '1');
+      eq(await createSessionVault(one).hasWishTrace(), true, k);
+    }
+  },
+});
+
+Deno.test({
+  name: '저장 어댑터: 쓴 흔적은 실행이 시작할 때의 키로 본다(시작하며 지운 만료 캐시도 흔적)',
+  ignore: BASELINE,
+  async fn() {
+    const kv = new FakeAsyncStorage();
+    await kv.setItem('wishshot.signedurl.u/1.jpg', '1');
+    const vault = createSessionVault(kv);
+    await kv.removeItem('wishshot.signedurl.u/1.jpg'); // hydrateSignedUrlCache 가 만료된 캐시를 지움
+    eq(await vault.hasUsageTrace(), true);
   },
 });
