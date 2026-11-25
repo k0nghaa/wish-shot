@@ -19,9 +19,7 @@ import {
   signOut,
   uploadItemImageThumb,
 } from '@/lib/queries';
-
-// 지원 이메일 — docs/legal/support.html·개인정보 방침과 통일된 주소(새 주소 금지).
-const SUPPORT_EMAIL = 'wishshot2026@gmail.com';
+import { feedbackMailUrl, SUPPORT_EMAIL } from '@/lib/supportMail';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -31,7 +29,7 @@ export default function SettingsScreen() {
 
   // 의견 보내기: 앱 안 피드백 경로는 메일 하나다. 모든 사용자에게 보인다.
   function handleSendFeedback() {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('WishShot 의견')}`).catch(() => {
+    Linking.openURL(feedbackMailUrl()).catch(() => {
       Alert.alert('메일 열기 실패', `${SUPPORT_EMAIL} 으로 보내주세요.`);
     });
   }

@@ -7,13 +7,14 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
 import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
+import { LostSessionScreen, OfflineScreen } from '@/components/SessionNotice';
 import { ShareIntentHandler } from '@/components/ShareIntentHandler';
 import { SnackbarHost } from '@/components/SnackbarHost';
 import { colors } from '@/constants/theme';
 import { identifyUser, initAnalytics, installJsErrorCapture } from '@/lib/analytics';
 import { initMonitoring, wrapRoot } from '@/lib/monitoring';
 import { hydrateNotifications } from '@/lib/notifications';
-import { hydrateSignedUrlCache, signInAnonymouslyIfNeeded } from '@/lib/queries';
+import { bootstrapSession, hydrateSignedUrlCache, type BootResult } from '@/lib/queries';
 import { wasLaunchedByShare } from '@/lib/shareIntent';
 import { supabase } from '@/lib/supabase';
 
@@ -36,18 +37,23 @@ function RootLayout() {
 
 export default wrapRoot(RootLayout);
 
+// 시작 확인이 이보다 오래 걸리면 확인이 끝나기 전에 연결 실패 화면을 보인다(재발급 재시도는 약 27초).
+const SLOW_BOOT_MS = 8000;
+
 function AuthGate() {
   const [session, setSession] = useState<Session | null>(null);
-  const [ready, setReady] = useState(false);
-  // 첫 세션을 한 번이라도 받은 뒤에는, 세션이 잠깐 null 이 돼도(개발용 세션 리셋 등)
+  // 첫 세션을 한 번이라도 받은 뒤에는, 세션이 잠깐 null 이 돼도(개발용 세션 리셋, 사용 중 재발급 실패 등)
   // 네비게이터를 언마운트하지 않는다. 언마운트→재마운트가 라우트를 엉뚱하게(모달) 재구성해
   // register 로 튀거나 뒤로가기(GO_BACK)가 깨지는 문제를 피한다.
   const [everHadSession, setEverHadSession] = useState(false);
+  const [boot, setBoot] = useState<BootResult | null>(null); // null = 확인 중
+  const [slow, setSlow] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    // 세션이 없으면 익명 로그인으로 부트스트랩한다(로그인 벽 없음, 기기별 세션).
-    // signInAnonymously 성공 시 onAuthStateChange 가 새 세션을 흘려보낸다.
+    // 시작 판정(bootstrapSession): 이 기기에서 세션을 쓴 적이 없을 때만 새 익명 계정을 만든다(로그인 벽 없음).
+    // 세션 자체는 onAuthStateChange 로 받는다 — 연결 실패·끊긴 세션 화면을 띄운 뒤에도 auth-js 의 자동 갱신이나
+    // "새로 시작"으로 세션이 오면 저절로 앱으로 넘어간다.
     // 세션 리셋 후의 재익명 로그인은 설정 화면 핸들러가 소유한다(중복 생성 방지).
     const apply = (next: Session | null) => {
       setSession(next);
@@ -65,32 +71,28 @@ function AuthGate() {
     void hydrateSignedUrlCache();
     // 기기 안 알림·'못 찾은 위시' 기록 복원(탭 배지·타일 점·편집 자리표시). 실패는 빈 목록.
     void hydrateNotifications();
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!cancelled) apply(data.session);
-      if (!data.session) {
-        try {
-          await signInAnonymouslyIfNeeded();
-        } catch (e) {
-          // 익명 로그인 실패(예: 대시보드 토글 OFF) — 스피너에 머무르되 원인을 남긴다.
-          console.error(e);
-        }
-      }
-      if (!cancelled) setReady(true);
-    })();
+    void bootstrapSession().then((result) => {
+      if (!cancelled) setBoot(result);
+    });
+    const slowTimer = setTimeout(() => {
+      if (!cancelled) setSlow(true);
+    }, SLOW_BOOT_MS);
+    // 구독하면 auth-js 가 지금 세션을 INITIAL_SESSION 으로 먼저 보낸다. 콜백 안에서 getSession 을 기다리지 않는다(교착).
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
       if (!cancelled) apply(next);
     });
     return () => {
       cancelled = true;
+      clearTimeout(slowTimer);
       sub.subscription.unsubscribe();
     };
   }, []);
 
-  // 최초 부트스트랩(익명 로그인 포함) 완료 전에만 스피너 — 보호 화면이 세션 없이 마운트돼
-  // "permission denied for table ..." 오류가 뜨는 것을 막는다. 이후 세션이 잠깐 null 이어도
-  // (개발용 리셋 중) 네비게이터는 유지한다.
-  if (!ready || (!session && !everHadSession)) {
+  // 첫 세션을 받기 전에는 앱 화면을 그리지 않는다 — 보호 화면이 세션 없이 마운트돼
+  // "permission denied for table ..." 오류가 뜨는 것을 막는다. 이후 세션이 잠깐 null 이어도 네비게이터는 유지한다.
+  if (!session && !everHadSession) {
+    if (boot?.status === 'lost') return <LostSessionScreen userId={boot.userId} />;
+    if (boot?.status === 'offline' || slow) return <OfflineScreen />;
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />
