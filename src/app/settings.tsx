@@ -1,3 +1,4 @@
+import { reloadAppAsync } from 'expo';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -12,6 +13,8 @@ import { isMonitoringEnabled, triggerNativeCrashForTest } from '@/lib/monitoring
 import { readImageBytes } from '@/lib/imageBytes';
 import { makeThumbnail } from '@/lib/imageResize';
 import {
+  devSimulateFreshInstall,
+  devSimulateSessionProblem,
   getCurrentUserId,
   getItemImageSignedUrl,
   listItems,
@@ -19,9 +22,7 @@ import {
   signOut,
   uploadItemImageThumb,
 } from '@/lib/queries';
-
-// 지원 이메일 — docs/legal/support.html·개인정보 방침과 통일된 주소(새 주소 금지).
-const SUPPORT_EMAIL = 'wishshot2026@gmail.com';
+import { feedbackMailUrl, SUPPORT_EMAIL } from '@/lib/supportMail';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function SettingsScreen() {
 
   // 의견 보내기: 앱 안 피드백 경로는 메일 하나다. 모든 사용자에게 보인다.
   function handleSendFeedback() {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('WishShot 의견')}`).catch(() => {
+    Linking.openURL(feedbackMailUrl()).catch(() => {
       Alert.alert('메일 열기 실패', `${SUPPORT_EMAIL} 으로 보내주세요.`);
     });
   }
@@ -47,6 +48,63 @@ export default function SettingsScreen() {
     } catch (e) {
       Alert.alert('오류', e instanceof Error ? e.message : '세션 초기화에 실패했습니다.');
     }
+  }
+
+  // 시작 화면 확인용(__DEV__ 전용): 개발용 앱은 Metro 에서 JS 를 받아 비행기 모드로 다시 켤 수 없어서,
+  // 연결 실패·서버 거절·새 설치를 흉내 낸 뒤 앱을 다시 시작해 연결 실패·끊긴 세션 화면을 본다.
+  // "적용"만 누르면 앱을 끈 뒤 공유 시트로 열어 공유로 연 실행을 확인할 수 있다.
+  function runDevSimulation(apply: () => Promise<void>, restart: boolean) {
+    apply()
+      .then(() =>
+        restart
+          ? reloadAppAsync()
+          : Alert.alert('적용했습니다', '앱을 완전히 끈 뒤 홈 화면이나 공유 시트에서 여세요.')
+      )
+      .catch((e) => Alert.alert('오류', e instanceof Error ? e.message : '적용하지 못했습니다.'));
+  }
+
+  const simulateOffline = (restart: boolean) =>
+    runDevSimulation(() => devSimulateSessionProblem('offline'), restart);
+
+  function handleDevSimulateOffline() {
+    Alert.alert(
+      '연결 실패 흉내',
+      '다시 시작할 때까지, 그리고 다음 실행 40초 동안 연결이 끊긴 것처럼 보입니다. 저장된 세션은 만료된 것으로 바뀝니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '적용', onPress: () => simulateOffline(false) },
+        { text: '적용 후 다시 시작', onPress: () => simulateOffline(true) },
+      ]
+    );
+  }
+
+  function handleDevSimulateReject() {
+    Alert.alert(
+      '서버 거절 흉내',
+      '다음 실행에서 서버가 세션을 거절한 것처럼 보입니다. 다시 시도하면 지금 계정으로 돌아오고, 새로 시작하면 새 계정이 됩니다. 이 기기에 위시를 저장한 흔적(등록 화면에서 사진을 고른 기록 등)이 없으면 화면 없이 바로 새 계정이 됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '적용 후 다시 시작',
+          onPress: () => runDevSimulation(() => devSimulateSessionProblem('reject'), true),
+        },
+      ]
+    );
+  }
+
+  function handleDevSimulateFreshInstall() {
+    Alert.alert(
+      '새 설치 흉내',
+      '앱을 지운 것처럼 기기의 세션과 기록을 모두 지우고, 다음 실행 40초 동안 연결이 끊긴 것처럼 보입니다. 지금 계정은 이 기기에서 되찾을 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '지우고 다시 시작',
+          style: 'destructive',
+          onPress: () => runDevSimulation(devSimulateFreshInstall, true),
+        },
+      ]
+    );
   }
 
   // 온보딩 재검증용: 플래그를 지워 다음 앱 실행 시 온보딩이 다시 뜨게 한다(__DEV__ 전용).
@@ -160,6 +218,30 @@ export default function SettingsScreen() {
               accessibilityLabel="이메일 로그인(개발용)"
             >
               <Text style={styles.devButtonText}>이메일 로그인(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevSimulateOffline}
+              accessibilityRole="button"
+              accessibilityLabel="연결 실패 흉내(개발용)"
+            >
+              <Text style={styles.devButtonText}>연결 실패 흉내(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevSimulateReject}
+              accessibilityRole="button"
+              accessibilityLabel="서버 거절 흉내(개발용)"
+            >
+              <Text style={styles.devButtonText}>서버 거절 흉내(개발용)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevSimulateFreshInstall}
+              accessibilityRole="button"
+              accessibilityLabel="새 설치 흉내(개발용)"
+            >
+              <Text style={styles.devButtonText}>새 설치 흉내(개발용)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.devButton}

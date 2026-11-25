@@ -6,7 +6,7 @@ WishShot(위시샷) 앱을 로컬에서 실행하고, 빌드·출시하고, DB·
 
 - **앱**: Expo SDK 57 (React Native 0.86) + Expo Router + TypeScript, iOS 전용
 - **백엔드**: Supabase (Postgres + Storage + Auth), `@supabase/supabase-js`로 직접 호출 + RLS
-- **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. (계정 연결은 보류)
+- **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. 세션을 확인하지 못해도 새 계정을 만들지 않는다 — 아래 "익명 세션 지키기". (계정 연결은 보류)
 - **공유 시트**: `expo-share-intent` (iOS Share Extension). 받은 공유는 루트 레이아웃의 공유 처리기(`ShareIntentHandler`)가 어느 탭·화면에서든 처리합니다 — 사진은 등록 폼, URL은 전체 탭 링크 저장 모드. 등록·편집 폼을 작성 중이면 [지금 열기](작성 중인 내용 버림)·[저장 후 열기](폼을 닫으면 이어서 열림) 중에서 고르게 묻습니다
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
 - **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**. 요청 한도(사용자·전체)·입력 크기 상한으로 API 비용 제한
@@ -56,6 +56,7 @@ $env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wi
 | `npx expo lint` | ESLint |
 | `npx expo-doctor` | 설정·의존성 정합성 점검(패치 미스매치가 나와도 `expo install --fix`는 하지 않음) |
 | `deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts` | 구매처 함수 순수 로직 + 앱 입구 채널 판별 단위 시험(네트워크·키 없음) |
+| `deno test --no-lock supabase/tests/session_vault_test.ts supabase/tests/support_mail_test.ts` | 세션 저장 어댑터·시작 판정 + 문의 메일 주소 시험(약 30초, `node_modules` 필요 — 설치된 supabase-js를 가짜 서버·가짜 저장소에 연결). 끝에 `-- --baseline`을 붙이면 고치기 전 동작으로 같은 사례를 돌려 실패를 보인다 |
 | `deno check --no-lock supabase/functions/find-purchase-links/index.ts` | 구매처 함수 타입 검사 |
 | `npx expo-updates runtimeversion:resolve --platform ios` | 지금 코드의 runtimeVersion(fingerprint) 확인 — `APP_VARIANT`가 없는 셸에서 |
 
@@ -212,6 +213,25 @@ Free 플랜(월 Egress 5GB)을 출시·성장까지 유지하기 위해 이미�
 - 적용·활성화는 사람이 합니다: 마이그레이션 실행 → dry-run 카운트 확인 → cron 등록,
   `npx supabase@2.121.0 secrets set CRON_SECRET=<임의 난수>` → `npx supabase@2.121.0 functions deploy cleanup-orphan-images`
   (JWT 검증 해제는 `supabase/config.toml`의 `verify_jwt = false`가 배포 시 적용) → dryRun 확인 → 주간 스케줄 등록.
+
+## 익명 세션 지키기
+
+익명 사용자는 기기에 저장된 세션이 계정의 유일한 열쇠입니다. 그래서 앱이 스스로 새 계정을 만들거나 저장된 세션을 지우지 않습니다.
+
+- **시작 판정**(`bootstrapSession`, 앱 시작 1회): 세션이 있으면 그대로 씁니다. 세션도 사본도 없고 이 기기에서 앱을 쓴 흔적(온보딩 기록·이미지 주소 캐시 등)도 없을 때만 새 익명 계정을 만듭니다.
+  - **연결 실패 화면**: 확인하지 못함(통신 실패·5xx·403·429·402·540 등, 저장소 읽기 실패). 8초가 넘어도 보입니다. 저절로 복구되면 앱으로 들어갑니다. [다시 시도] 문의 — 계속 실패하는 오류(서버 차단·풀리지 않는 사용량 제한 등)에서도 연락할 수 있게 문의를 둡니다.
+  - **끊긴 세션 화면**: 서버가 세션을 거절(`refresh_token_not_found`·`refresh_token_already_used`·`session_expired`·`validation_failed`·세션 없음 응답)했거나 저장값이 깨졌거나 사라짐. [다시 시도] [새로 시작] 문의.
+  - **위시를 저장한 흔적이 없으면** 끊겨도 화면 없이 새로 시작합니다(옛 계정 기록·보관은 같음). 위시 없는 익명 계정은 서버가 30일 뒤 지우므로(`0002`), 그대로 두면 이런 사용자가 30일마다 끊긴 세션 화면을 봅니다. 흔적 = 등록 화면을 연 기록(`wishshot.privacyNoticeShown*`)·제품 영역 고지·이미지 주소 캐시·링크 알림 기록. 흔적은 실행이 시작할 때의 키로 봅니다(시작하며 지우는 만료 캐시에 흔들리지 않게).
+  - 다시 시도는 앱 새로고침입니다. auth-js가 재발급 실패를 60초 동안 저장해 두어, 같은 실행에서 다시 확인하면 같은 실패를 돌려받습니다.
+- **세션 저장소**(`src/lib/sessionVault.ts`): AsyncStorage를 감쌉니다. auth-js가 재발급 실패 뒤 세션을 스스로 지우는 것을 무시하고(다음 자동 갱신이 같은 세션으로 다시 시도), 사용자가 고른 로그아웃(`signOut`)만 지웁니다. 사용자 id·refreshToken 사본(`wishshot.sessionCopy`)은 원래 값이 확실히 없거나 깨졌을 때만 씁니다 — 읽기에 실패했을 때 낡은 사본을 쓰면 서버가 세션 전체를 끝냅니다. 다른 계정의 세션이 저장되면 옛 계정을 `wishshot.sessionArchive`에 보관합니다(최근 5개). **저장 키(`sb-<프로젝트>-auth-token`)는 바꾸지 않습니다** — 바꾸면 모든 사용자의 세션이 사라집니다.
+- **새로 시작**: 지금 계정을 보관하고 새 익명 계정을 만듭니다. 새 계정의 `user_metadata.previous_user_id`에 옛 계정 id가 남습니다.
+- **사용자가 고른 로그아웃**(`signOut`, 지금은 `__DEV__` 세션 초기화만)은 세션과 사본을 지웁니다. 바로 새 계정을 만들지 않은 채 다시 켜면, 위시 흔적이 있는 기기는 끊긴 세션으로 봅니다.
+- **문의**: 메일 제목은 끊긴 세션 화면이 "WishShot 기존 위시 찾기", 연결 실패 화면이 "WishShot 연결 문의"이고, 본문에는 문의 번호(이 기기 계정 id 앞 8자, 모르면 없음)만 넣습니다. 전체 id·토큰은 넣지 않습니다. 두 계정은 새 계정의 `previous_user_id`(전체 id)로 잇고, 문의 번호(앞 8자 — 스크린샷 등에 보일 수 있음)는 후보를 좁히는 데만 씁니다. 둘 다 본인 증거가 아니므로(`user_metadata`는 사용자가 바꿀 수 있음) 위시를 옮기기 전에 메일로 본인을 확인합니다. 옮기는 절차는 사람이 DB·Storage에서 합니다.
+- **대시보드 설정**: Authentication → Sessions의 세션 시간 제한·비활성 만료·사용자당 세션 1개는 꺼 둡니다. 켜면 정상 사용자도 끊긴 세션 화면을 봅니다.
+- **실기기 확인**: 개발용 앱은 Metro에서 JS를 받아 비행기 모드로는 다시 켤 수 없으므로, 설정의 `__DEV__` 흉내를 씁니다. 흉내는 누른 실행(다시 시작할 때까지)과 다음 실행 1회에만 적용되고, 실제 refreshToken은 서버로 가지 않습니다.
+  - **연결 실패 흉내**: 다음 실행 40초 동안 모든 요청 실패. "적용"만 누르고 앱을 끈 뒤 공유 시트로 열면 공유로 연 실행도 확인할 수 있습니다(제어 센터를 열면 앱이 비활성이 되어 받은 사진이 지워짐).
+  - **서버 거절 흉내**: 다음 실행에서 토큰 재발급이 `refresh_token_not_found` → 끊긴 세션 화면. 다시 시도하면 지금 계정으로 돌아오고, 새로 시작하면 새 계정이 됩니다. **위시 흔적이 없는 기기에서는 화면 없이 바로 새 계정이 됩니다** — 끊긴 세션 화면을 보려면 먼저 등록 화면에서 사진을 한 번 고릅니다(새 설치 흉내 뒤라면 특히).
+  - **새 설치 흉내**: 기기의 `wishshot.*`·세션 키를 지우고 다음 실행을 연결 실패로 시작합니다. 위시 흔적도 함께 지워집니다. 지금 계정은 이 기기에서 되찾을 수 없습니다.
 
 ## OCR 정제 Edge Function (`parse-screenshot-text`)
 
