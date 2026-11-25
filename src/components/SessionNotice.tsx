@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { colors, radius, spacing, type } from '@/constants/theme';
-import { startOver } from '@/lib/queries';
+import { getInquiryUserId, startOver } from '@/lib/queries';
 import {
   connectionMailUrl,
   inquiryNumber,
@@ -27,8 +27,10 @@ function reload() {
 }
 
 // 문의: 메일 앱을 연다. 열지 못하면 주소와 문의 번호를 보여 준다.
-function openInquiry(url: string, userId: string | null) {
-  Linking.openURL(url).catch(() => {
+// 화면이 받은 id 가 없으면(시작 확인이 끝나기 전에 뜬 연결 실패 화면 등) 누를 때 기기에서 읽는다.
+async function openInquiry(mailUrl: (userId: string | null) => string, shownUserId: string | null) {
+  const userId = shownUserId ?? (await getInquiryUserId().catch(() => null));
+  Linking.openURL(mailUrl(userId)).catch(() => {
     const number = inquiryNumber(userId);
     Alert.alert(
       '메일 열기 실패',
@@ -60,7 +62,7 @@ export function OfflineScreen({ userId }: { userId: string | null }) {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.textButton}
-          onPress={() => openInquiry(connectionMailUrl(userId), userId)}
+          onPress={() => void openInquiry(connectionMailUrl, userId)}
           accessibilityRole="button"
           accessibilityLabel="문의"
           accessibilityHint="메일 앱을 엽니다."
@@ -128,7 +130,7 @@ export function LostSessionScreen({ userId }: { userId: string | null }) {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.textButton, starting && styles.disabled]}
-          onPress={() => openInquiry(lostAccountMailUrl(userId), userId)}
+          onPress={() => void openInquiry(lostAccountMailUrl, userId)}
           disabled={starting}
           accessibilityRole="button"
           accessibilityLabel="문의"

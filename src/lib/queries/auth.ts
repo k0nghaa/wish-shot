@@ -47,6 +47,14 @@ export async function startOver(): Promise<void> {
   if (!(await runStartOver(supabase.auth, sessionVault))) throw new Error('새 계정을 만들지 못했습니다.');
 }
 
+/**
+ * 문의 번호용 사용자 id(이 기기에 저장된 계정 — 세션을 읽지 못했으면 사본의 id). 모르면 null.
+ * 시작 확인이 끝나기 전(8초 뒤 연결 실패 화면)에도 쓸 수 있다. 토큰은 쓰지 않는다.
+ */
+export function getInquiryUserId(): Promise<string | null> {
+  return sessionVault.inquiryUserId();
+}
+
 /** 사용자가 고른 로그아웃: 세션과 사본을 지운다(지금은 __DEV__ 세션 초기화만). */
 export async function signOut(): Promise<void> {
   const { error } = await sessionVault.allowRemoval(() => supabase.auth.signOut());
