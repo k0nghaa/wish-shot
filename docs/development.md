@@ -184,6 +184,7 @@ npx tsc --noEmit
 - RLS·GRANT·함수 권한·Storage 정책 점검은 `supabase/tests/audit.sql`(읽기 전용 한 문장 — 결과가 표 하나로 나옴)을 같은 방식으로 실행합니다.
 - 테스트 지표(링크 보유율·AI 정제 상태 분포·필드 수정률·추천 채택률)는 `supabase/tests/metrics.sql` 을 같은 방식으로 실행합니다(블록마다 코호트 시작 시각이 고정돼 있고, 개발자 uid는 `ops.internal_users`에서 읽음).
 - 요청 한도 검증은 `supabase/tests/quota.sql`(권한 확인 + 트랜잭션 안 동작 시험 후 rollback), AI 정제 실패 원인 조회는 `supabase/tests/parse_failures.sql` 을 같은 방식으로 실행합니다.
+- Claude 호출량(정제·구매처 찾기 호출 수 대비 실제 저장 수, 링크 찾기 실패 사유)은 `supabase/tests/claude_usage.sql`(읽기만)을 같은 방식으로 실행합니다. 금액은 Anthropic Console에서 봅니다.
 - 요청 한도 실제 동작 시험은 `supabase/tests/parse_quota_live.ts`(Deno, 공개 anon 키만 사용)로 합니다. 사용자 시간당 한도를 시크릿으로 잠시 낮춘 뒤 실행하고 바로 되돌립니다(실행 방법은 파일 상단 주석).
 - `src/types/database.ts` 는 자동 생성 파일이라 직접 수정하지 않습니다.
 

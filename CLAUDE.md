@@ -106,7 +106,7 @@ supabase/
     parse-screenshot-text/    # AI 정제. prompt.ts + samples/(회귀 케이스·eval.ts, 정답셋 측정 goldset-eval.ts·goldset-holdout.ts·goldset/LABELING.md·REPORT.md, 비교용 고정 사본 prompt-2026-10-04.ts). 정답셋 원문·결과(goldset/data·out)는 git 제외
     find-purchase-links/      # 구매처 링크: index(흐름·한도) · logic(순수 판정) · malls(몰 사전) · prompt · site(카페24 검색) · safety(Web Risk) · verify(접속 확인)
     cleanup-orphan-images/    # 고아 이미지 주간 스윕(service_role, x-cron-secret)
-  tests/                      # SQL Editor 용 검증 SQL(rls·audit·quota·purchase_link_quota·metrics·parse_failures) + Deno 시험(find_purchase_links_test·purchase_channel_test·parse_quota_live)
+  tests/                      # SQL Editor 용 검증·조회 SQL + Deno 시험(목록·실행 방법: docs/development.md)
 docs/
   README.md                   # 문서 안내 — 읽는 순서·작업 기록 목록·용어
   development.md              # 개발 가이드 — 절차·명령·수치 정본
