@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
 import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CategoryCard } from '@/components/CategoryCard';
 import { EmptyState } from '@/components/EmptyState';
+import { ListRefreshControl, LoadFailed, useListLoad } from '@/components/listLoad';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { colors, radius, spacing, type } from '@/constants/theme';
 import {
@@ -46,71 +47,63 @@ export default function CategoriesScreen() {
   const [rows, setRows] = useState<Row[] | null>(null); // null = 로딩 중
   const [deleteMode, setDeleteMode] = useState(false); // iOS 앨범 톤 카테고리 삭제 모드
 
+  // 실패하면 throw 한다 — 처음부터 못 불러오면 목록 자리에 실패 안내, 이미 불러온 목록이 있으면 스낵바(useListLoad).
   const load = useCallback(async () => {
-    try {
-      const [cats, items] = await Promise.all([listCategories(), listItems()]);
+    const [cats, items] = await Promise.all([listCategories(), listItems()]);
 
-      // items 는 최신순. 카테고리별 개수와 대표 이미지 키(최신 MOSAIC_TILES개)를 모은다.
-      const countByCat = new Map<string | null, number>();
-      const keysByCat = new Map<string | null, string[]>();
-      for (const it of items) {
-        const key = it.category_id;
-        countByCat.set(key, (countByCat.get(key) ?? 0) + 1);
-        const arr = keysByCat.get(key) ?? [];
-        if (arr.length < MOSAIC_TILES) {
-          arr.push(it.image_key);
-          keysByCat.set(key, arr);
-        }
+    // items 는 최신순. 카테고리별 개수와 대표 이미지 키(최신 MOSAIC_TILES개)를 모은다.
+    const countByCat = new Map<string | null, number>();
+    const keysByCat = new Map<string | null, string[]>();
+    for (const it of items) {
+      const key = it.category_id;
+      countByCat.set(key, (countByCat.get(key) ?? 0) + 1);
+      const arr = keysByCat.get(key) ?? [];
+      if (arr.length < MOSAIC_TILES) {
+        arr.push(it.image_key);
+        keysByCat.set(key, arr);
       }
-
-      // 카테고리는 비어 있어도(개수 0) 노출한다(UX 결정). 이름 카테고리 → 미분류 순.
-      const built: Row[] = [];
-      for (const c of cats) {
-        built.push({
-          id: c.id,
-          name: c.name,
-          count: countByCat.get(c.id) ?? 0,
-          thumbUrls: [],
-          fallbackUrls: [],
-          isUncat: false,
-        });
-      }
-      const uncatCount = countByCat.get(null) ?? 0;
-      if (uncatCount > 0) {
-        built.push({
-          id: 'uncategorized',
-          name: '미분류',
-          count: uncatCount,
-          thumbUrls: [],
-          fallbackUrls: [],
-          isUncat: true,
-        });
-      }
-
-      // 대표 이미지 signed URL 배치 발급(전 카테고리 키를 한 번에). 썸네일(우선)+원본(폴백) 함께.
-      const allKeys = built.flatMap((r) => keysByCat.get(r.isUncat ? null : r.id) ?? []);
-      const [thumbMap, origMap] = await Promise.all([
-        getItemThumbSignedUrls(allKeys),
-        getItemImageSignedUrls(allKeys),
-      ]);
-      for (const r of built) {
-        const keys = keysByCat.get(r.isUncat ? null : r.id) ?? [];
-        r.thumbUrls = keys.map((k) => thumbMap[k] ?? null);
-        r.fallbackUrls = keys.map((k) => origMap[k] ?? null);
-      }
-
-      setRows(built);
-    } catch (e) {
-      setRows([]);
-      Alert.alert('오류', e instanceof Error ? e.message : '불러오지 못했습니다.');
     }
+
+    // 카테고리는 비어 있어도(개수 0) 노출한다(UX 결정). 이름 카테고리 → 미분류 순.
+    const built: Row[] = [];
+    for (const c of cats) {
+      built.push({
+        id: c.id,
+        name: c.name,
+        count: countByCat.get(c.id) ?? 0,
+        thumbUrls: [],
+        fallbackUrls: [],
+        isUncat: false,
+      });
+    }
+    const uncatCount = countByCat.get(null) ?? 0;
+    if (uncatCount > 0) {
+      built.push({
+        id: 'uncategorized',
+        name: '미분류',
+        count: uncatCount,
+        thumbUrls: [],
+        fallbackUrls: [],
+        isUncat: true,
+      });
+    }
+
+    // 대표 이미지 signed URL 배치 발급(전 카테고리 키를 한 번에). 썸네일(우선)+원본(폴백) 함께.
+    const allKeys = built.flatMap((r) => keysByCat.get(r.isUncat ? null : r.id) ?? []);
+    const [thumbMap, origMap] = await Promise.all([
+      getItemThumbSignedUrls(allKeys),
+      getItemImageSignedUrls(allKeys),
+    ]);
+    for (const r of built) {
+      const keys = keysByCat.get(r.isUncat ? null : r.id) ?? [];
+      r.thumbUrls = keys.map((k) => thumbMap[k] ?? null);
+      r.fallbackUrls = keys.map((k) => origMap[k] ?? null);
+    }
+
+    setRows(built);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { status, run, retry, refreshing, refresh } = useListLoad(load);
 
   function openCategory(row: Row) {
     router.push({ pathname: '/category/[id]', params: { id: row.id, name: row.name } });
@@ -136,7 +129,7 @@ export default function CategoriesScreen() {
       if (!name) return;
       try {
         await createCategory(name);
-        load();
+        void run();
       } catch (e) {
         Alert.alert('오류', e instanceof Error ? e.message : '카테고리를 만들지 못했습니다.');
       }
@@ -168,7 +161,7 @@ export default function CategoriesScreen() {
         if (!name || name === row.name) return;
         try {
           await renameCategory(row.id, name);
-          load();
+          void run();
         } catch (e) {
           Alert.alert('오류', e instanceof Error ? e.message : '이름을 바꾸지 못했습니다.');
         }
@@ -190,7 +183,7 @@ export default function CategoriesScreen() {
           try {
             await deleteCategory(row.id);
             if (wasLast) setDeleteMode(false);
-            load();
+            void run();
           } catch (e) {
             Alert.alert('오류', e instanceof Error ? e.message : '삭제하지 못했습니다.');
           }
@@ -252,9 +245,13 @@ export default function CategoriesScreen() {
       </View>
 
       {rows === null ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        status === 'failed' ? (
+          <LoadFailed onRetry={() => void retry()} refreshing={refreshing} onRefresh={refresh} />
+        ) : (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )
       ) : rows.length === 0 ? (
         <EmptyState
           title="아직 담은 위시가 없습니다"
@@ -268,6 +265,7 @@ export default function CategoriesScreen() {
           keyExtractor={(r) => r.id}
           numColumns={2}
           columnWrapperStyle={styles.column}
+          refreshControl={<ListRefreshControl refreshing={refreshing} onRefresh={refresh} />}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <View style={{ width: cardSize }}>

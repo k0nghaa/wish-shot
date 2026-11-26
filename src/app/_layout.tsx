@@ -3,7 +3,8 @@ import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 
-import { OnboardingOverlay } from '@/components/Onboarding/OnboardingOverlay';
+import { OnboardingCards } from '@/components/Onboarding/OnboardingCards';
+import { OnboardingGuide } from '@/components/Onboarding/OnboardingGuide';
 import { hasSeenOnboarding, markOnboardingSeen } from '@/components/Onboarding/onboardingStorage';
 import { OnboardingTargetProvider } from '@/components/Onboarding/onboardingTarget';
 import { ShareIntentHandler } from '@/components/ShareIntentHandler';
@@ -58,11 +59,15 @@ function AuthGate() {
     void hydrateSignedUrlCache();
     // 기기 안 알림·'못 찾은 위시' 기록 복원(탭 배지·타일 점·편집 자리표시). 실패는 빈 목록.
     void hydrateNotifications();
-    // 기기 상태가 바뀌면(로그인·로그아웃·서버 거절·삭제) 알림을 받아 화면을 바꾼다.
+    // 기기 상태가 바뀌면(로그인·로그아웃·서버 거절·삭제) 알림을 받아 화면을 바꾼다. 첫 읽기를 마치기 전의 unreadable 은
+    // 받지 않는다 — 스플래시를 유지한 채 다시 읽는 중이다(받으면 첫 실패에 바로 실패 화면이 뜬다).
+    let loaded = false;
     const unsubscribe = subscribeAccountState((next) => {
-      if (!cancelled) setState(next);
+      if (cancelled || (!loaded && next.kind === 'unreadable')) return;
+      setState(next);
     });
     void loadStartState().then((first) => {
+      loaded = true;
       if (!cancelled) setState(first);
     });
     // 서버 거절 지켜보기·합치기 재시도·Apple 연결 확인.
@@ -93,7 +98,12 @@ function AuthGate() {
   // (화면이 사라지면 결과를 처리하던 코드가 끊긴다).
   const keepSignIn = pathname === '/sign-in';
   // 등록·편집 폼이 떠 있는 동안 서버가 세션을 거절해도 폼은 닫지 않는다(작성 내용 유지) — 저장할 때 로그인 화면을 띄운다.
+  // 폼 위에 로그인 화면을 띄운 동안에도(경로가 /sign-in) 폼을 스택에 남긴다 — 가드가 꺼지면 폼이 스택에서 빠져 작성 내용을 잃고,
+  // 로그인(또는 로그인 없이 시작) 뒤 돌아올 곳이 없다(P-24).
   const formOpen = pathname === '/register' || /^\/item\/[^/]+\/edit$/.test(pathname);
+  const [formUnderSignIn, setFormUnderSignIn] = useState(false);
+  const nextFormUnderSignIn = formOpen || (pathname === '/sign-in' && formUnderSignIn);
+  if (nextFormUnderSignIn !== formUnderSignIn) setFormUnderSignIn(nextFormUnderSignIn);
   const keepDeleting = pathname === '/account/deleting';
 
   if (!state) return null; // 스플래시 유지
@@ -112,7 +122,7 @@ function AuthGate() {
         <Stack.Protected guard={appReady || kind === 'deleting' || (kind === 'fresh' && keepDeleting)}>
           <Stack.Screen name="account/deleting" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
         </Stack.Protected>
-        <Stack.Protected guard={appReady || (needsSignIn && formOpen)}>
+        <Stack.Protected guard={appReady || (needsSignIn && (formOpen || formUnderSignIn))}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="category/[id]" />
           <Stack.Screen name="tag/[name]" />
@@ -152,7 +162,7 @@ function AuthGate() {
       </Stack>
       {/* 공유 시트 처리(앱 전체 1개): 로그인 화면이 떠 있는 동안 온 공유는 맡아 두었다가 앱 화면이 생기면 연다. */}
       <ShareIntentHandler />
-      <OnboardingGate ready={appReady} />
+      <OnboardingGate kind={kind} />
       {/* 앱 전체 스낵바(1개): FullWindowOverlay 에 그려 네이티브 모달 위에도 보인다. 보일 것이 없으면 그리지 않는다. */}
       <SnackbarHost />
     </OnboardingTargetProvider>
@@ -170,18 +180,33 @@ async function loadStartState(): Promise<StartState> {
   return state;
 }
 
-// 첫 실행 온보딩 게이트: 앱 화면이 생긴 뒤(ready) 최초 1회만 판단해 오버레이를 띄운다.
+// 첫 실행 온보딩 게이트. 순서는 카드 → 로그인 → 사용 안내다.
+// - 카드: 세션 없음 + 로그인한 적 없음(fresh)이거나 앱 화면을 쓸 수 있는 상태(익명·로그인)에서 아직 안 봤다면 띄운다.
+//   로그인 화면 위에 뜨고, 마치면 로그인 화면이 보인다. 건너뛰면 사용 안내 없이 '봤음'.
+// - 사용 안내: 카드를 마친 뒤 앱 화면이 생기고 전체 탭에 돌아왔을 때(닉네임·합치는 중이 끝난 뒤) 띄운다.
+//   로그인하면서 기존 위시가 있는 계정이면 데이터 레이어가 '봤음'으로 표시해 건너뛴다.
 // - 공유로 열렸으면 온보딩을 건너뛴다(공유 처리 우선). 플래그를 세우지 않아 다음 일반 실행에서 노출.
 //   공유 데이터는 늦게 도착하므로 첫 URL(공유 딥링크인지)로도 판단한다.
-// - 이미 본 적이 있으면 노출하지 않는다.
 // - 온보딩이 떠 있는 중에 공유가 오면 '봤음' 표시 없이 닫는다(공유 화면이 온보딩 모달에 가리지 않게).
-function OnboardingGate({ ready }: { ready: boolean }) {
+type OnboardingStage = 'none' | 'cards' | 'guidePending' | 'guide';
+
+function OnboardingGate({ kind }: { kind: StartState['kind'] | undefined }) {
   const { hasShareIntent } = useShareIntentContext();
-  const [visible, setVisible] = useState(false);
+  const pathname = usePathname();
+  const [stage, setStage] = useState<OnboardingStage>('none');
   const decided = useRef(false);
+  const ready = kind === 'anonymous' || kind === 'signed_in';
+  const canDecide = kind === 'fresh' || ready;
+
+  // 계정을 삭제하면 새 설치와 같은 흐름(온보딩 카드부터)으로 돌아간다 — 앱 화면을 쓰던 상태에서 fresh 로 바뀌면 다시 판단한다.
+  const prevReady = useRef(false);
+  useEffect(() => {
+    if (kind === 'fresh' && prevReady.current) decided.current = false;
+    prevReady.current = ready;
+  }, [kind, ready]);
 
   useEffect(() => {
-    if (!ready || decided.current) return;
+    if (!canDecide || decided.current) return;
     // 공유 값이 이미 와 있으면 이번엔 스킵(다음 실행에 노출).
     if (hasShareIntent) {
       decided.current = true;
@@ -193,23 +218,53 @@ function OnboardingGate({ ready }: { ready: boolean }) {
       // 판단 사이에 공유가 도착했거나(effect 정리) 언마운트됐으면 스킵.
       if (cancelled || decided.current) return;
       decided.current = true;
-      if (!seen && !wasLaunchedByShare()) setVisible(true);
+      if (!seen && !wasLaunchedByShare()) setStage('cards');
     })();
     return () => {
       cancelled = true;
     };
-  }, [hasShareIntent, ready]);
+  }, [hasShareIntent, canDecide, kind]);
+
+  // 카드를 마쳤고 앱 화면이 생겼으면 사용 안내 대기 → 전체 탭에 있을 때 보인다.
+  // 기존 계정으로 로그인해 데이터 레이어가 '봤음'으로 표시했으면 안내는 건너뛴다.
+  useEffect(() => {
+    if (stage !== 'guidePending' || !ready || pathname !== '/') return;
+    let cancelled = false;
+    void hasSeenOnboarding().then((seen) => {
+      if (cancelled) return;
+      setStage(seen ? 'none' : 'guide');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stage, ready, pathname]);
 
   // 온보딩 중 공유 도착 → 닫기(렌더 중 상태 조정 — 이 컴포넌트 자신의 상태만 바꾼다).
-  if (visible && hasShareIntent) setVisible(false);
+  if ((stage === 'cards' || stage === 'guide') && hasShareIntent) setStage('none');
 
-  if (!visible) return null;
-  return (
-    <OnboardingOverlay
-      onDone={() => {
-        setVisible(false);
-        void markOnboardingSeen();
-      }}
-    />
-  );
+  if (stage === 'cards') {
+    return (
+      <OnboardingCards
+        onDone={(result) => {
+          if (result === 'skipped') {
+            setStage('none');
+            void markOnboardingSeen();
+          } else {
+            setStage('guidePending');
+          }
+        }}
+      />
+    );
+  }
+  if (stage === 'guide') {
+    return (
+      <OnboardingGuide
+        onDone={() => {
+          setStage('none');
+          void markOnboardingSeen();
+        }}
+      />
+    );
+  }
+  return null;
 }

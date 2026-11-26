@@ -1,10 +1,11 @@
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
 import { ItemSelectionControls } from '@/components/ItemSelectionControls';
+import { ListRefreshControl, LoadFailed, useListLoad } from '@/components/listLoad';
 import { PhotoTile } from '@/components/PhotoTile';
 import { colors, spacing } from '@/constants/theme';
 import { useItemSelection } from '@/hooks/useItemSelection';
@@ -35,35 +36,28 @@ export default function CategoryItemsScreen() {
   const [fallbackUrls, setFallbackUrls] = useState<Record<string, string>>({}); // 원본(폴백)
   const [categories, setCategories] = useState<Category[]>([]);
 
+  // 실패하면 throw 한다 — 처음부터 못 불러오면 목록 자리에 실패 안내, 이미 불러온 목록이 있으면 스낵바(useListLoad).
   const load = useCallback(async () => {
-    try {
-      // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 카테고리 탭으로 돌아간다.
-      // dismissTo: 아래에 있는 탭 그룹까지 닫고 카테고리 탭으로(replace 는 탭 그룹을 하나 더 쌓는다).
-      const cats = await listCategories().catch(() => [] as Category[]);
-      if (!isUncat && !cats.some((c) => c.id === id)) {
-        router.dismissTo('/categories');
-        return;
-      }
-      const list = await listItemsByCategory(isUncat ? null : id);
-      const keys = list.map((it) => it.image_key);
-      const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
-      setItems(list);
-      setUrls(thumbMap);
-      setFallbackUrls(origMap);
-      setCategories(cats);
-    } catch (e) {
-      setItems([]);
-      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했습니다.');
+    // 이 카테고리가 (다른 화면에서) 삭제됐으면 빈 화면 대신 카테고리 탭으로 돌아간다.
+    // dismissTo: 아래에 있는 탭 그룹까지 닫고 카테고리 탭으로(replace 는 탭 그룹을 하나 더 쌓는다).
+    // 카테고리 목록을 못 불러온 것(통신 실패)은 삭제된 것이 아니다 — 돌아가지 않고 위시 목록만 불러온다.
+    const cats: Category[] | null = await listCategories().catch(() => null);
+    if (cats && !isUncat && !cats.some((c) => c.id === id)) {
+      router.dismissTo('/categories');
+      return;
     }
+    const list = await listItemsByCategory(isUncat ? null : id);
+    const keys = list.map((it) => it.image_key);
+    const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
+    setItems(list);
+    setUrls(thumbMap);
+    setFallbackUrls(origMap);
+    setCategories(cats ?? []);
   }, [id, isUncat, router]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { status, run, retry, refreshing, refresh } = useListLoad(load);
 
-  const selection = useItemSelection({ items, categories, setCategories, reload: load });
+  const selection = useItemSelection({ items, categories, setCategories, reload: run });
   // 선택·링크 찾기 상태가 바뀔 때만 그리드를 다시 그린다(매 렌더 새 배열이면 FlatList 비교가 깨짐).
   const gridExtra = useMemo(() => [selection.selected, linkState], [selection.selected, linkState]);
 
@@ -96,9 +90,13 @@ export default function CategoryItemsScreen() {
       </View>
 
       {items === null ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        status === 'failed' ? (
+          <LoadFailed onRetry={() => void retry()} refreshing={refreshing} onRefresh={refresh} />
+        ) : (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )
       ) : items.length === 0 ? (
         <EmptyState title="담은 위시가 없습니다" />
       ) : (
@@ -108,6 +106,7 @@ export default function CategoryItemsScreen() {
           numColumns={COLUMNS}
           contentContainerStyle={styles.list}
           extraData={gridExtra}
+          refreshControl={<ListRefreshControl refreshing={refreshing} onRefresh={refresh} />}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
