@@ -66,6 +66,16 @@ export const colorsDark: Record<ColorToken, string> = {
   overlay: 'rgba(0,0,0,0.6)',
 };
 
+/**
+ * 외부 브랜드 가이드가 색을 정한 버튼용 토큰 — 가이드대로 값을 바꾸지 않는다.
+ * 카카오 로그인 버튼: 바탕 #FEE500, 심볼 #000000, 글자 #000000 85% (카카오 디자인 가이드).
+ */
+export const brand = {
+  kakaoBackground: '#FEE500',
+  kakaoSymbol: '#000000',
+  kakaoLabel: 'rgba(0,0,0,0.85)',
+} as const;
+
 /** 간격 스케일 (4pt 기반) */
 export const spacing = {
   half: 2,
