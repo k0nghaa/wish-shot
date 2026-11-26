@@ -1,9 +1,10 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
+import { ListRefreshControl, LoadFailed, useListLoad } from '@/components/listLoad';
 import { PhotoTile } from '@/components/PhotoTile';
 import { useNotifications } from '@/hooks/useNotifications';
 import { colors, spacing } from '@/constants/theme';
@@ -23,25 +24,17 @@ export default function TagItemsScreen() {
   const [urls, setUrls] = useState<Record<string, string>>({}); // 썸네일(우선)
   const [fallbackUrls, setFallbackUrls] = useState<Record<string, string>>({}); // 원본(폴백)
 
+  // 실패하면 throw 한다 — 처음부터 못 불러오면 목록 자리에 실패 안내, 이미 불러온 목록이 있으면 스낵바(useListLoad).
   const load = useCallback(async () => {
-    try {
-      const list = await listItemsByTag(name);
-      const keys = list.map((it) => it.image_key);
-      const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
-      setItems(list);
-      setUrls(thumbMap);
-      setFallbackUrls(origMap);
-    } catch (e) {
-      setItems([]);
-      Alert.alert('오류', e instanceof Error ? e.message : '아이템을 불러오지 못했습니다.');
-    }
+    const list = await listItemsByTag(name);
+    const keys = list.map((it) => it.image_key);
+    const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
+    setItems(list);
+    setUrls(thumbMap);
+    setFallbackUrls(origMap);
   }, [name]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { status, retry, refreshing, refresh } = useListLoad(load);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -56,9 +49,13 @@ export default function TagItemsScreen() {
       </View>
 
       {items === null ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        status === 'failed' ? (
+          <LoadFailed onRetry={() => void retry()} refreshing={refreshing} onRefresh={refresh} />
+        ) : (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )
       ) : items.length === 0 ? (
         <EmptyState title="이 태그의 위시가 없습니다" />
       ) : (
@@ -68,6 +65,7 @@ export default function TagItemsScreen() {
           numColumns={COLUMNS}
           contentContainerStyle={styles.list}
           extraData={linkState}
+          refreshControl={<ListRefreshControl refreshing={refreshing} onRefresh={refresh} />}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}

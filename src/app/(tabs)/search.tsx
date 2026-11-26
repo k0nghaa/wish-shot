@@ -1,10 +1,11 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
+import { ListRefreshControl, LoadFailed, useListLoad } from '@/components/listLoad';
 import { PhotoTile } from '@/components/PhotoTile';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -32,23 +33,15 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
 
+  // 실패하면 throw 한다 — 처음부터 못 불러오면 목록 자리에 실패 안내, 이미 불러온 목록이 있으면 스낵바(useListLoad).
   const load = useCallback(async () => {
-    try {
-      const list = await listItems();
-      const urlMap = await getItemImageSignedUrls(list.map((it) => it.image_key));
-      setItems(list);
-      setUrls(urlMap);
-    } catch {
-      // 검색은 조회 실패 시 빈 목록으로(치명적이지 않음). 사용자는 재진입으로 재시도.
-      setItems([]);
-    }
+    const list = await listItems();
+    const urlMap = await getItemImageSignedUrls(list.map((it) => it.image_key));
+    setItems(list);
+    setUrls(urlMap);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { status, retry, refreshing, refresh } = useListLoad(load);
 
   // 300ms 디바운스: 입력이 멈춘 뒤에만 필터링한다.
   useEffect(() => {
@@ -93,9 +86,13 @@ export default function SearchScreen() {
       </View>
 
       {items === null ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        status === 'failed' ? (
+          <LoadFailed onRetry={() => void retry()} refreshing={refreshing} onRefresh={refresh} />
+        ) : (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )
       ) : debounced.trim().length === 0 ? (
         <EmptyState title="검색어를 입력하세요" description="제품명·브랜드·태그·메모로 찾습니다." />
       ) : results.length === 0 ? (
@@ -109,6 +106,7 @@ export default function SearchScreen() {
           keyboardDismissMode="on-drag"
           contentContainerStyle={styles.list}
           extraData={linkState}
+          refreshControl={<ListRefreshControl refreshing={refreshing} onRefresh={refresh} />}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}

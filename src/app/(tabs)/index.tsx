@@ -1,11 +1,14 @@
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
 import { ItemSelectionControls } from '@/components/ItemSelectionControls';
+import { ListRefreshControl, LoadFailed, useListLoad } from '@/components/listLoad';
+import { setLoadedWishCount, takeSheetCheckOnce } from '@/components/account/wishCount';
+import { hasSeenOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PhotoTile } from '@/components/PhotoTile';
 import { TabHeaderLogo } from '@/components/TabHeaderLogo';
 import { useTabBarVisibility } from '@/components/tabBarVisibility';
@@ -17,6 +20,7 @@ import {
   getItemThumbSignedUrls,
   listCategories,
   listItems,
+  shouldShowSignInSheet,
   type Category,
   type Item,
 } from '@/lib/queries';
@@ -52,30 +56,33 @@ export default function AllScreen() {
     router.setParams({ attachLink: '' });
   }
 
+  // 실패하면 throw 한다 — 처음부터 못 불러오면 목록 자리에 실패 안내, 이미 불러온 목록이 있으면 스낵바(useListLoad).
   const load = useCallback(async () => {
-    try {
-      const [list, cats] = await Promise.all([listItems(), listCategories().catch(() => [] as Category[])]);
-      const keys = list.map((it) => it.image_key);
-      // 썸네일(우선)과 원본(폴백)을 함께 발급한다 — 발급은 egress 가 아니라 무해하고,
-      // 원본 바이트는 썸네일이 실제로 없을 때(레거시)만 내려온다.
-      const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
-      setItems(list);
-      setUrls(thumbMap);
-      setFallbackUrls(origMap);
-      setCategories(cats);
-    } catch (e) {
-      setItems([]);
-      Alert.alert('오류', e instanceof Error ? e.message : '불러오지 못했습니다.');
-    }
+    const [list, cats] = await Promise.all([listItems(), listCategories().catch(() => [] as Category[])]);
+    const keys = list.map((it) => it.image_key);
+    // 썸네일(우선)과 원본(폴백)을 함께 발급한다 — 발급은 egress 가 아니라 무해하고,
+    // 원본 바이트는 썸네일이 실제로 없을 때(레거시)만 내려온다.
+    const [thumbMap, origMap] = await Promise.all([getItemThumbSignedUrls(keys), getItemImageSignedUrls(keys)]);
+    setItems(list);
+    setLoadedWishCount(list.length); // 로그인 권유 반시트의 제목 개수
+    setUrls(thumbMap);
+    setFallbackUrls(origMap);
+    setCategories(cats);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { status, run, retry, refreshing, refresh } = useListLoad(load);
 
-  const selection = useItemSelection({ items, categories, setCategories, reload: load });
+  // 기존 익명 사용자에게 로그인 반시트를 한 번 권한다(앱을 켠 뒤 처음 전체 탭이 뜰 때, 통신 없이 판단).
+  // 온보딩을 아직 안 봤으면 건너뛴다 — 카드·사용 안내가 먼저다.
+  useEffect(() => {
+    if (!takeSheetCheckOnce()) return;
+    void (async () => {
+      if (!(await hasSeenOnboarding())) return;
+      if (await shouldShowSignInSheet()) router.push('/account/sign-in-sheet');
+    })().catch(() => {});
+  }, [router]);
+
+  const selection = useItemSelection({ items, categories, setCategories, reload: run });
   // 선택·링크 찾기 상태가 바뀔 때만 그리드를 다시 그린다(매 렌더 새 배열이면 FlatList 비교가 깨짐).
   const gridExtra = useMemo(() => [selection.selected, linkState], [selection.selected, linkState]);
 
@@ -164,9 +171,13 @@ export default function AllScreen() {
       ) : null}
 
       {items === null ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        status === 'failed' ? (
+          <LoadFailed onRetry={() => void retry()} refreshing={refreshing} onRefresh={refresh} />
+        ) : (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )
       ) : items.length === 0 ? (
         attachMode ? (
           <EmptyState
@@ -190,6 +201,7 @@ export default function AllScreen() {
           numColumns={COLUMNS}
           contentContainerStyle={styles.list}
           extraData={gridExtra}
+          refreshControl={<ListRefreshControl refreshing={refreshing} onRefresh={refresh} />}
           renderItem={({ item }) => (
             <PhotoTile
               url={urls[item.image_key] ?? null}
