@@ -41,7 +41,40 @@ export type AnalyticsEventMap = {
   notification_opened: { source: 'snackbar' | 'list' };
   /** 전역 JS 에러. name=에러 클래스명뿐 — 메시지·스택은 콘텐츠 유입 가능성 때문에 미수집. */
   app_error: { name: string; is_fatal: boolean };
+  /** 로그인 화면·반시트가 보였을 때. */
+  sign_in_viewed: { surface: SignInSurface; entry: SignInEntry };
+  /** "로그인 없이 시작"(확인창 뒤 시작)·닫기·반시트 "나중에". */
+  sign_in_skipped: { surface: SignInSurface; entry: SignInEntry };
+  /** Apple·카카오 로그인 결과. linked = 익명 계정이 그대로 로그인 계정이 됨(목표 지표), new = 새 계정. */
+  sign_in_result: {
+    provider: 'apple' | 'kakao';
+    result: 'linked' | 'new' | 'existing' | 'cancelled' | 'other_provider' | 'error';
+  };
+  /** 익명 위시 합치기가 끝났을 때. count = 옮긴 위시 수(같은 위시로 합쳐진 것 포함). */
+  wishes_merged: { result: 'success' | 'failed'; count: number; attempt: 'first' | 'retry' };
+  /** 닉네임 저장 성공. changed_from_suggested = 추천값에서 바꿨는지. 닉네임 자체는 미수집. */
+  nickname_saved: { mode: 'signup' | 'edit'; changed_from_suggested: boolean };
+  /** 사용자가 고른 로그아웃. */
+  signed_out: Record<string, never>;
+  /** iPhone 설정에서 Apple 연결이 끊긴 것을 감지해 로그아웃 상태로 바꿨을 때. */
+  apple_credential_revoked: Record<string, never>;
+  /** 계정 삭제 완료. 탈퇴 사유는 보내지 않는다(DB ops 표에 사용자 id 없이 저장). */
+  account_deleted: { account: 'anonymous' | 'apple' | 'kakao'; apple_revoked: boolean };
 };
+
+/** 로그인을 권한 곳: 전체 화면(로그인 화면) 또는 반시트. */
+export type SignInSurface = 'screen' | 'sheet';
+
+/** 로그인 화면·반시트로 들어온 길. lost = 서버가 익명 세션을 거절함, feature = 로그인 전용 기능 안내. */
+export type SignInEntry =
+  | 'first_launch'
+  | 'share'
+  | 'signed_out'
+  | 'expired'
+  | 'lost'
+  | 'settings'
+  | 'sheet'
+  | 'feature';
 
 export type AnalyticsEvent = keyof AnalyticsEventMap;
 
