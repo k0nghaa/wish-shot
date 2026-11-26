@@ -37,14 +37,14 @@
 | `link_attached` | 저장 뒤 링크 붙이기가 성공했을 때(링크가 비어 있던 위시에 붙음 — `setSourceLinkIfEmpty` 성공) | — | 저장 뒤 붙이기가 얼마나 일어나는가 | `src/app/register.tsx`(`notifyLinkAttached`) |
 | `notification_opened` | 스낵바 [보기] 또는 알림 목록 행을 눌러 위시 상세로 갈 때 | `source: snackbar \| list` | 붙인 링크를 사용자가 확인하는가 | `src/app/register.tsx`(스낵바)·`src/app/(tabs)/notifications.tsx`(목록) |
 | `app_error` (갈래 F) | 전역 JS 에러 핸들러. 1.0.2부터 Sentry가 켜진 빌드에서는 루트 렌더 오류 경계가 넘긴 렌더 오류도 포함 | `name: string`(에러 클래스명), `is_fatal: boolean` — **메시지·스택 미수집** | 에러 빈도 집계(상세·네이티브 크래시는 Sentry) | `src/lib/analytics.ts`, `src/lib/monitoring.ts`(렌더 오류 경계) |
-| `sign_in_viewed` (1.2.0, 구현 중) | 로그인 화면·반시트가 보였을 때 | `surface: screen \| sheet`, `entry: first_launch \| share \| signed_out \| expired \| lost \| settings \| sheet \| feature` | 어디서 로그인을 권하는가 | 로그인 화면·반시트(`src/app/sign-in.tsx`·`src/app/account/**`) |
-| `sign_in_skipped` (1.2.0, 구현 중) | "로그인 없이 시작"(확인창 뒤 시작)·닫기·반시트 "나중에" | `surface`, `entry`(위와 같은 enum) | 얼마나 건너뛰는가 | 〃 |
-| `sign_in_result` (1.2.0, 구현 중) | Apple·카카오 로그인 결과 | `provider: apple \| kakao`, `result: linked \| new \| existing \| cancelled \| other_provider \| error` — `linked`(익명 → 로그인, 같은 계정)는 목표 지표라 `new`와 나눈다 | 익명 사용자를 얼마나 계정으로 옮기는가 | `src/lib/queries/account.ts` |
-| `wishes_merged` (1.2.0, 구현 중) | 익명 위시 합치기가 끝났을 때 | `result: success \| failed`, `count`(옮긴 위시 수), `attempt: first \| retry` | 합치기가 얼마나 실패하는가 | 〃 |
-| `nickname_saved` (1.2.0, 구현 중) | 닉네임 저장 성공 | `mode: signup \| edit`, `changed_from_suggested: boolean` — **닉네임 미수집** | 추천 닉네임을 바꾸는가 | 〃 |
-| `signed_out` (1.2.0, 구현 중) | 사용자가 고른 로그아웃 | — | — | 〃 |
-| `apple_credential_revoked` (1.2.0, 구현 중) | iPhone 설정에서 Apple 연결이 끊긴 것을 감지해 로그아웃 상태로 바꿨을 때 | — | — | 〃 |
-| `account_deleted` (1.2.0, 구현 중) | 계정 삭제 완료 | `account: anonymous \| apple \| kakao`, `apple_revoked: boolean` — **탈퇴 사유 미수집**(DB `ops` 표에 사용자 id 없이) | 탈퇴 규모 | 〃 |
+| `sign_in_viewed` (1.2.0~) | 로그인 화면·반시트가 보였을 때 | `surface: screen \| sheet`, `entry: first_launch \| share \| signed_out \| expired \| lost \| settings \| sheet \| feature` | 어디서 로그인을 권하는가 | `src/components/account/SignInContent.tsx`(로그인 화면 두 경로)·`src/app/account/sign-in-sheet.tsx`(반시트) |
+| `sign_in_skipped` (1.2.0~) | "로그인 없이 시작"(확인창 뒤 시작)·닫기·반시트 "나중에" | `surface`, `entry`(위와 같은 enum) | 얼마나 건너뛰는가 | 〃 |
+| `sign_in_result` (1.2.0~) | Apple·카카오 로그인 결과 | `provider: apple \| kakao`, `result: linked \| new \| existing \| cancelled \| other_provider \| error` — `linked`(익명 → 로그인, 같은 계정)는 목표 지표라 `new`와 나눈다 | 익명 사용자를 얼마나 계정으로 옮기는가 | `src/lib/queries/account.ts` |
+| `wishes_merged` (1.2.0~) | 익명 위시 합치기가 끝났을 때 | `result: success \| failed`, `count`(옮긴 위시 수), `attempt: first \| retry` | 합치기가 얼마나 실패하는가 | 〃 |
+| `nickname_saved` (1.2.0~) | 닉네임 저장 성공 | `mode: signup \| edit`, `changed_from_suggested: boolean` — **닉네임 미수집** | 추천 닉네임을 바꾸는가 | 〃 |
+| `signed_out` (1.2.0~) | 사용자가 고른 로그아웃 | — | — | 〃 |
+| `apple_credential_revoked` (1.2.0~) | iPhone 설정에서 Apple 연결이 끊긴 것을 감지해 로그아웃 상태로 바꿨을 때 | — | — | 〃 |
+| `account_deleted` (1.2.0~) | 계정 삭제 완료 | `account: anonymous \| apple \| kakao`, `apple_revoked: boolean` — **탈퇴 사유 미수집**(DB `ops` 표에 사용자 id 없이) | 탈퇴 규모 | 〃 |
 
 ### 구현 노트 (코드와 1:1)
 
@@ -115,6 +115,14 @@
 - [x] `docs/legal/privacy.html` 개정(§1 분석 기록·요청 기록, §3 링크 찾기·Google Web Risk·쇼핑몰 사이트 검색어, §7 분석 기록·실패 기록 보관) 게시 — 심사 제출 전에 PR #46(`docs/privacy-v1.1.0` → `main`)으로 먼저 게시, 개정일 = 게시일 2026-11-10
 - [x] 노션 개인정보 방침 동기화(2026-11-10, 6곳)
 - [x] 인앱 고지(`src/constants/privacy.ts`)와 방침 내용 일치 — 방침 문장을 코드와 대조하고 앱 안 안내를 같은 커밋에서 맞춤(2026-11-09, `phase-21` Step 6). 출시 뒤 재확인(2026-11-15): 어긋남 없음, 방침 §1의 '요청 기록'은 앱 안 안내에는 없음
+
+**1.2.0(Apple·카카오 로그인·계정 삭제) 추가 확인** — 심사 제출 전에 전부 체크한다(지시서 `phase-22` Step 6 '제출용 초안', Step 9)
+
+- [ ] App Store Connect 앱 개인정보 반영 — 연락처 정보 > 이메일 주소 추가(앱 기능, 연결됨, 추적 아님), 사용자 ID 목적에 앱 기능 확인, 닉네임·탈퇴 사유 분류 판단
+- [ ] `docs/legal/privacy.html` 개정(§1·§3·§4·§5·§6·§7·§8·§10) 사람 검토·개정일 기입 후 게시 — 카카오 동의 항목 심사에 방침 URL이 필요하면 그 전에
+- [ ] 노션 개인정보 방침 동기화
+- [ ] 인앱 고지(`src/constants/privacy.ts`)와 방침 일치 재확인 — 로그인 정보·이메일 목적·계정 삭제·통계로 남는 것·탈퇴 사유 3년
+- [ ] 로그인 이벤트 8개 실발화 확인(아래 6절 방식, 개발용 앱)
 
 ## 6. 실발화 확인 체크리스트 (dev client — 사람 확인)
 
