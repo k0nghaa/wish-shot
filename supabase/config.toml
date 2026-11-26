@@ -390,6 +390,21 @@ deno_version = 2
 [functions.cleanup-orphan-images]
 verify_jwt = false
 
+# 계정 로그인(Phase 22) 서버 함수 3개. 셋 다 함수 안에서 직접 검증한다:
+#   check-signup    — 세션 없는 로그인 전 호출, 증거는 Apple·카카오 ID 토큰(서명·aud·nonce 검증)
+#   merge-anonymous — 로그인 계정 토큰 + 익명 토큰을 Auth 서버로 검증(운영자 경로는 service_role 키)
+#   delete-account  — 사용자 토큰을 Auth 서버로 검증(이미 지워진 사용자의 호출엔 already_deleted)
+# 플랫폼 JWT 검사를 끄는 이유: anon·publishable 키 형식, service_role 키 형식(JWT 가 아닐 수 있음)에 상관없이 통과시키려는 것이고,
+# 검증 자체는 함수가 하므로 보안이 줄지 않는다. 확인할 것 9(앱 키로 통과하는지)는 이 설정으로 해소된다.
+[functions.check-signup]
+verify_jwt = false
+
+[functions.merge-anonymous]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
