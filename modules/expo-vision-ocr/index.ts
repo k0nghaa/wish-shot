@@ -16,7 +16,7 @@ export const isAvailable: boolean = ExpoVisionOcr != null;
  */
 export async function recognizeText(uri: string): Promise<string[]> {
   if (!ExpoVisionOcr) {
-    throw new Error('ExpoVisionOcr 네이티브 모듈을 사용할 수 없어요(개발 빌드 필요).');
+    throw new Error('ExpoVisionOcr 네이티브 모듈을 사용할 수 없습니다(개발 빌드 필요).');
   }
   return ExpoVisionOcr.recognizeText(uri);
 }
