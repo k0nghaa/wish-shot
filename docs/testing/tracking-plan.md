@@ -37,6 +37,14 @@
 | `link_attached` | 저장 뒤 링크 붙이기가 성공했을 때(링크가 비어 있던 위시에 붙음 — `setSourceLinkIfEmpty` 성공) | — | 저장 뒤 붙이기가 얼마나 일어나는가 | `src/app/register.tsx`(`notifyLinkAttached`) |
 | `notification_opened` | 스낵바 [보기] 또는 알림 목록 행을 눌러 위시 상세로 갈 때 | `source: snackbar \| list` | 붙인 링크를 사용자가 확인하는가 | `src/app/register.tsx`(스낵바)·`src/app/(tabs)/notifications.tsx`(목록) |
 | `app_error` (갈래 F) | 전역 JS 에러 핸들러. 1.0.2부터 Sentry가 켜진 빌드에서는 루트 렌더 오류 경계가 넘긴 렌더 오류도 포함 | `name: string`(에러 클래스명), `is_fatal: boolean` — **메시지·스택 미수집** | 에러 빈도 집계(상세·네이티브 크래시는 Sentry) | `src/lib/analytics.ts`, `src/lib/monitoring.ts`(렌더 오류 경계) |
+| `sign_in_viewed` (1.2.0, 구현 중) | 로그인 화면·반시트가 보였을 때 | `surface: screen \| sheet`, `entry: first_launch \| share \| signed_out \| expired \| lost \| settings \| sheet \| feature` | 어디서 로그인을 권하는가 | 로그인 화면·반시트(`src/app/sign-in.tsx`·`src/app/account/**`) |
+| `sign_in_skipped` (1.2.0, 구현 중) | "로그인 없이 시작"(확인창 뒤 시작)·닫기·반시트 "나중에" | `surface`, `entry`(위와 같은 enum) | 얼마나 건너뛰는가 | 〃 |
+| `sign_in_result` (1.2.0, 구현 중) | Apple·카카오 로그인 결과 | `provider: apple \| kakao`, `result: linked \| new \| existing \| cancelled \| other_provider \| error` — `linked`(익명 → 로그인, 같은 계정)는 목표 지표라 `new`와 나눈다 | 익명 사용자를 얼마나 계정으로 옮기는가 | `src/lib/queries/account.ts` |
+| `wishes_merged` (1.2.0, 구현 중) | 익명 위시 합치기가 끝났을 때 | `result: success \| failed`, `count`(옮긴 위시 수), `attempt: first \| retry` | 합치기가 얼마나 실패하는가 | 〃 |
+| `nickname_saved` (1.2.0, 구현 중) | 닉네임 저장 성공 | `mode: signup \| edit`, `changed_from_suggested: boolean` — **닉네임 미수집** | 추천 닉네임을 바꾸는가 | 〃 |
+| `signed_out` (1.2.0, 구현 중) | 사용자가 고른 로그아웃 | — | — | 〃 |
+| `apple_credential_revoked` (1.2.0, 구현 중) | iPhone 설정에서 Apple 연결이 끊긴 것을 감지해 로그아웃 상태로 바꿨을 때 | — | — | 〃 |
+| `account_deleted` (1.2.0, 구현 중) | 계정 삭제 완료 | `account: anonymous \| apple \| kakao`, `apple_revoked: boolean` — **탈퇴 사유 미수집**(DB `ops` 표에 사용자 id 없이) | 탈퇴 규모 | 〃 |
 
 ### 구현 노트 (코드와 1:1)
 
