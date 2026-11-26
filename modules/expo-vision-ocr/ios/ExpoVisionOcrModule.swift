@@ -17,7 +17,7 @@ public class ExpoVisionOcrModule: Module {
 
       guard let imageData = try? Data(contentsOf: url),
             let cgImage = UIImage(data: imageData)?.cgImage else {
-        promise.reject("E_IMAGE", "이미지를 읽지 못했어요.")
+        promise.reject("E_IMAGE", "이미지를 읽지 못했습니다.")
         return
       }
 
