@@ -2,7 +2,7 @@
 
 이 파일은 이 저장소에서 작업하는 Claude Code에게 제공하는 가이드입니다. 규칙·구조·원칙을 담고, 절차·명령·수치는 [`docs/development.md`](docs/development.md)(개발 가이드)가 정본입니다.
 
-> 상태: **1.1.0 출시(2026-11-11, App Store)** — 구매처 링크 찾기·탭 순서·알림·몰 검색 링크까지 반영. 운영 runtimeVersion은 1.1.0 빌드 값이라 이후 OTA(JS만 바꾼 배포)는 1.1.0 사용자에게만 간다. 로그인·계정 연결은 보류. 이 문서는 `dev`의 현재 상태를 반영한다.
+> 상태: **1.1.0 출시(2026-11-11, App Store)** — 구매처 링크 찾기·탭 순서·알림·몰 검색 링크까지 반영. 운영 runtimeVersion은 1.1.0 빌드 값이라 이후 OTA(JS만 바꾼 배포)는 1.1.0 사용자에게만 간다. Apple·카카오 로그인은 1.2.0(스토어 빌드, Phase 22)으로 구현 중 — 이 문서의 인증·계정 설명은 그 브랜치 기준이다. 이 문서는 `dev`의 현재 상태를 반영한다.
 
 ## 프로젝트 개요
 
@@ -22,8 +22,13 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 ## 기술 스택과 원칙
 
 - **앱**: Expo SDK 57 (React Native 0.86, React 19) + Expo Router + TypeScript. iOS 전용.
-- **백엔드**: 별도 서버 없음. `@supabase/supabase-js`로 Supabase(Postgres + Storage + Auth)를 직접 호출하고, 행 단위 권한은 RLS로 강제. API 키가 필요한 일만 **Supabase Edge Function(Deno)** 으로 처리 — `parse-screenshot-text`(AI 정제)·`find-purchase-links`(구매처 링크 찾기)·`cleanup-orphan-images`(고아 이미지 스윕).
-- **인증**: **익명 로그인**. 앱 시작 때 `bootstrapSession()`이 세션을 확인하고, 이 기기에서 세션을 쓴 적이 없을 때만 익명 계정을 만든다 → 로그인 벽 없이 바로 쓴다. **세션을 확인하지 못해도 새 계정을 만들지 않는다**(세션이 유일한 열쇠라 덮어쓰면 위시를 잃는다) — 확인 실패는 연결 실패 화면, 서버 거절은 끊긴 세션 화면이고, 새 계정은 사용자가 "새로 시작"을 고를 때만 만든다(위시를 저장한 흔적이 없는 기기는 잃을 것이 없어 화면 없이 새로 시작 — 위시 없는 익명 계정은 서버가 30일 뒤 지운다). 세션 저장소는 `src/lib/sessionVault.ts`가 AsyncStorage를 감싸 auth-js가 세션을 스스로 지우는 것을 막고 사본·보관을 둔다 — 세션 키는 사용자가 고른 로그아웃(`signOut`)으로만 지우고, **저장 키(`sb-<프로젝트>-auth-token`)는 바꾸지 않는다**. 규칙·흉내(실기기 확인)는 개발 가이드 "익명 세션 지키기". 세션은 AsyncStorage에 저장돼 재시작 뒤에도 유지되고, RLS가 익명 세션의 `auth.uid()`로 행을 격리한다(익명도 `authenticated` 롤이라 GRANT·정책이 그대로 적용). 대시보드 **Authentication → Anonymous sign-ins ON**이 필요하다. 이메일 로그인 라우트(`login.tsx`)는 보존하지만 정상 흐름에선 도달하지 않는다(`__DEV__` 왕복용). 계정 연결(Apple 등)은 보류.
+- **백엔드**: 별도 서버 없음. `@supabase/supabase-js`로 Supabase(Postgres + Storage + Auth)를 직접 호출하고, 행 단위 권한은 RLS로 강제. API 키가 필요한 일만 **Supabase Edge Function(Deno)** 으로 처리 — `parse-screenshot-text`(AI 정제)·`find-purchase-links`(구매처 링크 찾기)·`cleanup-orphan-images`(고아 이미지 스윕)·`check-signup`(가입 확인)·`merge-anonymous`(익명 위시 합치기)·`delete-account`(계정 삭제). 비밀 키가 필요 없는 일은 DB 함수로(닉네임 `ensure_profile`·`check_nickname`·`set_nickname`).
+- **인증**: **Apple·카카오 로그인 + 로그인 없이 시작(익명)**. 설계·결정 정본은 `docs/phases/phase-22-account-login.md`(불변식 절을 지킨다), 운영 절차는 개발 가이드 "계정 로그인".
+  - **첫 화면은 통신 없이** 기기 기록(`wishshot.accountState`)으로 정하고 그때까지 스플래시를 유지한다(`Stack.Protected`). 읽기 실패는 "세션 없음"이 아니다.
+  - **익명 계정은 사용자가 "로그인 없이 시작"을 고를 때만 만든다.** 세션이 유일한 열쇠라 앱이 스스로 새 계정을 만들거나 세션을 덮어쓰지 않는다. 세션 저장소 `src/lib/sessionVault.ts`가 auth-js가 세션을 스스로 지우는 것을 막고 사본·보관을 둔다 — 세션은 사용자가 고른 로그아웃·계정 삭제로만 지우고, **저장 키(`sb-<프로젝트>-auth-token`)는 바꾸지 않는다**.
+  - 로그인: 네이티브 SDK(`expo-apple-authentication`, `@react-native-kakao/*`)의 ID 토큰을 `check-signup`(한 계정 = 수단 하나)에 먼저 보낸 뒤 Supabase에 로그인한다. 처음 쓰는 수단이면 익명 계정을 그대로 잇고(`linkIdentity`), 기존 계정이면 `merge-anonymous`로 합친다. **소셜 토큰은 서버에 저장하지 않는다**(심사 지침 5.1.1(v)).
+  - 앱 안 계정 삭제(`delete-account`)는 연결 해제(Apple 철회·카카오 해제)를 먼저 하고, 실패하면 아무것도 지우지 않는다.
+  - RLS는 익명·로그인 모두 `auth.uid()`로 행을 격리한다(익명도 `authenticated` 롤). 대시보드에 **Anonymous sign-ins ON**, Apple·카카오 공급자, Manual linking이 필요하다. 개발용 이메일 로그인은 `dev/email-login`(`__DEV__`만).
 - **공유 시트**: `expo-share-intent`(이미지 1개 또는 URL). 받은 공유는 **루트의 공유 처리기**(`ShareIntentHandler`, 앱 전체 1개)가 어느 화면에서든 처리한다 — 이미지는 등록 폼, URL은 전체 탭 링크붙이기 모드. 등록·편집 폼이 떠 있으면 앱 자체 확인창으로 [지금 열기](작성 중인 내용 버림)·[저장 후 열기](폼을 닫으면 이어서 엶)를 묻는다. `+native-intent.ts`는 앱이 켜져 있을 때 온 공유 딥링크로 화면을 옮기지 않는다(이동은 처리기만).
 - **이미지**: `expo-image-picker`(앱 내 선택), `expo-file-system`(uri → 바이트), `expo-image-manipulator`(크롭·리사이즈), `expo-media-library`(최근 사진·앨범 원본 삭제). 모두 네이티브.
 - **OCR**: 온디바이스 **Apple Vision** — 자작 로컬 모듈 `modules/expo-vision-ocr/`(ko-KR + en-US). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화하고, Expo Go·시뮬레이터처럼 모듈이 없으면 `MockOcrEngine`. Google ML Kit 대신 Apple Vision을 쓴 이유: iOS 전용이라 ML Kit의 iOS CocoaPods/arm64 문제를 피하고, Expo SDK 57·New Architecture와 호환되는 RN용 ML Kit 래퍼를 확인하지 못했다.
@@ -39,7 +44,9 @@ WishShot(위시샷)은 스크린샷으로 저장한 관심 제품을 카테고�
 ```
 src/
   app/                        # Expo Router 라우트(파일 = 화면)
-    _layout.tsx               # 루트: 세션 시작 판정(AuthGate — 연결 실패·끊긴 세션 화면) · 첫 실행 온보딩 판단 · 공유 처리기 · 스낵바. 등록·편집 = 모달, 상세 = 풀스크린 모달, 정보 = formSheet
+    _layout.tsx               # 루트: 첫 화면 판정(기기 기록 → Stack.Protected, 스플래시 유지) · 온보딩 순서(카드 → 로그인 → 사용 안내) · 공유 처리기 · 스낵바. 등록·편집 = 모달, 상세 = 풀스크린 모달, 정보 = formSheet
+    sign-in.tsx               # 로그인(세션이 없을 때 첫 화면): Apple·카카오·로그인 없이 시작, 확인창 A·B·D, 끊긴 세션 알림창 C
+    account/                  # 로그인(설정·반시트에서 연 모달)·로그인 권유 반시트·닉네임·합치는 중·계정 삭제 안내·삭제하는 중
     (tabs)/                   # 하단 플로팅 탭바(CustomTabBar): 카테고리·전체·알림·검색. 앱을 열면 전체(index)
       _layout.tsx
       index.tsx               # 전체: 3열 그리드(최신순)·업로드 버튼·다중 선택·설정 진입. 링크붙이기 모드(URL 공유로 열림 — 위시를 골라 편집에 링크를 채우거나 새로 담기)
@@ -52,8 +59,8 @@ src/
     item/[id]/edit.tsx        # 편집: 필드·태그·카테고리·이미지 교체(OCR 없음). 다른 위시와 이름이 겹치면 막음. 링크붙이기로 들어오면 링크를 미리 채움
     category/[id].tsx         # 카테고리별 목록('uncategorized' = 미분류)
     tag/[name].tsx            # 태그별 목록
-    settings.tsx              # 설정: 개인정보 안내·의견 보내기. __DEV__ 도구(세션 초기화·이메일 로그인·연결 실패·서버 거절·새 설치 흉내·온보딩 다시 보기·썸네일 백필·계측 토글·오류·크래시 시험)
-    login.tsx                 # 이메일 로그인 — 정상 흐름 미도달, __DEV__ 왕복용으로 보존
+    settings.tsx              # 설정: 계정(로그인·닉네임·이메일·로그아웃·계정 삭제·합치지 못한 위시)·개인정보 안내·의견 보내기. __DEV__ 도구(계정 결과 흉내·세션 초기화·이메일 로그인·연결 실패·서버 거절·새 설치 흉내·온보딩 다시 보기·썸네일 백필·계측 토글·오류·크래시 시험)
+    dev/email-login.tsx       # 개발용 이메일 로그인 — 정상 흐름 미도달, __DEV__ 왕복용
     +native-intent.ts         # 공유 딥링크: 첫 실행이면 '/', 앱이 켜져 있으면 이동 없음(공유 처리기가 처리)
   components/
     ShareIntentHandler.tsx    # 공유 시트 처리(앱 전체 1개) — 같은 공유 중복 수신 무시, 폼 작성 중이면 확인창
@@ -80,7 +87,12 @@ src/
   lib/
     queries/                  # 데이터 레이어(아래 절). 화면·훅은 @/lib/queries 만 import
     ocr/                      # OcrEngine 인터페이스 + VisionOcrEngine·MockOcrEngine. 화면은 @/lib/ocr 만 import
-    supabase.ts               # 타입 클라이언트
+    supabase.ts               # 타입 클라이언트(세션 저장소 = sessionVault)
+    sessionVault.ts           # 세션 저장 어댑터: auth-js의 자체 삭제 무시, 사본·보관(wishshot.sessionCopy·sessionArchive)
+    accountLogic.ts           # 계정 판단 규칙(순수 함수 — 첫 화면·합치기 재시도·기기 정리·삭제 되돌리기, Deno 시험이 import)
+    accountDevice.ts, accountProviders.ts # 계정 기기 기록 / Apple·카카오 SDK 감싸기
+    accountSimulation.ts      # __DEV__ 계정 결과 흉내(설정에서 함수마다 결과를 골라 화면 확인)
+    supportMail.ts            # 지원 메일·문의 번호(계정 id 앞 8자)
     analytics.ts              # PostHog 캡슐화(키 없으면 no-op)
     monitoring.ts             # Sentry 캡슐화(DSN 없으면 no-op)
     normalize.ts              # 중복 판정 정규화(단일 소스)
@@ -100,13 +112,14 @@ src/
 modules/expo-vision-ocr/      # 자작 OCR 네이티브 모듈. ios/ 아래는 fingerprint 에 들어간다
 supabase/
   config.toml                 # init 템플릿 + [functions.cleanup-orphan-images] verify_jwt=false(스케줄러 전용)
-  migrations/                 # 0001(기준선) ~ 0007. 적용한 파일은 고치지 않는다(아래 절)
+  migrations/                 # 0001(기준선) ~ 0009(0008 닉네임 profiles, 0009 계정 서버 부품). 적용한 파일은 고치지 않는다(아래 절)
   rollback/                   # 0005부터 마이그레이션마다 되돌리기 SQL
   functions/
     parse-screenshot-text/    # AI 정제. prompt.ts + samples/(회귀 케이스·eval.ts, 정답셋 측정 goldset-eval.ts·goldset-holdout.ts·goldset/LABELING.md·REPORT.md, 비교용 고정 사본 prompt-2026-10-04.ts). 정답셋 원문·결과(goldset/data·out)는 git 제외
     find-purchase-links/      # 구매처 링크: index(흐름·한도) · logic(순수 판정) · malls(몰 사전) · prompt · site(카페24 검색) · safety(Web Risk) · verify(접속 확인)
     cleanup-orphan-images/    # 고아 이미지 주간 스윕(service_role, x-cron-secret)
-  tests/                      # SQL Editor 용 검증 SQL(rls·audit·quota·purchase_link_quota·metrics·parse_failures) + Deno 시험(find_purchase_links_test·purchase_channel_test·parse_quota_live)
+    check-signup/ merge-anonymous/ delete-account/  # 계정: 가입 확인·익명 위시 합치기·계정 삭제(각 index + 순수 판정 logic.ts, verify_jwt=false — 함수가 토큰 검증)
+  tests/                      # SQL Editor 용 검증 SQL(rls·audit·accounts·quota·purchase_link_quota·metrics·parse_failures) + Deno 시험(*_test.ts — 전부 돌릴 땐 --allow-read) + parse_quota_live
 docs/
   README.md                   # 문서 안내 — 읽는 순서·작업 기록 목록·용어
   development.md              # 개발 가이드 — 절차·명령·수치 정본
@@ -147,7 +160,7 @@ tsconfig.json, .npmrc, .gitattributes, .env.example, .github/
 목록과 등록 방법은 개발 가이드. 원칙:
 
 - 앱 번들엔 **`EXPO_PUBLIC_*` 공개 값만** 넣는다(Supabase anon 키·URL, PostHog 키, Sentry DSN). `.env`는 커밋 금지, `.env.example`만 커밋한다.
-- 비밀 값(Claude·Web Risk 키, `CRON_SECRET`, `SENTRY_AUTH_TOKEN`)은 Edge Function 시크릿 또는 EAS Secret에만 둔다. 앱·`.env`·커밋·채팅 금지.
+- 비밀 값(Claude·Web Risk 키, `CRON_SECRET`, `SENTRY_AUTH_TOKEN`, Apple 철회 키(.p8)·카카오 어드민 키·PostHog 개인 API 키)은 Edge Function 시크릿 또는 EAS Secret에만 둔다. 앱·`.env`·커밋·채팅 금지. 카카오 **네이티브 앱 키**는 공개 값이라 `EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY`(운영)·`_DEV`(개발용 카카오 앱)로 앱에 넣는다 — 이 키는 runtimeVersion에 들어가므로 OTA·값 확인은 빌드와 같은 키가 있는 환경에서 한다.
 - EAS 클라우드 빌드는 로컬 `.env`를 읽지 않는다 → `EXPO_PUBLIC_*`를 EAS 환경에 등록한다. 프로필에 `environment`가 없으면 개발 클라이언트 = development, internal 배포 = preview, 그 밖 = production 환경 변수를 쓴다(eas-cli 코드 확인).
 - `APP_VARIANT`는 셸과 `eas.json`에서만 넣고, 커밋하는 파일에는 두지 않는다. `.env`를 바꾸면 `npx expo start --clear`로 재시작한다.
 
@@ -170,7 +183,7 @@ tsconfig.json, .npmrc, .gitattributes, .env.example, .github/
 
 ## 데이터 레이어 · Supabase 접근
 
-- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름 변경/삭제), `items`(전체·카테고리별·태그별 목록, 전체 태그, 단건, 생성, 수정 `updateItem`, 카테고리 이동 `moveItemCategory`, 일괄 이동·삭제 `moveItems`·`deleteItems`, 삭제, 중복 조회, 빈 링크에만 붙이기 `setSourceLinkIfEmpty`), `storage`(업로드/signed URL/삭제), `auth`(`getCurrentUserId`·`bootstrapSession`(앱 시작 1회)·`startOver`(끊긴 세션의 새로 시작), `signOut`·`signInAnonymouslyIfNeeded`·흉내는 `__DEV__`만), `errors`(`DuplicateItemError`·`DuplicateCategoryError`), `analysisLogs`(분석 로그 기록 — 실패는 삼켜 저장을 막지 않음), `parse`(`parseScreenshotText(text, image?)` — 정제 함수 호출), `purchaseLinks`(`findPurchaseLink` — 실패·한도·시간 초과는 던지지 않고 null, https 링크만 받음). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
+- **쿼리는 `src/lib/queries/`에 모아둔다.** `categories`(목록/생성/이름 변경/삭제), `items`(전체·카테고리별·태그별 목록, 전체 태그, 단건, 생성, 수정 `updateItem`, 카테고리 이동 `moveItemCategory`, 일괄 이동·삭제 `moveItems`·`deleteItems`, 삭제, 중복 조회, 빈 링크에만 붙이기 `setSourceLinkIfEmpty`), `storage`(업로드/signed URL/삭제), `auth`(`getCurrentUserId`·`getInquiryUserId`, `signOut`·`signInAnonymouslyIfNeeded`·흉내는 `__DEV__`만), `account`(로그인·로그인 없이 시작·합치기·계정 정보·닉네임·로그아웃·계정 삭제·첫 화면 상태·반시트 1회 — 함수·결과 종류는 지시서 설계 2가 정본, 화면은 결과 `kind`마다 처리), `edge`(계정 Edge Function 호출), `errors`(`DuplicateItemError`·`DuplicateCategoryError`), `analysisLogs`(분석 로그 기록 — 실패는 삼켜 저장을 막지 않음), `parse`(`parseScreenshotText(text, image?)` — 정제 함수 호출), `purchaseLinks`(`findPurchaseLink` — 실패·한도·시간 초과는 던지지 않고 null, https 링크만 받음). 화면·훅은 `@/lib/queries`에서 가져다 쓴다.
 - **편집·이동의 중복 판정.** `updateItem`은 `normalizeName`을 재계산하고, 편집으로 **다른 아이템**과 정규화명이 겹치면 23505 → `DuplicateItemError`로 변환해 화면이 **차단·안내**한다(덮어쓰기 없음). `moveItemCategory`는 `category_id`만 바꿔(정규화명 불변) 중복 위험이 없다. 카테고리 생성/이름 변경 중복은 `DuplicateCategoryError`('같은 이름의 카테고리가 있습니다.')로 변환한다(원본 메시지는 콘솔).
 - **빈 카테고리 표시.** 카테고리 탭은 개수 0인 카테고리도 노출한다(삭제 여부를 사용자가 알아차리도록). 대신 이동·편집·삭제로 카테고리가 비면 `promptDeleteIfCategoryEmpty`로 삭제/유지를 묻는다.
 - **OCR/정제는 데이터 레이어·훅 경유.** 화면은 OCR 엔진을 `@/lib/ocr`로, 상태 흐름을 `useAnalysis`로만 다룬다. `analysis_logs`는 **쓰기만** 한다. `status`는 `ocr_empty`/`parsed`/`parse_failed`/`low_confidence` 4종. `parsed`에는 **AI 원본 정제값**을 남긴다(실제 저장값은 `items` — AI 정확도 평가용 로그이기 때문). **위시를 지우면** 외래 키가 `item_id`를 비울 때 트리거(`0006`, `ops.clear_analysis_log_content`)가 그 로그의 `raw_text`·`parsed`를 비우고 상태·시각과 분석 경로 표시(`parsed.source`)만 남긴다. 개발자 계정(`ops.internal_users`)은 건너뛴다(정답셋·재현 사례용) — 측정 기록이 필요하면 개발자 uid가 목록에 있는지 먼저 확인한다.
@@ -183,8 +196,8 @@ tsconfig.json, .npmrc, .gitattributes, .env.example, .github/
   - **썸네일이 없으면 원본 폴백.** 썸네일이 없는 옛 아이템은 그리드에서 원본으로 폴백한다(`Thumbnail`의 `fallbackUrl` + `onError`). 신규·재저장은 자동으로 썸네일이 생긴다.
   - **signed URL 영속 캐시 재사용.** 발급한 signed URL을 AsyncStorage에 영속해 콜드스타트 뒤에도 같은 URL을 재사용한다 → `expo-image` 디스크 캐시가 살아남아 재방문 다운로드 ≈ 0. 앱 시작 시 `hydrateSignedUrlCache()` 1회.
   - **삭제·덮어쓰기·교체는 원본+썸네일을 항상 함께.** `deleteItemImage(s)`가 두 키를 함께 지우고 둘 다 캐시를 무효화한다(고아 객체 없음). 담기·덮어쓰기·이미지 교체는 둘 다 다시 올린다.
-- **익명 계정 수명주기((1)~(3)은 서버 측, 앱 코드 무관).** 앱 재설치마다 접근할 수 없는 옛 계정·파일이 쌓이므로 "잃을 게 없는 것만" 자동 정리한다. (1) **빈 익명 계정**(아이템 0건·생성 30일+)은 pg_cron 주간 잡 `delete-empty-anon-users`(`0002`)가 삭제한다 → FK cascade로 정리. **아이템이 있는 계정은 절대 삭제하지 않는다**(`not exists items` 조건 필수). (2) **고아 Storage 객체**(살아 있는 키 = `items.image_key` ∪ 파생 썸네일 키 — 이 union 밖)는 `list_orphan_item_images`(`0003`)가 열거하고 `cleanup-orphan-images`가 주 1회 **Storage API(`.remove()`)로만** 지운다(`storage.objects` 직접 DELETE 금지). 썸네일 키는 DB에 없는 파생 키라 union을 빼면 썸네일이 전부 오삭제된다. (3) **재설치 시 데이터 미보존은 의도된 동작** — 복원은 계정 연결 작업 소관. (4) 세션을 잃은 사용자의 위시는 서버에 남는다 — 끊긴 세션 화면의 문의 메일(문의 번호 = 계정 id 앞 8자)과 새 계정의 `user_metadata.previous_user_id`로 사람이 두 계정을 찾는다. 둘 다 본인 증거가 아니라 메일로 본인을 확인한 뒤 옮긴다.
-- **마이그레이션.** 기준선은 `0001_init.sql`이고, 그 뒤 `0002`~`0007`을 번호순으로 적용한다(방법은 개발 가이드). **스키마를 바꾸면 새 `000N_*.sql`을 추가**하고(적용한 파일은 고치지 않음), 타입을 재생성한다. 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/000N_*_down.sql`로 함께 둔다(`0005`부터). `ops` 테이블은 API 비노출이라 타입에 없고, `public`의 한도·실패 기록 함수(`0005`·`0007`)는 service_role 전용이라 앱에서 쓰지 않는다.
+- **익명 계정 수명주기((1)~(3)은 서버 측, 앱 코드 무관).** 앱 재설치마다 접근할 수 없는 옛 계정·파일이 쌓이므로 "잃을 게 없는 것만" 자동 정리한다. (1) **빈 익명 계정**(아이템 0건·생성 30일+)은 pg_cron 주간 잡 `delete-empty-anon-users`(`0002`)가 삭제한다 → FK cascade로 정리. **아이템이 있는 계정은 절대 삭제하지 않는다**(`not exists items` 조건 필수). (2) **고아 Storage 객체**(살아 있는 키 = `items.image_key` ∪ 파생 썸네일 키 — 이 union 밖)는 `list_orphan_item_images`(`0003`)가 열거하고 `cleanup-orphan-images`가 주 1회 **Storage API(`.remove()`)로만** 지운다(`storage.objects` 직접 DELETE 금지). 썸네일 키는 DB에 없는 파생 키라 union을 빼면 썸네일이 전부 오삭제된다. (3) **익명 계정의 재설치 시 데이터 미보존은 의도된 동작** — 지키려면 로그인한다(로그인 계정은 이 정리 대상이 아니다). (4) 세션을 잃은 사용자의 위시는 서버에 남는다 — 알림창 C의 문의 메일(문의 번호 = 계정 id 앞 8자)과 새 익명 계정의 `user_metadata.previous_user_id`로 사람이 두 계정을 찾고, 메일로 가볍게 본인을 확인한 뒤 `merge-anonymous`의 운영자 경로로 옮긴다. (5) 앱 안 계정 삭제는 사진(Storage)까지 지우고, 실패 기록은 사용자 id를 떼어 합계로, 탈퇴 사유는 사용자 id 없이 남긴다(`0009`).
+- **마이그레이션.** 기준선은 `0001_init.sql`이고, 그 뒤 `0002`~`0009`를 번호순으로 적용한다(방법은 개발 가이드). **스키마를 바꾸면 새 `000N_*.sql`을 추가**하고(적용한 파일은 고치지 않음), 타입을 재생성한다. 운영 DB 하나로 시험하므로 되돌리는 SQL을 `supabase/rollback/000N_*_down.sql`로 함께 둔다(`0005`부터). `ops` 테이블은 API 비노출이라 타입에 없고, `public`의 한도·실패 기록 함수(`0005`·`0007`)는 service_role 전용이라 앱에서 쓰지 않는다.
 - **타입은 자동 생성.** `src/types/database.ts`는 `supabase gen types`로 만든다. 손으로 고치지 않는다.
 
 ## 개발 환경 주의 (Windows 개발 머신)

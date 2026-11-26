@@ -6,7 +6,7 @@ WishShot(위시샷) 앱을 로컬에서 실행하고, 빌드·출시하고, DB·
 
 - **앱**: Expo SDK 57 (React Native 0.86) + Expo Router + TypeScript, iOS 전용
 - **백엔드**: Supabase (Postgres + Storage + Auth), `@supabase/supabase-js`로 직접 호출 + RLS
-- **인증**: **익명 로그인**(로그인 벽 없음, 기기별 세션). 세션은 AsyncStorage에 저장, RLS가 `auth.uid()`로 행 격리. 세션을 확인하지 못해도 새 계정을 만들지 않는다 — 아래 "익명 세션 지키기". (계정 연결은 보류)
+- **인증(1.2.0~)**: **Apple·카카오 로그인 + 로그인 없이 시작(익명)**. 세션이 없으면 로그인 화면이 첫 화면이고, 익명 계정은 사용자가 "로그인 없이 시작"을 고를 때만 만든다. 로그인하면 익명 위시를 그 계정으로 옮긴다(합치기). 세션은 AsyncStorage, RLS가 `auth.uid()`로 행 격리. 첫 화면은 통신 없이 기기 기록으로 정한다 — 아래 "계정 로그인"·"익명 세션 지키기"
 - **공유 시트**: `expo-share-intent` (iOS Share Extension). 받은 공유는 루트 레이아웃의 공유 처리기(`ShareIntentHandler`)가 어느 탭·화면에서든 처리합니다 — 사진은 등록 폼, URL은 전체 탭 링크 저장 모드. 등록·편집 폼을 작성 중이면 [지금 열기](작성 중인 내용 버림)·[저장 후 열기](폼을 닫으면 이어서 열림) 중에서 고르게 묻습니다
 - **OCR**: 온디바이스 Apple Vision — 자작 로컬 Expo 네이티브 모듈 `modules/expo-vision-ocr` (한국어+영어 인식). `src/lib/ocr`의 `OcrEngine` 뒤에 캡슐화
 - **LLM 정제 + 카테고리 추천(FR-8)**: Supabase Edge Function `parse-screenshot-text` (Deno) + Claude Haiku. OCR 원문을 정제하고, 기존 카테고리 이름을 함께 보내면 그중 하나를 추천(`suggestedCategory`). **텍스트가 부족하거나 사용자가 "제품 영역으로 분석"을 누르면, 사용자가 선택한 제품 영역 크롭만 '분석' 때 예외 전송해 분석(Phase 6, 하위호환·미저장)**. 요청 한도(사용자·전체)·입력 크기 상한으로 API 비용 제한
@@ -17,7 +17,7 @@ WishShot(위시샷) 앱을 로컬에서 실행하고, 빌드·출시하고, DB·
 - **개발용 앱 분리(Phase 14)**: `APP_VARIANT=development`(EAS development 프로필)면 `app.config.js`가 번들 ID·이름·scheme을 바꿔 `WishShot Dev`로 빌드 — 스토어 앱과 한 기기에 나란히 설치, 별도 익명 계정
 - **디자인**: 흰 배경 + iOS 시스템 그레이 모노톤, 와인색은 새 링크 점·알림 배지에만(색 토큰 = `src/constants/theme.ts`, 정본 = `docs/design/color_tokens.md`)
 
-주요 화면: **하단 알약 탭바(카테고리·전체·알림·검색 — 앱을 열면 전체)** · 전체(전체 아이템 3열 그리드·설정 진입) · 카테고리(2×2 모자이크 카드·설정 진입) · 알림(저장 뒤 링크를 붙인 기록) · 검색 · 등록(OCR 자동채움·카테고리 추천·메모/태그) · **상세 풀스크린 뷰어 + 정보(i) 하프시트**(편집·카테고리 이동·삭제) · 편집 · 설정(개인정보 안내). **로그인 화면 없이 익명 로그인으로 바로 사용.**
+주요 화면: **하단 알약 탭바(카테고리·전체·알림·검색 — 앱을 열면 전체)** · 전체(전체 아이템 3열 그리드·설정 진입) · 카테고리(2×2 모자이크 카드·설정 진입) · 알림(저장 뒤 링크를 붙인 기록) · 검색 · 등록(OCR 자동채움·카테고리 추천·메모/태그) · **상세 풀스크린 뷰어 + 정보(i) 하프시트**(편집·카테고리 이동·삭제) · 편집 · 설정(계정·개인정보 안내) · 로그인(Apple·카카오·로그인 없이 시작) · 닉네임 · 계정 삭제.
 
 ## 로컬 실행
 
@@ -32,6 +32,7 @@ cp .env.example .env
 #   .env 에 EXPO_PUBLIC_SUPABASE_URL 과 EXPO_PUBLIC_SUPABASE_ANON_KEY 입력
 #   (선택) 계측: EXPO_PUBLIC_POSTHOG_KEY / EXPO_PUBLIC_POSTHOG_HOST — 미설정이면 계측만 꺼진 채 동작
 #   (선택) 오류 수집: EXPO_PUBLIC_SENTRY_DSN — 미설정이면 Sentry만 꺼진 채 동작(개발 중엔 기본 비활성)
+#   (카카오 로그인) EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY / EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY_DEV — 없으면 로컬은 카카오 설정 없이 동작, EAS 빌드는 실패
 
 # 3) 개발 서버 (이 환경은 --tunnel 필수)
 npx expo start --tunnel            # Expo Go 로 접속 (네이티브 모듈 없는 화면 확인용)
@@ -56,9 +57,10 @@ $env:APP_VARIANT='development'; npx expo start --dev-client --tunnel --scheme wi
 | `npx expo lint` | ESLint |
 | `npx expo-doctor` | 설정·의존성 정합성 점검(패치 미스매치가 나와도 `expo install --fix`는 하지 않음) |
 | `deno test --no-lock supabase/tests/find_purchase_links_test.ts supabase/tests/purchase_channel_test.ts` | 구매처 함수 순수 로직 + 앱 입구 채널 판별 단위 시험(네트워크·키 없음) |
-| `deno test --no-lock supabase/tests/session_vault_test.ts supabase/tests/support_mail_test.ts` | 세션 저장 어댑터·시작 판정 + 문의 메일 주소 시험(약 30초, `node_modules` 필요 — 설치된 supabase-js를 가짜 서버·가짜 저장소에 연결). 끝에 `-- --baseline`을 붙이면 고치기 전 동작으로 같은 사례를 돌려 실패를 보인다 |
-| `deno check --no-lock supabase/functions/find-purchase-links/index.ts` | 구매처 함수 타입 검사 |
-| `npx expo-updates runtimeversion:resolve --platform ios` | 지금 코드의 runtimeVersion(fingerprint) 확인 — `APP_VARIANT`가 없는 셸에서 |
+| `deno test --no-lock supabase/tests/session_vault_test.ts supabase/tests/support_mail_test.ts` | 세션 저장 어댑터 + 문의 메일 주소 시험(약 30초, `node_modules` 필요 — 설치된 supabase-js를 가짜 서버·가짜 저장소에 연결). 끝에 `-- --baseline`을 붙이면 고치기 전 동작으로 같은 사례를 돌려 실패를 보인다 |
+| `deno test --no-lock --allow-read supabase/tests/*_test.ts` | Deno 시험 전부(계정 서버 함수·계정 판단 규칙·계측 이벤트 대조 포함). `analytics_events_test.ts`가 지시서와 `analytics.ts`를 읽어 `--allow-read`가 필요하다 |
+| `deno check --no-lock supabase/functions/<함수>/index.ts` | Edge Function 타입 검사(`find-purchase-links`·`check-signup`·`merge-anonymous`·`delete-account`) |
+| `npx expo-updates runtimeversion:resolve --platform ios` | 지금 코드의 runtimeVersion(fingerprint) 확인 — `APP_VARIANT`가 없고 **운영 카카오 키(`EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY`)가 있는** 셸에서. 키는 `app.config.js`가 플러그인 설정에 넣어 값이 달라진다(키 없이 계산하면 빌드와 다른 값) |
 
 ## 앱 빌드·출시
 
@@ -86,6 +88,7 @@ npx eas-cli submit --platform ios --profile production --latest   # App Store Co
 - production 프로필은 `channel: "production"`(OTA 사용)·`autoIncrement`(빌드 번호 자동 증가)입니다.
 - 앱 버전(App Store에 보이는 버전)은 `app.json`의 `expo.version` 하나가 정본입니다. 출시마다 이 값만 올립니다. `package.json`의 `version`은 쓰지 않습니다 — Expo는 앱 설정에 버전이 없을 때만 그 값을 읽습니다.
 - 네이티브를 바꾸면 `runtimeVersion`(`app.json`의 `policy: "fingerprint"`)이 달라집니다. 그 빌드를 받은 사용자만 이후 OTA를 받습니다(불일치 크래시 방지).
+- 1.2.0부터 카카오 네이티브 앱 키도 runtimeVersion에 들어갑니다. OTA를 내거나 값을 확인할 때는 빌드와 같은 키가 있는 환경(`--environment production`, 로컬 셸이면 같은 값의 `EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY`)에서 합니다.
 
 **OTA(JS만 바뀐 수정)** — 새 빌드·재심사 없이 배포:
 
@@ -117,6 +120,7 @@ npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist
 | `EXPO_PUBLIC_POSTHOG_KEY`, `EXPO_PUBLIC_POSTHOG_HOST` | 아니오 | 계측. write-only 공개 키. 없으면 계측만 no-op |
 | `EXPO_PUBLIC_SENTRY_DSN` | 아니오 | 오류 수집. 공개 값. 없으면 Sentry만 no-op |
 | `EXPO_PUBLIC_SENTRY_DEV` | 아니오 | `1`이면 `__DEV__`에서도 Sentry를 켬(검증용, 로컬 `.env`만) |
+| `EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY`, `EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY_DEV` | 빌드에 필수 | 카카오 네이티브 앱 키(공개 값) — 운영 카카오 앱 / 개발용 카카오 앱. `app.config.js`가 변형에 맞는 키를 `kakao<키>` scheme·SDK 초기화에 쓴다. EAS 빌드는 키가 없으면 실패한다 |
 
 - **EAS 클라우드 빌드는 로컬 `.env`를 읽지 않습니다.** 같은 `EXPO_PUBLIC_*` 값을 EAS 환경(production 등)에 등록합니다. 미등록이면 빌드는 되지만 앱이 켜지자마자 Supabase 환경 변수가 없어 실패합니다.
 - EAS는 프로필에 `environment`가 없으면 개발 클라이언트 = development, internal 배포 = preview, 그 밖 = production 환경 변수를 씁니다(eas-cli 코드 확인).
@@ -129,7 +133,12 @@ npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist
 |---|---|
 | `ANTHROPIC_API_KEY` | 필수. Claude 키(정제·구매처 찾기) |
 | `WEB_RISK_API_KEY` | 구매처 찾기 필수. Google Cloud Web Risk API 키 — 없으면 링크를 항상 비움 |
-| `CRON_SECRET` | 고아 이미지 스윕 호출 보호 |
+| `CRON_SECRET` | 주간 작업 호출 보호(고아 이미지 스윕, 계정 삭제의 PostHog 재시도) |
+| `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | 계정 삭제의 Apple 연결 철회. Sign in with Apple용 키(.p8 내용 전체)와 그 키 ID·팀 ID — 요청마다 client secret을 만든다 |
+| `APPLE_CLIENT_IDS` | Apple ID 토큰의 허용 `aud`(운영·개발 번들 ID, 쉼표로 구분) — 가입 확인·철회 |
+| `KAKAO_CLIENT_IDS` | 카카오 ID 토큰의 허용 `aud`(운영·개발 네이티브 앱 키, 쉼표로 구분) — 가입 확인 |
+| `KAKAO_ADMIN_KEY` | 계정 삭제의 카카오 연결 해제(운영 카카오 앱의 어드민 키) |
+| `POSTHOG_PERSONAL_API_KEY` / `POSTHOG_PROJECT_ID` / `POSTHOG_HOST` | 계정 삭제 때 PostHog 사용자 프로필 삭제(이벤트는 남김). 개인 API 키는 사람 삭제 권한만 |
 | `PARSE_LIMIT_USER_HOURLY` / `PARSE_LIMIT_USER_DAILY` / `PARSE_LIMIT_GLOBAL_DAILY` | AI 정제 한도(기본 30 / 100 / 300) |
 | `PARSE_IMAGE_WEIGHT` | 이미지 요청을 몇 건으로 셀지(기본 1, 1~3 — 잘못된 값이면 기본값) |
 | `PURCHASE_LIMIT_USER_HOURLY` / `PURCHASE_LIMIT_USER_DAILY` / `PURCHASE_LIMIT_GLOBAL_DAILY` | 구매처 찾기 한도(기본 10 / 30 / 100) |
@@ -141,7 +150,7 @@ npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist
 
 코드 밖(서비스 설정)에서 맞춰 둔 값입니다. 바꾸면 개인정보처리방침과 어긋나는지 먼저 확인합니다.
 
-- **PostHog**: SDK `disableGeoip: true` + 프로젝트의 GeoIP 변환 Paused, "Discard client IP data" 켬(IP 버리기만으로는 GeoIP가 꺼지지 않음). 익명 부트스트랩 뒤 Supabase uid로 `identify`. 이벤트·속성 정본은 [트래킹 플랜](testing/tracking-plan.md), DB 지표 SQL은 `supabase/tests/metrics.sql`.
+- **PostHog**: SDK `disableGeoip: true` + 프로젝트의 GeoIP 변환 Paused, "Discard client IP data" 켬(IP 버리기만으로는 GeoIP가 꺼지지 않음). 세션을 얻은 뒤(로그인·합치기 뒤 포함) Supabase uid로 `identify`, 로그아웃·계정 삭제 때 `reset`. 이벤트·속성 정본은 [트래킹 플랜](testing/tracking-plan.md), DB 지표 SQL은 `supabase/tests/metrics.sql`.
 - **Sentry**: 조직·프로젝트 슬러그 `wishshot`, 데이터 저장 위치 US. IP 미저장(SDK `infer_ip: never` + 조직 설정), 위치는 서버 규칙(`$user.geo.**` 제거)으로 지움. 보존 최대 90일(방침 §5).
 
 ## 데이터베이스 (Supabase)
@@ -157,6 +166,8 @@ npx --package=@sentry/react-native sentry-expo-upload-sourcemaps dist
 | `0005_parse_quota.sql` | AI 정제 함수의 요청 한도 카운터와 실패 기록(`ops` 스키마, 함수 `consume_parse_quota`·`record_parse_failure`는 service_role 전용) |
 | `0006_permissions_and_retention.sql` | 권한 정리(public 테이블의 CRUD 외 권한 회수, 새 함수 기본 실행 권한 끔), `item-images` 업로드 제한(3MB·JPEG), 위시 삭제 시 분석 로그의 원문·AI 결과 비우기(개발자 계정 제외) |
 | `0007_purchase_link_quota.sql` | 구매처 링크 찾기 함수의 전용 요청 한도 카운터와 실패 기록(함수 `consume_purchase_link_quota`·`record_purchase_link_failure`, service_role 전용) |
+| `0008_profiles.sql` | 로그인 계정의 닉네임(`profiles`, 본인 행 읽기만)과 닉네임 DB 함수 `ensure_profile`·`check_nickname`·`set_nickname`(authenticated 실행) |
+| `0009_account_server.sql` | 계정 서버 함수용 DB 부품(service_role 전용): 가입 확인 조회, 실패 기록에서 사용자 id 떼기, 탈퇴 사유 표 2개, PostHog 삭제 재시도 표, 삭제 진행 상태, 삭제 마무리 함수, 주간 정리 잡(`purge-deletion-reason-texts` — 3년 지난 '기타' 글 등) |
 
 운영 DB 하나로 시험하므로 `0005`부터 되돌리는 SQL을 `supabase/rollback/`에 함께 둡니다.
 
@@ -180,7 +191,7 @@ npx tsc --noEmit
 
 - Supabase CLI는 2.121.0으로 고정해 씁니다(3.x는 검증하지 않음).
 - 스키마 변경은 기존 파일을 고치지 말고 **새 `000N_*.sql`** 을 추가합니다.
-- RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다(테스트 4·5는 블록 단위 — 끝에 "통과"가 나오면 통과, 시험 데이터는 블록 안에서 되돌림).
+- RLS/권한 검증은 `supabase/tests/rls.sql` 을 대시보드 SQL Editor 에서 실행합니다(테스트 4·5·6은 블록 단위 — 끝에 "통과"가 나오면 통과, 시험 데이터는 블록 안에서 되돌림). 계정 부품(`0008`·`0009` — 닉네임 규칙·동시 저장·삭제 마무리)은 `supabase/tests/accounts.sql`로 같은 방식으로 확인합니다.
 - RLS·GRANT·함수 권한·Storage 정책 점검은 `supabase/tests/audit.sql`(읽기 전용 한 문장 — 결과가 표 하나로 나옴)을 같은 방식으로 실행합니다.
 - 테스트 지표(링크 보유율·AI 정제 상태 분포·필드 수정률·추천 채택률)는 `supabase/tests/metrics.sql` 을 같은 방식으로 실행합니다(블록마다 코호트 시작 시각이 고정돼 있고, 개발자 uid는 `ops.internal_users`에서 읽음).
 - 요청 한도 검증은 `supabase/tests/quota.sql`(권한 확인 + 트랜잭션 안 동작 시험 후 rollback), AI 정제 실패 원인 조회는 `supabase/tests/parse_failures.sql` 을 같은 방식으로 실행합니다.
@@ -209,29 +220,51 @@ Free 플랜(월 Egress 5GB)을 출시·성장까지 유지하기 위해 이미�
   `item-images` 객체를 DB 함수 `list_orphan_item_images()`가 열거하고, Edge Function
   `cleanup-orphan-images`(비밀 헤더 `x-cron-secret` 보호, `?dryRun=true` 지원)가 **Storage API로만**
   삭제합니다. 썸네일 키는 DB에 저장되지 않는 파생 키라 union에서 빠지면 전부 오삭제됩니다.
-- **재설치 시 데이터 미보존은 의도된 동작**입니다 — 복원은 계정 연결 작업(보류) 소관.
+- **익명 계정의 재설치 시 데이터 미보존은 의도된 동작**입니다. 데이터를 지키려면 Apple·카카오로 로그인합니다(아래 "계정 로그인"). 로그인 계정은 이 정리 대상이 아닙니다.
 - 적용·활성화는 사람이 합니다: 마이그레이션 실행 → dry-run 카운트 확인 → cron 등록,
   `npx supabase@2.121.0 secrets set CRON_SECRET=<임의 난수>` → `npx supabase@2.121.0 functions deploy cleanup-orphan-images`
   (JWT 검증 해제는 `supabase/config.toml`의 `verify_jwt = false`가 배포 시 적용) → dryRun 확인 → 주간 스케줄 등록.
 
+## 계정 로그인 (Apple·카카오, 1.2.0)
+
+설계·결정의 정본은 [작업 기록 Phase 22](phases/phase-22-account-login.md)입니다. 여기에는 운영에 필요한 절차만 둡니다.
+
+- **흐름**: 앱이 켜지면 통신 없이 기기 기록(`wishshot.accountState` 등)으로 첫 화면을 정하고, 정해질 때까지 스플래시를 유지합니다. 세션이 없으면 로그인 화면(Apple·카카오·로그인 없이 시작), 기존 익명 사용자에게는 반시트로 로그인을 한 번 권합니다. 앱은 Apple·카카오 네이티브 SDK로 받은 ID 토큰을 먼저 `check-signup`에 보내 "한 계정에 수단 하나"를 확인한 뒤 Supabase에 로그인합니다(같은 이메일은 Supabase가 한 계정으로 자동 연결). 처음 쓰는 수단이면 익명 계정이 그대로 로그인 계정이 되고(`linkIdentity`), 이미 계정이 있으면 `merge-anonymous`가 익명 위시를 옮깁니다(위시 id 유지, 한 번에 20개, 실패하면 앱이 켜질 때 다시 시도).
+- **Edge Function 3개**(모두 `verify_jwt = false` — 함수가 토큰을 직접 검증, 시크릿은 위 "Edge Function 시크릿"):
+  - `check-signup`: ID 토큰(서명·aud·만료·nonce) 검증 → 새 계정 / 기존 계정 / 다른 수단으로 가입됨.
+  - `merge-anonymous`: 로그인 계정 토큰 + 익명 access token → 익명 위시·카테고리·사진·분석 기록을 옮기고 끝나면 익명 사용자를 지운다(멱등). 운영자 경로: service_role + `{fromUserId, toUserId}`(끊긴 세션 문의 복구).
+  - `delete-account`: Apple 철회·카카오 연결 해제 → 사진 → 실패 기록 합산·탈퇴 사유·PostHog 프로필 → 사용자 삭제. 연결 해제에 실패하면 아무것도 지우지 않고 `502 unlink_failed`를 돌려준다(사용자가 고르면 `skipUnlink`로 다시 부름). 헤더 `x-cron-secret`으로 부르면 PostHog 삭제 재시도 표를 처리한다(주간 작업).
+- **콘솔 설정**(사람, 처음 한 번):
+  - 카카오 개발자 콘솔: 앱 2개(운영 — 운영 번들 ID, 개발 — `com.k0nghaa.wishshot.dev`)를 iOS 플랫폼에 등록, 각각 OpenID Connect 켬, 비즈 앱 전환, 이메일 **필수 동의** 신청(목적: "계정 식별, 중복 가입 방지, 서비스 운영 관련 중요 안내"). 운영·개발 앱이 같은 키면 `kakao<키>://` scheme이 겹쳐 어느 앱이 열릴지 정해지지 않으므로 반드시 둘로 나눕니다.
+  - Apple Developer: 두 App ID에 Sign in with Apple, 철회용 키(.p8) 발급.
+  - Supabase Authentication → Providers: Kakao(Client ID에 운영·개발 네이티브 앱 키 둘, "이메일 없는 사용자 허용" 켬), Apple(Client IDs에 번들 ID 둘, 이메일 없는 사용자 허용 확인), 그리고 Manual linking 켬.
+- **배포 순서**(사람): `0008` → `0009` 적용 → `accounts.sql`·`rls.sql` 테스트 6·`audit.sql` 실행 → 타입 재생성 → 시크릿 등록 → 함수를 **이름을 붙여** 하나씩 배포 → 주간 일정 등록.
+
+```bash
+npx supabase@2.121.0 functions deploy check-signup
+npx supabase@2.121.0 functions deploy merge-anonymous
+npx supabase@2.121.0 functions deploy delete-account
+```
+
+  - 주간 일정: `delete-account`를 `x-cron-secret: <CRON_SECRET>` 헤더로 주 1회 POST 합니다(고아 이미지 스윕과 같은 방식). 3년 지난 탈퇴 사유 글 정리는 `0009`가 만든 pg_cron 잡이 합니다.
+- **개발용 결과 흉내**: 설정의 `__DEV__` 영역에서 계정 함수마다 돌려줄 결과를 고르면(`src/lib/accountSimulation.ts`, 기기에 저장돼 다시 켜도 남음) 서버 없이 로그인·합치기·닉네임·삭제 화면의 모든 상태를 볼 수 있습니다. 해제하면 진짜 함수로 돌아갑니다.
+
 ## 익명 세션 지키기
 
-익명 사용자는 기기에 저장된 세션이 계정의 유일한 열쇠입니다. 그래서 앱이 스스로 새 계정을 만들거나 저장된 세션을 지우지 않습니다.
+익명 사용자는 기기에 저장된 세션이 계정의 유일한 열쇠입니다. 그래서 앱이 스스로 새 익명 계정을 만들거나 저장된 세션을 지우지 않습니다(새 익명 계정은 사용자가 "로그인 없이 시작"을 고를 때만).
 
-- **시작 판정**(`bootstrapSession`, 앱 시작 1회): 세션이 있으면 그대로 씁니다. 세션도 사본도 없고 이 기기에서 앱을 쓴 흔적(온보딩 기록·이미지 주소 캐시 등)도 없을 때만 새 익명 계정을 만듭니다.
-  - **연결 실패 화면**: 확인하지 못함(통신 실패·5xx·403·429·402·540 등, 저장소 읽기 실패). 8초가 넘어도 보입니다. 저절로 복구되면 앱으로 들어갑니다. [다시 시도] 문의 — 계속 실패하는 오류(서버 차단·풀리지 않는 사용량 제한 등)에서도 연락할 수 있게 문의를 둡니다.
-  - **끊긴 세션 화면**: 서버가 세션을 거절(`refresh_token_not_found`·`refresh_token_already_used`·`session_expired`·`validation_failed`·세션 없음 응답)했거나 저장값이 깨졌거나 사라짐. [다시 시도] [새로 시작] 문의.
-  - **위시를 저장한 흔적이 없으면** 끊겨도 화면 없이 새로 시작합니다(옛 계정 기록·보관은 같음). 위시 없는 익명 계정은 서버가 30일 뒤 지우므로(`0002`), 그대로 두면 이런 사용자가 30일마다 끊긴 세션 화면을 봅니다. 흔적 = 등록 화면을 연 기록(`wishshot.privacyNoticeShown*`)·제품 영역 고지·이미지 주소 캐시·링크 알림 기록. 흔적은 실행이 시작할 때의 키로 봅니다(시작하며 지우는 만료 캐시에 흔들리지 않게).
-  - 다시 시도는 앱 새로고침입니다. auth-js가 재발급 실패를 60초 동안 저장해 두어, 같은 실행에서 다시 확인하면 같은 실패를 돌려받습니다.
-- **세션 저장소**(`src/lib/sessionVault.ts`): AsyncStorage를 감쌉니다. auth-js가 재발급 실패 뒤 세션을 스스로 지우는 것을 무시하고(다음 자동 갱신이 같은 세션으로 다시 시도), 사용자가 고른 로그아웃(`signOut`)만 지웁니다. 사용자 id·refreshToken 사본(`wishshot.sessionCopy`)은 원래 값이 확실히 없거나 깨졌을 때만 씁니다 — 읽기에 실패했을 때 낡은 사본을 쓰면 서버가 세션 전체를 끝냅니다. 다른 계정의 세션이 저장되면 옛 계정을 `wishshot.sessionArchive`에 보관합니다(최근 5개). **저장 키(`sb-<프로젝트>-auth-token`)는 바꾸지 않습니다** — 바꾸면 모든 사용자의 세션이 사라집니다.
-- **새로 시작**: 지금 계정을 보관하고 새 익명 계정을 만듭니다. 새 계정의 `user_metadata.previous_user_id`에 옛 계정 id가 남습니다.
-- **사용자가 고른 로그아웃**(`signOut`, 지금은 `__DEV__` 세션 초기화만)은 세션과 사본을 지웁니다. 바로 새 계정을 만들지 않은 채 다시 켜면, 위시 흔적이 있는 기기는 끊긴 세션으로 봅니다.
-- **문의**: 메일 제목은 끊긴 세션 화면이 "WishShot 기존 위시 찾기", 연결 실패 화면이 "WishShot 연결 문의"이고, 본문에는 문의 번호(이 기기 계정 id 앞 8자, 모르면 없음)만 넣습니다. 전체 id·토큰은 넣지 않습니다. 두 계정은 새 계정의 `previous_user_id`(전체 id)로 잇고, 문의 번호(앞 8자 — 스크린샷 등에 보일 수 있음)는 후보를 좁히는 데만 씁니다. 둘 다 본인 증거가 아니므로(`user_metadata`는 사용자가 바꿀 수 있음) 위시를 옮기기 전에 메일로 본인을 확인합니다. 옮기는 절차는 사람이 DB·Storage에서 합니다.
-- **대시보드 설정**: Authentication → Sessions의 세션 시간 제한·비활성 만료·사용자당 세션 1개는 꺼 둡니다. 켜면 정상 사용자도 끊긴 세션 화면을 봅니다.
-- **실기기 확인**: 개발용 앱은 Metro에서 JS를 받아 비행기 모드로는 다시 켤 수 없으므로, 설정의 `__DEV__` 흉내를 씁니다. 흉내는 누른 실행(다시 시작할 때까지)과 다음 실행 1회에만 적용되고, 실제 refreshToken은 서버로 가지 않습니다.
-  - **연결 실패 흉내**: 다음 실행 40초 동안 모든 요청 실패. "적용"만 누르고 앱을 끈 뒤 공유 시트로 열면 공유로 연 실행도 확인할 수 있습니다(제어 센터를 열면 앱이 비활성이 되어 받은 사진이 지워짐).
-  - **서버 거절 흉내**: 다음 실행에서 토큰 재발급이 `refresh_token_not_found` → 끊긴 세션 화면. 다시 시도하면 지금 계정으로 돌아오고, 새로 시작하면 새 계정이 됩니다. **위시 흔적이 없는 기기에서는 화면 없이 바로 새 계정이 됩니다** — 끊긴 세션 화면을 보려면 먼저 등록 화면에서 사진을 한 번 고릅니다(새 설치 흉내 뒤라면 특히).
-  - **새 설치 흉내**: 기기의 `wishshot.*`·세션 키를 지우고 다음 실행을 연결 실패로 시작합니다. 위시 흔적도 함께 지워집니다. 지금 계정은 이 기기에서 되찾을 수 없습니다.
+- **첫 화면 판정**: 통신하지 않고 기기 기록만 읽습니다. 읽기에 실패하면 "세션 없음"으로 보지 않고 스플래시를 유지한 채 다시 읽습니다(3번 실패하면 "불러오지 못했습니다" 화면). 세션은 있는데 재발급만 실패하면 전체 탭을 그대로 두고 목록 실패 표시로 다시 시도하게 합니다.
+- **서버가 세션을 거절**(`refresh_token_not_found`·`refresh_token_already_used`·`session_expired`·`validation_failed`·세션 없음 응답):
+  - 익명이었고 위시를 저장한 흔적이 있으면 → 로그인 화면 + 알림창 C(문의하기 / 다시 시도 / 확인). [다시 시도]는 서버에 세션을 다시 확인합니다(`retryLostSession`). 이후 "로그인 없이 시작"(확인창 D)이 만드는 새 익명 계정의 `user_metadata.previous_user_id`에 이전 계정 id가 남습니다.
+  - 흔적이 없으면 → 새 설치와 같은 로그인 화면(알림창 없음). 흔적 = 등록 화면을 연 기록(`wishshot.privacyNoticeShown*`)·제품 영역 고지·이미지 주소 캐시·링크 알림 기록(`hasWishTrace`).
+  - 로그인 계정이었으면 → 로그아웃 상태(최근 로그인 표시)로 바꾸고 로그인 화면.
+- **세션 저장소**(`src/lib/sessionVault.ts`): AsyncStorage를 감쌉니다. auth-js가 재발급 실패 뒤 세션을 스스로 지우는 것을 무시하고, 사용자가 고른 로그아웃·계정 삭제만 지웁니다. 사용자 id·refreshToken 사본(`wishshot.sessionCopy`)은 원래 값이 확실히 없거나 깨졌을 때만 씁니다. 다른 계정의 세션이 저장되면 옛 계정을 `wishshot.sessionArchive`에 보관합니다(최근 5개). **저장 키(`sb-<프로젝트>-auth-token`)는 바꾸지 않습니다** — 바꾸면 모든 사용자의 세션이 사라집니다. auth-js는 재발급 실패를 60초 동안 저장해 두어, 그 사이 같은 토큰으로 다시 확인하면 같은 실패를 돌려받습니다.
+- **문의**: 끊긴 세션의 문의 메일 제목은 "WishShot 기존 위시 찾기"이고, 본문에는 문의 번호(계정 id 앞 8자, 모르면 없음)만 넣습니다. "의견 보내기" 메일에도 문의 번호가 들어갑니다. 두 계정은 새 계정의 `previous_user_id`(전체 id)로 잇고, 문의 번호는 후보를 좁히는 데만 씁니다. 둘 다 본인 증거가 아니므로 메일로 가볍게 본인을 확인한 뒤(문의 번호 + 질문 하나, 운영자는 계정 요약만 보고 사진은 보지 않음) `merge-anonymous`의 운영자 경로로 옮깁니다.
+- **대시보드 설정**: Authentication → Sessions의 세션 시간 제한·비활성 만료·사용자당 세션 1개는 꺼 둡니다. 켜면 정상 사용자도 세션을 잃습니다.
+- **실기기 확인**: 개발용 앱은 Metro에서 JS를 받아 비행기 모드로는 다시 켤 수 없으므로, 설정의 `__DEV__` 흉내를 씁니다(누른 실행과 다음 실행 1회에만 적용, 실제 refreshToken은 서버로 가지 않음).
+  - **연결 실패 흉내**: 다음 실행 40초 동안 모든 요청 실패.
+  - **서버 거절 흉내**: 다음 실행에서 토큰 재발급이 `refresh_token_not_found`. 위시 흔적이 없는 기기에서는 알림창 C 없이 로그인 화면이 됩니다 — 알림창을 보려면 먼저 등록 화면에서 사진을 한 번 고릅니다.
+  - **새 설치 흉내**: 기기의 `wishshot.*`·세션 키를 지웁니다. 지금 익명 계정은 이 기기에서 되찾을 수 없습니다(로그인 계정은 다시 로그인하면 됨).
 
 ## OCR 정제 Edge Function (`parse-screenshot-text`)
 

@@ -106,11 +106,12 @@ flowchart LR
   end
 
   subgraph Supabase
-    Auth[Auth<br/>익명 로그인]
+    Auth[Auth<br/>Apple · 카카오 · 익명]
     DB[(Postgres + RLS)]
     Storage[(Storage<br/>이미지)]
     Parse[Edge Function<br/>parse-screenshot-text]
     Links[Edge Function<br/>find-purchase-links]
+    Account[Edge Function<br/>계정: 가입 확인 · 합치기 · 삭제]
   end
 
   App --> Auth
@@ -118,6 +119,8 @@ flowchart LR
   App --> Storage
   App -->|OCR 텍스트 · 필요 시 제품 영역| Parse
   App -->|제품명 · 브랜드 · 판매처| Links
+  App -->|ID 토큰 · 계정 요청| Account
+  Account --> Social[Apple · 카카오<br/>연결 해제]
   Parse --> Claude[Claude Haiku]
   Links --> Search[Claude 웹 검색]
   Links --> Risk[Google Web Risk]
