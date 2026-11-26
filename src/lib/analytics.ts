@@ -144,6 +144,16 @@ export function identifyUser(uid: string): void {
   }
 }
 
+/** 로그아웃·계정 삭제 때: 식별자와 저장된 속성을 초기화한다(이벤트 전송 설정은 유지). */
+export function resetAnalytics(): void {
+  lastIdentifiedId = null;
+  try {
+    client?.reset();
+  } catch (e) {
+    if (__DEV__) console.warn('[WishShot/analytics] reset 실패', e);
+  }
+}
+
 let errorHandlerInstalled = false;
 
 /**

@@ -1,7 +1,6 @@
 // 지원 메일 주소 만들기(src/lib/supportMail.ts — import 없는 순수 TS) 단위 검증. 네트워크·키 없음.
 // 실행: deno test --no-lock supabase/tests/support_mail_test.ts
 import {
-  connectionMailUrl,
   feedbackMailUrl,
   inquiryNumber,
   lostAccountMailUrl,
@@ -47,18 +46,12 @@ Deno.test('끊긴 세션 문의 메일: 계정 ID 를 모르면 본문 없음', 
   });
 });
 
-Deno.test('연결 실패 문의 메일: 제목만 다르고 본문 규칙은 같다', () => {
-  eq(parseMailto(connectionMailUrl(USER_ID)), {
+Deno.test('의견 보내기 메일: 제목 + 본문 맨 아래 문의 번호, 모르면 제목만', () => {
+  eq(parseMailto(feedbackMailUrl(USER_ID)), {
     address: SUPPORT_EMAIL,
-    params: { subject: 'WishShot 연결 문의', body: '\n\n문의 번호: 8C1F2A3B' },
+    params: { subject: 'WishShot 의견', body: '\n\n문의 번호: 8C1F2A3B' },
   });
-  eq(parseMailto(connectionMailUrl(null)), {
-    address: SUPPORT_EMAIL,
-    params: { subject: 'WishShot 연결 문의' },
-  });
-});
-
-Deno.test('의견 보내기 메일: 제목만(이전과 같음)', () => {
-  const subject = encodeURIComponent('WishShot 의견');
-  eq(feedbackMailUrl(), `mailto:wishshot2026@gmail.com?subject=${subject}`);
+  eq(parseMailto(feedbackMailUrl(null)), { address: SUPPORT_EMAIL, params: { subject: 'WishShot 의견' } });
+  eq(feedbackMailUrl(), `mailto:wishshot2026@gmail.com?subject=${encodeURIComponent('WishShot 의견')}`);
+  eq(feedbackMailUrl(USER_ID).includes(USER_ID), false, '전체 ID 가 들어가면 안 된다');
 });

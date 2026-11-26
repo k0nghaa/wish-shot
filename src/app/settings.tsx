@@ -213,7 +213,7 @@ export default function SettingsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.devButton}
-              onPress={() => router.push('/login')}
+              onPress={() => router.push('/dev/email-login')}
               accessibilityRole="button"
               accessibilityLabel="이메일 로그인(개발용)"
             >

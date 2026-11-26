@@ -13,11 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
+import { devSignInWithPassword } from '@/lib/queries';
 
-// 이메일 + 비밀번호 로그인. 가입 링크는 없다 (본인 계정은 대시보드에서 수동 생성).
-// 익명 로그인 도입으로 정상 흐름에선 도달하지 않는다. 개발용 왕복(설정의
-// "이메일 로그인(개발용)")으로 열려, 이메일 계정으로 되돌아오는 경로를 연다.
+// 개발용(__DEV__ 설정에서만 열림): 이메일 + 비밀번호 로그인. 가입 링크는 없다 (본인 계정은 대시보드에서 수동 생성).
+// 정상 흐름(Apple·카카오 로그인)에선 도달하지 않는다. 이메일 계정으로 되돌아오는 개발용 왕복 경로로 보존한다.
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -32,16 +31,13 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setError(null);
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+    const ok = await devSignInWithPassword(email.trim(), password);
     setLoading(false);
-    if (signInError) {
+    if (!ok) {
       setError('이메일 또는 비밀번호를 확인하세요.');
       return;
     }
-    // 로그인 성공 → 전체 탭(/)으로. AuthGate 는 /login 을 자동 이동시키지 않으므로 직접 이동한다.
+    // 로그인 성공 → 전체 탭(/)으로. 화면 이동은 직접 한다.
     router.replace('/');
   }
 

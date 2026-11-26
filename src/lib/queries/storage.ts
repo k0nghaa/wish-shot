@@ -51,6 +51,17 @@ export function invalidateSignedUrl(imageKey: string): void {
   void AsyncStorage.removeItem(PERSIST_PREFIX + imageKey).catch(() => undefined);
 }
 
+/** 로그아웃·계정 삭제·합치기 뒤: 사진 주소 캐시를 모두 비운다(인메모리+영속). 경로가 바뀌거나 다른 계정이 되기 때문이다. */
+export async function clearSignedUrlCache(): Promise<void> {
+  signedUrlCache.clear();
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(PERSIST_PREFIX));
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {
+    /* 지우지 못해도 다음 미스 때 새로 발급된다 */
+  }
+}
+
 /**
  * 앱 시작 시 1회: 영속 항목을 인메모리 Map 으로 복원한다(만료된 키는 건너뛰고 정리).
  * 복원 실패는 무시한다 — 다음 캐시 미스 때 새로 발급되므로 기능에 지장 없다.
