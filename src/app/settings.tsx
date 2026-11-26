@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountSection } from '@/components/account/AccountSection';
+import { DevAccountTools } from '@/components/account/DevAccountTools';
 import { DisclosureRow, FormCard } from '@/components/FormField';
 import { resetOnboarding } from '@/components/Onboarding/onboardingStorage';
 import { PRIVACY_NOTICE } from '@/constants/privacy';
@@ -33,7 +35,7 @@ export default function SettingsScreen() {
   // 의견 보내기: 앱 안 피드백 경로는 메일 하나다. 모든 사용자에게 보인다.
   function handleSendFeedback() {
     Linking.openURL(feedbackMailUrl()).catch(() => {
-      Alert.alert('메일 열기 실패', `${SUPPORT_EMAIL} 으로 보내주세요.`);
+      Alert.alert('메일 열기 실패', `문의 주소: ${SUPPORT_EMAIL}`);
     });
   }
 
@@ -172,8 +174,7 @@ export default function SettingsScreen() {
     ]);
   }
 
-  // 익명 로그인이라 계정·로그아웃 개념이 없다 — 개인정보 안내만 둔다.
-  // 이메일 가입·계정 연결·로그아웃은 로그인을 도입할 때 넣는다.
+  // 맨 위 '계정' 영역(로그인·닉네임·로그아웃·계정 삭제) 아래에 개인정보 안내·지원을 둔다.
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
@@ -185,6 +186,8 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <AccountSection />
+
         <Text style={styles.sectionLabel}>개인정보 안내</Text>
         <View style={styles.card}>
           <Text style={styles.noticeTitle}>{PRIVACY_NOTICE.title}</Text>
@@ -291,6 +294,7 @@ export default function SettingsScreen() {
             >
               <Text style={styles.devButtonText}>렌더 오류 테스트(개발용)</Text>
             </TouchableOpacity>
+            <DevAccountTools />
           </View>
         ) : null}
       </ScrollView>
