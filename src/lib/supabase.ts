@@ -1,7 +1,7 @@
 import 'react-native-url-polyfill/auto';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
 import { devFetch } from '@/lib/devSessionSimulation';
@@ -18,6 +18,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
     'Supabase 환경 변수가 없습니다. .env에 EXPO_PUBLIC_SUPABASE_URL과 EXPO_PUBLIC_SUPABASE_ANON_KEY를 설정하세요.',
   );
 }
+
+// supabase-js 기본 세션 저장 키(sb-<프로젝트>-auth-token) — 바꾸면 기존 사용자의 세션이 사라진다. 첫 화면 판정이 통신 없이 읽는다.
+export const SESSION_STORAGE_KEY = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
 
 // 세션 저장소: AsyncStorage 를 감싸 세션 사본·보관 목록을 두고, auth-js 가 세션을 스스로 지우는 것을 막는다.
 // 저장 키는 supabase-js 기본값(sb-<프로젝트>-auth-token) 그대로 — 바꾸면 기존 사용자의 세션이 사라진다.
@@ -42,3 +45,14 @@ AppState.addEventListener('change', (state) => {
     supabase.auth.stopAutoRefresh();
   }
 });
+
+/**
+ * 세션 저장·자동 갱신을 끈 따로 만든 클라이언트. 합치기 때 익명 세션을 새로 고치는 데만 쓴다 —
+ * 앱의 세션(로그인 계정)을 건드리지 않고 익명 세션의 새 refreshToken 을 받아 바로 저장하기 위해서다.
+ */
+export function createDetachedClient(): SupabaseClient<Database> {
+  return createClient<Database>(supabaseUrl as string, supabaseAnonKey as string, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    ...(__DEV__ ? { global: { fetch: devFetch } } : {}),
+  });
+}

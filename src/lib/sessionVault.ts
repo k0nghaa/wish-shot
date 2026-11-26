@@ -1,4 +1,4 @@
-// 세션 저장 어댑터와 앱 시작 판정. import 없는 순수 TS — 앱(supabase.ts·queries/auth.ts)과
+// 세션 저장 어댑터와 거절 판정. import 없는 순수 TS — 앱(supabase.ts·queries/auth.ts)과
 // Deno 시험(supabase/tests/session_vault_test.ts)이 함께 쓴다.
 //
 // 익명 사용자는 기기에 저장된 세션이 계정의 유일한 열쇠다. 그래서:
@@ -257,6 +257,16 @@ export function createSessionVault(kv: KeyValueStore) {
       return keys.some((k) => WISH_KEY_PREFIXES.some((p) => k.startsWith(p)));
     },
 
+    /** 보관 목록에서 가장 최근에 보관된 계정의 사용자 id(이전 계정 번호용). 없거나 읽지 못하면 null. */
+    async archivedUserId(): Promise<string | null> {
+      try {
+        const raw = parseJson(await kv.getItem(SESSION_ARCHIVE_KEY));
+        return (Array.isArray(raw) ? raw : []).map(toCopy).find((c): c is SessionCopy => c !== null)?.userId ?? null;
+      } catch {
+        return null;
+      }
+    },
+
     /** 지금 계정을 보관 목록에 넣는다(새로 시작 전). */
     async archiveCurrent(): Promise<void> {
       const copy = lastGood?.copy ?? (await readCopy());
@@ -285,7 +295,9 @@ export function createSessionVault(kv: KeyValueStore) {
   };
 }
 
-// ── 앱 시작 판정 ─────────────────────────────────────────────
+// ── 거절 판정·새 익명 계정 ───────────────────────────────────
+// 앱의 첫 화면 판정은 통신 없이 기기 값만 읽는다(src/lib/accountLogic.ts). 여기엔 서버 거절 분류와 "로그인 없이 시작"의
+// 새 익명 계정 만들기만 둔다.
 
 /** supabase-js `auth` 중 여기서 쓰는 부분. */
 export type SessionAuth = {
@@ -294,14 +306,6 @@ export type SessionAuth = {
     options?: { data?: object };
   }): Promise<{ data: { session: { user: { id: string } } | null }; error: unknown }>;
 };
-
-// userId: 이 기기에 저장된 계정의 사용자 id(문의 번호용). 모르면 null.
-export type BootResult =
-  | { status: 'ready' } // 저장된 세션으로 쓸 수 있음
-  | { status: 'created' } // 이 기기에서 처음 — 새 익명 계정을 만듦
-  | { status: 'restarted' } // 끊겼지만 위시를 저장한 흔적이 없어 화면 없이 새로 시작함(옛 계정은 보관·기록)
-  | { status: 'offline'; userId: string | null } // 확인하지 못함(통신·서버·저장소 오류). auth-js 의 자동 갱신이나 앱 새로고침으로 다시 확인한다
-  | { status: 'lost'; userId: string | null }; // 서버가 세션을 거절했거나 저장값이 사라짐. 새 계정은 사용자가 고를 때만 만든다
 
 // 다시 시도해도 같은 답이 오는 거절. 그 밖의 오류(403·429·402·409·5xx·통신 실패 등)는 일시적일 수 있어 offline 으로 본다.
 // session_not_found 는 auth-js 가 코드 없는 AuthSessionMissingError 로 바꿔 돌려준다.
@@ -319,61 +323,16 @@ export function isSessionRejected(error: unknown): boolean {
 }
 
 /**
- * 앱 시작 때 1회. 이 기기에서 세션을 쓴 적이 없을 때만 새 익명 계정을 만든다.
- * 같은 실행 안에서 다시 부르지 않는다 — 재발급 실패 뒤 60초 동안 auth-js 가 저장해 둔 실패를 돌려준다.
- */
-export async function runSessionBootstrap(auth: SessionAuth, vault: SessionVault): Promise<BootResult> {
-  const offline = async (): Promise<BootResult> => ({
-    status: 'offline',
-    userId: await vault.inquiryUserId(),
-  });
-  let result: Awaited<ReturnType<SessionAuth['getSession']>>;
-  try {
-    result = await auth.getSession();
-  } catch {
-    return offline();
-  }
-  if (result.data.session) return { status: 'ready' };
-  if (result.error) return isSessionRejected(result.error) ? lostOrRestart(auth, vault) : offline();
-  const state = vault.state();
-  if (state === 'corrupt') return lostOrRestart(auth, vault);
-  if (state !== 'none') return offline();
-  let used: boolean;
-  try {
-    used = await vault.hasUsageTrace();
-  } catch {
-    return offline();
-  }
-  if (used) return lostOrRestart(auth, vault);
-  try {
-    const { data, error } = await auth.signInAnonymously();
-    return !error && data.session ? { status: 'created' } : offline();
-  } catch {
-    return offline();
-  }
-}
-
-// 끊긴 세션: 위시를 저장한 흔적이 있으면(모르면) 끊긴 세션 화면, 없으면 잃을 것이 없으니 새로 시작한다.
-// 새로 시작의 가입이 실패하면 offline — 다시 시도(앱 새로고침)하면 같은 판정을 다시 거친다.
-async function lostOrRestart(auth: SessionAuth, vault: SessionVault): Promise<BootResult> {
-  const userId = await vault.inquiryUserId();
-  let hadWishes: boolean;
-  try {
-    hadWishes = await vault.hasWishTrace();
-  } catch {
-    hadWishes = true;
-  }
-  if (hadWishes) return { status: 'lost', userId };
-  return (await runStartOver(auth, vault)) ? { status: 'restarted' } : { status: 'offline', userId };
-}
-
-/**
- * 끊긴 세션에서 사용자가 고른 "새로 시작". 지금 계정을 보관하고 새 익명 계정을 만든다.
+ * 사용자가 고른 "로그인 없이 시작": 지금 계정을 보관하고 새 익명 계정을 만든다.
  * 새 계정의 user_metadata.previous_user_id 에 옛 계정 id 를 남겨, 문의 때 사람이 두 계정을 잇게 한다.
+ * previousUserId: 남길 값. 생략하면 기기에 저장된 계정, null 이면 남기지 않는다.
  * 가입에 실패하면 false — 저장된 세션은 그대로다.
  */
-export async function runStartOver(auth: SessionAuth, vault: SessionVault): Promise<boolean> {
-  const previousUserId = vault.knownUserId();
+export async function runStartOver(
+  auth: SessionAuth,
+  vault: SessionVault,
+  previousUserId: string | null = vault.knownUserId(),
+): Promise<boolean> {
   await vault.archiveCurrent().catch(() => {});
   try {
     const { data, error } = await auth.signInAnonymously(

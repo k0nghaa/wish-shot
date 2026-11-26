@@ -182,6 +182,15 @@ export function pruneMissingItems(existingItemIds: ReadonlySet<string>): Promise
   });
 }
 
+/** 로그아웃·계정 삭제 때: 알림 기록과 찾는 중 표시를 모두 지운다(메모리와 기기). */
+export async function clearAllNotifications(): Promise<void> {
+  await hydrating?.catch(() => undefined);
+  notifications = [];
+  pending.clear();
+  emit();
+  await AsyncStorage.removeItem(NOTIFICATIONS_KEY).catch(() => undefined);
+}
+
 export function subscribeNotifications(listener: () => void): () => void {
   listeners.add(listener);
   return () => {

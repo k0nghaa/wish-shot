@@ -13,11 +13,68 @@ import { createClient } from '@supabase/supabase-js';
 import {
   createSessionVault,
   isSessionRejected,
-  runSessionBootstrap,
   runStartOver,
   SESSION_ARCHIVE_KEY,
   SESSION_COPY_KEY,
+  type SessionAuth,
+  type SessionVault,
 } from '../../src/lib/sessionVault.ts';
+
+// ── 시험용 세션 확인 ──────────────────────────────────────────
+// 세션 저장 어댑터가 auth-js 의 세션 지우기·읽기 실패·재발급 재시도와 맞물려 동작하는지 보려고, getSession(재발급을 기다림)으로
+// 세션을 확인하는 코드다. 앱의 첫 화면 판정은 통신 없이 기기 값만 읽으므로(src/lib/accountLogic.ts, 시험은 account_logic_test.ts)
+// 이 코드를 쓰지 않는다. 다만 결과는 지금 앱의 규칙을 따른다 — 새 익명 계정은 사용자가 "로그인 없이 시작"을 고를 때만
+// 만든다(불변식 1). 세션이 없으면(새 설치·위시 흔적 없는 거절) 계정을 만들지 않고 로그인 화면(signin)이다.
+// userId: 이 기기에 저장된 계정의 사용자 id(문의 번호용). 모르면 null.
+type BootResult =
+  | { status: 'ready' } // 저장된 세션으로 쓸 수 있음
+  | { status: 'signin' } // 세션 없음 + 잃을 위시 없음(새 설치·위시 흔적 없는 거절) — 로그인 화면, 새 계정을 만들지 않음
+  | { status: 'offline'; userId: string | null } // 확인하지 못함(통신·서버·저장소 오류). auth-js 의 자동 갱신으로 다시 확인한다
+  | { status: 'lost'; userId: string | null }; // 서버가 세션을 거절했거나 저장값이 사라짐(위시 흔적 있음) — 알림창 C
+
+
+/**
+ * 시험 실행마다 1회. 새 계정은 만들지 않는다.
+ * 같은 실행 안에서 다시 부르지 않는다 — 재발급 실패 뒤 60초 동안 auth-js 가 저장해 둔 실패를 돌려준다.
+ */
+async function runSessionBootstrap(auth: SessionAuth, vault: SessionVault): Promise<BootResult> {
+  const offline = async (): Promise<BootResult> => ({
+    status: 'offline',
+    userId: await vault.inquiryUserId(),
+  });
+  let result: Awaited<ReturnType<SessionAuth['getSession']>>;
+  try {
+    result = await auth.getSession();
+  } catch {
+    return offline();
+  }
+  if (result.data.session) return { status: 'ready' };
+  if (result.error) return isSessionRejected(result.error) ? lostOrSignIn(vault) : offline();
+  const state = vault.state();
+  if (state === 'corrupt') return lostOrSignIn(vault);
+  if (state !== 'none') return offline();
+  let used: boolean;
+  try {
+    used = await vault.hasUsageTrace();
+  } catch {
+    return offline();
+  }
+  return used ? lostOrSignIn(vault) : { status: 'signin' };
+}
+
+// 끊긴 세션: 위시를 저장한 흔적이 있으면(모르면) 끊긴 세션(알림창 C), 없으면 새 설치와 같은 로그인 화면. 어느 쪽도 계정을 만들지 않는다.
+async function lostOrSignIn(vault: SessionVault): Promise<BootResult> {
+  const userId = await vault.inquiryUserId();
+  let hadWishes: boolean;
+  try {
+    hadWishes = await vault.hasWishTrace();
+  } catch {
+    hadWishes = true;
+  }
+  return hadWishes ? { status: 'lost', userId } : { status: 'signin' };
+}
+
+
 
 const BASELINE = Deno.args.includes('--baseline');
 // 고치기 전 코드는 저장소 읽기 오류가 auth-js 안에서 처리되지 않은 오류가 되어 시험 실행기를 멈춘다 — 비교 실행에서만 삼킨다.
@@ -427,18 +484,21 @@ scenario('저장소 읽기 실패·깨진 값은 "없음"이 아니다', [
   },
 ]);
 
-scenario('새 설치: 지금처럼 새 익명 계정을 만든다', [
-  { name: '온라인', seed: false, wait: 10e3, expect: { boot: 'created', delivered: 'NEW1', account: 'NEW1', again: 'ready/NEW1', signups: 1 } },
-  { name: '오프라인 → 다시 켬', seed: false, net: () => 'down', wait: 10e3, expect: { boot: 'offline:-', delivered: '(없음)', again: 'created/NEW1', signups: 1 } },
+const noAccount = { delivered: '(없음)', account: '(없음)', again: 'signin/(없음)', signups: 0 };
+
+scenario('새 설치: 새 익명 계정을 만들지 않고 로그인 화면(불변식 1)', [
+  { name: '온라인', seed: false, wait: 10e3, expect: { boot: 'signin', ...noAccount }, baseline: false },
+  { name: '오프라인', seed: false, net: () => 'down', wait: 10e3, expect: { boot: 'signin', ...noAccount }, baseline: false },
   { name: '저장소 읽기가 처음부터 오류', seed: false, setup: ({ kv }) => void kv.failKeys.add(KEY), wait: 5e3, relaunch: false, expect: { boot: 'offline:-', signups: 0 } },
   {
-    name: '(한계) 저장소 목록 전체가 초기화되면 새 설치와 구분하지 못한다',
+    name: '(한계) 저장소 목록 전체가 초기화되면 새 설치와 구분하지 못한다 — 로그인 화면(새 계정 없음)',
     before: async (c, kind) => {
       await normalRun(kind, c);
       c.kv.disk = new Map();
     },
     wait: 10e3,
-    expect: { boot: 'created', account: 'NEW1', signups: 1 },
+    expect: { boot: 'signin', ...noAccount },
+    baseline: false,
   },
 ]);
 
@@ -468,15 +528,14 @@ scenario('사본이 없어도 쓴 흔적이 있으면 lost: 말없이 새 계정
 const previousUserRecord = (server: FakeAuthServer) =>
   server.signupBodies.at(-1)?.data?.previous_user_id ?? '없음';
 
-scenario('위시를 저장한 흔적이 없으면 끊겨도 화면 없이 새로 시작한다(잃을 위시가 없음)', [
+scenario('위시를 저장한 흔적이 없으면 끊겨도 새 계정을 만들지 않고 로그인 화면(불변식 1)', [
   {
-    name: '위시 없는 계정이 서버 정리로 지워짐(refresh_token_not_found)',
+    name: '위시 없는 계정이 서버 정리로 지워짐(refresh_token_not_found) — 거절된 세션은 지우지 않는다',
     wishes: false,
     setup: ({ server }) => void (server.chains.get('OLD')!.dead = true),
     wait: 20e3,
-    after: (_l, { kv, server }) =>
-      Promise.resolve(`보관=${archivedUsers(kv)}, 이전 계정 기록=${previousUserRecord(server)}`),
-    expect: { boot: 'restarted', delivered: 'NEW1', again: 'ready/NEW1', signups: 1, note: '보관=OLD, 이전 계정 기록=OLD' },
+    after: (_l, { kv }) => Promise.resolve(`저장된 계정=${storedUser(kv.peek(KEY))}, 보관=${archivedUsers(kv)}`),
+    expect: { boot: 'signin', ...noAccount, note: '저장된 계정=OLD, 보관=없음' },
     baseline: false,
   },
   {
@@ -487,17 +546,20 @@ scenario('위시를 저장한 흔적이 없으면 끊겨도 화면 없이 새로
       await kv.removeItem(KEY);
     },
     wait: 10e3,
-    after: (_l, { server }) => Promise.resolve(`이전 계정 기록=${previousUserRecord(server)}`),
-    expect: { boot: 'restarted', delivered: 'NEW1', signups: 1, note: '이전 계정 기록=없음' },
+    expect: { boot: 'signin', ...noAccount },
     baseline: false,
   },
   {
-    name: '새로 시작의 가입이 실패하면 연결 실패(다시 시도하면 같은 판정)',
+    name: '사용자가 로그인 없이 시작을 고르면 그때만 새 계정(옛 계정은 보관·이전 계정 기록)',
     wishes: false,
     setup: ({ server }) => void (server.chains.get('OLD')!.dead = true),
-    net: signupOnly(() => 'down'),
     wait: 20e3,
-    expect: { boot: 'offline:OLD', delivered: '(없음)', again: 'restarted/NEW1', signups: 1 },
+    after: async (l, { kv, server }, boot) => {
+      if (boot !== 'signin') return '(signin 아님)';
+      const started = await runStartOver(l.client.auth, l.vault);
+      return `새로 시작=${started}, 보관=${archivedUsers(kv)}, 이전 계정 기록=${previousUserRecord(server)}`;
+    },
+    expect: { boot: 'signin', account: 'NEW1', again: 'ready/NEW1', signups: 1, note: '새로 시작=true, 보관=OLD, 이전 계정 기록=OLD' },
     baseline: false,
   },
 ]);
@@ -608,7 +670,7 @@ scenario('새로 시작·로그아웃', [
       await l.vault.allowRemoval(() => l.client.auth.signOut());
       return `세션=${kv.peek(KEY) ? '남음' : '지워짐'}, 사본=${kv.peek(SESSION_COPY_KEY) ? '남음' : '지워짐'}`;
     },
-    expect: { boot: 'ready', again: 'created/NEW1', note: '세션=지워짐, 사본=지워짐' },
+    expect: { boot: 'ready', again: 'signin/(없음)', signups: 0, note: '세션=지워짐, 사본=지워짐' },
     baseline: false,
   },
 ]);

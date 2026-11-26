@@ -4,6 +4,7 @@ import type {
   AccountInfo,
   AppleConfirmResult,
   DeleteAccountResult,
+  RetryLostSessionResult,
   MergeResult,
   NicknameCheckResult,
   SaveNicknameResult,
@@ -27,8 +28,10 @@ export type AccountSimulationMap = {
   confirmAppleForDeletion: AppleConfirmResult;
   deleteAccount: DeleteAccountResult;
   getStartState: StartState;
+  retryLostSession: RetryLostSessionResult;
   shouldShowSignInSheet: boolean;
   markSignInPromptUsed: null;
+  needsNicknameSignup: boolean;
 };
 
 export type SimulatedFunction = keyof AccountSimulationMap;
@@ -93,7 +96,9 @@ export const ACCOUNT_SIMULATION_CHOICES: { readonly [K in SimulatedFunction]: re
   confirmAppleForDeletion: [{ kind: 'confirmed', authorizationCode: 'dev-code' }, { kind: 'cancelled' }, { kind: 'failed' }],
   deleteAccount: [
     { kind: 'deleted' },
-    { kind: 'apple_revoke_failed' },
+    { kind: 'unlink_failed', provider: 'apple' },
+    { kind: 'unlink_failed', provider: 'kakao' },
+    { kind: 'apple_code_required' },
     { kind: 'error', reason: 'network' },
     { kind: 'error', reason: 'server' },
   ],
@@ -107,8 +112,10 @@ export const ACCOUNT_SIMULATION_CHOICES: { readonly [K in SimulatedFunction]: re
     { kind: 'deleting' },
     { kind: 'unreadable' },
   ],
+  retryLostSession: [{ kind: 'restored' }, { kind: 'still_lost' }, { kind: 'error', reason: 'network' }, { kind: 'error', reason: 'server' }],
   shouldShowSignInSheet: [false, true],
   markSignInPromptUsed: [null],
+  needsNicknameSignup: [false, true],
 };
 
 export const ACCOUNT_SIMULATION_KEY = 'wishshot.dev.accountSimulation';

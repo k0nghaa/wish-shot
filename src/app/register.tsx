@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { uuid } from 'expo-modules-core';
-import { router as appRouter, useLocalSearchParams, useRouter } from 'expo-router';
+import { router as appRouter, useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -44,11 +44,14 @@ import {
   findDuplicateItem,
   getCurrentUserId,
   getItemImageSignedUrl,
+  isAccountReady,
   listAllTags,
   listCategories,
+  shouldShowSignInSheet,
   updateItem,
   uploadItemImage,
   uploadItemImageThumb,
+  waitForAccountReady,
   type AnalysisStatus,
   type Category,
   type Item,
@@ -139,13 +142,21 @@ function analysisStatusInfo(
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
   // 저장이 끝나기 전에 이 폼이 닫혔으면(예: 새 공유를 [지금 열기]) 저장 뒤 이동·앨범 삭제 제안을 하지 않는다
   // — 새로 연 화면을 덮지 않게. 저장 자체와 링크 이어 찾기는 그대로 끝낸다.
   const mountedRef = useRef(true);
+  // 서버가 세션을 거절한 뒤 저장하려 하면 폼은 그대로 두고 로그인 화면을 띄운다(로그인하면 이어서 저장). 폼이 닫히면 기다림을 끝낸다.
+  const cancelSignInWaitRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      cancelSignInWaitRef.current?.();
     };
   }, []);
   // sourceLink: 링크붙이기 모드 "새로 담기"로 넘어온 공유 URL 프리필.
@@ -471,10 +482,35 @@ export default function RegisterScreen() {
     // 'deleted' 는 OS 확인창으로 충분(별도 안내 없음), 'error'(취소 포함)는 위시가 이미 저장돼 조용히 넘긴다.
   }
 
+  // 저장할 수 있는 계정 상태인지. 서버가 세션을 거절해 로그인 화면이 필요하면 작성 내용을 둔 채 그 화면을 띄우고, 로그인(또는
+  // 로그인 없이 시작)하면 true 로 이어간다. 이 폼이 닫혔으면 false.
+  async function ensureAccountReady(): Promise<boolean> {
+    if (isAccountReady()) return true;
+    router.push('/sign-in');
+    const wait = waitForAccountReady();
+    cancelSignInWaitRef.current = wait.cancel;
+    const ready = await wait.promise;
+    // 로그인 뒤 합치기·닉네임 화면(흐름 5)을 마치고 이 폼으로 돌아온 다음에 이어서 저장한다.
+    let cancelled = false;
+    cancelSignInWaitRef.current = () => {
+      cancelled = true;
+      wait.cancel();
+    };
+    while (ready && !cancelled && mountedRef.current && pathnameRef.current !== '/register') {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    cancelSignInWaitRef.current = null;
+    return ready && !cancelled && mountedRef.current;
+  }
+
   async function handleSave() {
     if (!canSave) return;
     setSaving(true);
     try {
+      if (!(await ensureAccountReady())) {
+        setSaving(false);
+        return;
+      }
       const existing = await findDuplicateItem(brand, productName.trim());
       if (existing) {
         setSaving(false);
@@ -544,12 +580,20 @@ export default function RegisterScreen() {
     const targetId = categoryId ?? 'uncategorized';
     const targetName = categoryId ? (categories.find((c) => c.id === categoryId)?.name ?? '카테고리') : '미분류';
     router.replace({ pathname: '/category/[id]', params: { id: targetId, name: targetName } });
+    // 익명 계정으로 저장했고 로그인 화면·반시트를 아직 안 보여 줬으면, 저장한 카테고리 목록 위에 반시트를 띄운다(저장 성공 뒤에만).
+    void shouldShowSignInSheet().then((show) => {
+      if (show) router.push('/account/sign-in-sheet');
+    });
   }
 
   async function handleOverwrite() {
     const existing = dupItem;
     if (!existing) return;
     setOverwriteBusy(true);
+    if (!(await ensureAccountReady())) {
+      setOverwriteBusy(false);
+      return;
+    }
     // 기존 위시에 링크가 있고 링크 칸을 손대지 않았으면 기존 링크를 그대로 둔다(찾은 링크로 바꾸지 않음).
     const keepExistingLink = sourceLinkEdit === null && !!existing.source_link;
     const linkHandOff = keepExistingLink ? null : takeLinkHandOff();

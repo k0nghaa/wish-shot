@@ -12,13 +12,8 @@ export function inquiryNumber(userId: string | null): string | null {
   return head ? head[0].toUpperCase() : null;
 }
 
-/** 설정 "의견 보내기" 메일. */
-export function feedbackMailUrl(): string {
-  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('WishShot 의견')}`;
-}
-
-// 시작 화면의 "문의" 메일. 본문은 빈 줄 둘과 문의 번호뿐이다 — 전체 ID·토큰·원인 코드는 넣지 않는다.
-// 문의 번호를 모르면 본문을 비운다.
+// 문의 메일. 본문은 빈 줄 둘과 문의 번호뿐이다 — 전체 ID·토큰·원인 코드는 넣지 않는다.
+// 문의 번호를 모르면 본문을 비운다. 사용자는 보내기 전에 지울 수 있다.
 function inquiryMailUrl(subject: string, userId: string | null): string {
   const number = inquiryNumber(userId);
   const query = [`subject=${encodeURIComponent(subject)}`];
@@ -26,12 +21,12 @@ function inquiryMailUrl(subject: string, userId: string | null): string {
   return `mailto:${SUPPORT_EMAIL}?${query.join('&')}`;
 }
 
-/** 끊긴 세션 화면의 "문의" 메일. */
-export function lostAccountMailUrl(userId: string | null): string {
-  return inquiryMailUrl('WishShot 기존 위시 찾기', userId);
+/** 설정 "의견 보내기" 메일. 본문 맨 아래에 문의 번호(익명·로그인 모두 — 지금 계정 ID 앞 8자). */
+export function feedbackMailUrl(userId: string | null = null): string {
+  return inquiryMailUrl('WishShot 의견', userId);
 }
 
-/** 연결 실패 화면의 "문의" 메일. */
-export function connectionMailUrl(userId: string | null): string {
-  return inquiryMailUrl('WishShot 연결 문의', userId);
+/** 끊긴 세션 화면(알림창 C)·합치지 못한 위시 "문의하기"의 메일. */
+export function lostAccountMailUrl(userId: string | null): string {
+  return inquiryMailUrl('WishShot 기존 위시 찾기', userId);
 }

@@ -5,11 +5,14 @@ import { AccessibilityInfo, Keyboard, StyleSheet, Text, TouchableOpacity, View }
 import { FullWindowOverlay } from 'react-native-screens';
 
 import { colors, hairlineWidth, radius, spacing, type } from '@/constants/theme';
+import { canOpenShare, createShareHold } from '@/lib/accountLogic';
 import { capture } from '@/lib/analytics';
 import { logImageDiag } from '@/lib/imageBytes';
+import { getCurrentAccountState, subscribeAccountStateChange } from '@/lib/queries';
 import { toShareTarget, type ShareTarget } from '@/lib/shareIntent';
 
-// 앱 스택이 아직 없을 때 다시 볼 간격·횟수(약 5초). 그 뒤에도 없으면 이번 공유는 버린다.
+// 앱 화면을 쓸 수 있는 상태인데 앱 스택이 아직 마운트되지 않았을 때 다시 볼 간격·횟수(약 5초). 그 뒤에도 없으면
+// 공유는 버리지 않고 맡겨 둔 채 다음 화면 변화 때 다시 본다.
 const NAV_RETRY_MS = 100;
 const NAV_RETRY_MAX = 50;
 // 같은 공유가 짧은 사이에 두 번 오면(네이티브 값을 두 곳에서 읽는 경우) 두 번째는 버린다.
@@ -30,6 +33,18 @@ type NavRef = ReturnType<typeof useNavigationContainerRef>;
 //    `queued = null; open(queued)`) 값이 틀어진 적이 있다.
 let prompt: ShareTarget | null = null;
 let queued: ShareTarget | null = null;
+// 로그인 화면이 떠 있는 동안(앱 화면이 없는 동안) 온 공유(마지막 1개, 메모리에만). 앱 화면이 생기면 연다.
+// expo-share-intent 는 앱이 inactive/background 가 되면 값을 지우므로(resetOnBackground) 받는 즉시 여기로 옮긴다.
+const heldShare = createShareHold<ShareTarget>();
+function holdShare(target: ShareTarget) {
+  heldShare.hold(target);
+}
+function peekHeldShare(): ShareTarget | null {
+  return heldShare.peek();
+}
+function takeHeldShare(): ShareTarget | null {
+  return heldShare.take();
+}
 const promptListeners = new Set<() => void>();
 /** 맡아 둔 공유를 꺼낸다(꺼내면 비운다). */
 function takeQueued(): ShareTarget | null {
@@ -93,9 +108,10 @@ function openShareTarget(navigationRef: NavRef, target: ShareTarget) {
 }
 
 /**
- * 공유 시트 처리(앱 전체에 1개 — 루트 레이아웃이 세션 준비 뒤에 그린다). 어느 탭·화면을 보고 있든 동작한다.
- * - 앱 스택이 준비될 때까지 기다린 뒤 처리한다(첫 실행 직후 등).
- * - 같은 공유를 두 번 처리하지 않는다: 처리 시작 때 잠그고 바로 resetShareIntent()로 네이티브 값까지 지운다.
+ * 공유 시트 처리(앱 전체에 1개 — 루트 레이아웃이 항상 그린다). 어느 탭·화면을 보고 있든 동작한다.
+ * - 로그인 화면이 떠 있는 동안(앱 화면이 없는 동안) 온 공유는 마지막 1개만 메모리에 맡겨 두었다가, 앱 화면이 생기면
+ *   앱 스택이 준비될 때까지 기다린 뒤 연다(첫 실행 직후 등). 5초 뒤 버리지 않는다.
+ * - 같은 공유를 두 번 처리하지 않는다: 받는 즉시 잠그고 resetShareIntent()로 네이티브 값까지 지운다.
  *   공유 값이 비면(hasShareIntent=false) 잠금을 푼다. 같은 공유가 3초 안에 다시 와도 버린다.
  * - 등록·편집 폼이 떠 있으면 앱 자체 확인창으로 묻는다: [지금 열기](작성 중인 내용 버림) /
  *   [저장 후 열기](맡아 두고, 폼을 저장하거나 취소해 닫으면 이어서 연다). 묻는 중에 또 받으면 확인창 내용이
@@ -108,6 +124,9 @@ export function ShareIntentHandler() {
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
   const handlingRef = useRef(false);
+  // 앱 화면(전체 탭 등)을 쓸 수 있는 상태인지. 로그인 화면·기기 값 읽는 중·삭제 중에는 공유를 맡아 둔다.
+  const accountState = useSyncExternalStore(subscribeAccountStateChange, getCurrentAccountState);
+  const canOpen = canOpenShare(accountState);
   // 앱 스택을 기다린 횟수(공유마다 처음부터 센다). tick 은 다시 보게 하는 신호일 뿐이다.
   const waitedRef = useRef(0);
   const [tick, setTick] = useState(0);
@@ -121,28 +140,15 @@ export function ShareIntentHandler() {
     if (next) openShareTarget(navigationRef, next);
   }, [pathname, navigationRef]);
 
+  // 받은 공유를 꺼내 맡아 둔다: 처리 시작 때 잠그고 바로 resetShareIntent()로 네이티브 값까지 지운다.
+  // 공유 값이 비면(hasShareIntent=false) 잠금을 푼다. 같은 공유가 3초 안에 다시 와도 버린다.
   useEffect(() => {
     if (!hasShareIntent) {
       handlingRef.current = false;
-      waitedRef.current = 0;
       return;
     }
     if (handlingRef.current) return;
-
-    // 앱 스택이 아직 없으면 잠시 뒤 다시 본다(끝내 없으면 이번 공유는 버린다).
-    if (!findAppStack(navigationRef)) {
-      if (waitedRef.current >= NAV_RETRY_MAX) {
-        handlingRef.current = true;
-        resetShareIntent();
-        return;
-      }
-      waitedRef.current += 1;
-      const timer = setTimeout(() => setTick((n) => n + 1), NAV_RETRY_MS);
-      return () => clearTimeout(timer);
-    }
-
     handlingRef.current = true;
-    waitedRef.current = 0;
     const target = toShareTarget(shareIntent);
     resetShareIntent(); // 네이티브 값까지 지워, 앱이 다시 활성화돼도 같은 공유가 다시 오지 않게 한다
     if (!target) return;
@@ -156,6 +162,24 @@ export function ShareIntentHandler() {
     capture('share_intent_received', { type: target.kind }); // 공유 진입 전체량
     if (target.kind === 'image') logImageDiag('shareIntent', target.path, { mimeType: target.mimeType });
 
+    holdShare(target); // 맡아 둔다(마지막 1개) — 아래 효과가 앱 화면이 생기면 연다
+    waitedRef.current = 0;
+    setTick((n) => n + 1);
+  }, [hasShareIntent, shareIntent, resetShareIntent]);
+
+  // 맡아 둔 공유를 연다: 앱 화면을 쓸 수 있고 앱 스택이 마운트됐을 때만. 로그인 화면이 떠 있는 동안 온 공유는 로그인·건너뛰기 뒤에 열린다.
+  useEffect(() => {
+    if (!canOpen || peekHeldShare() === null) return;
+    // 앱 스택이 아직 없으면 잠시 뒤 다시 본다(끝내 없어도 공유는 맡겨 둔 채 다음 변화 때 다시 본다).
+    if (!findAppStack(navigationRef)) {
+      if (waitedRef.current >= NAV_RETRY_MAX) return;
+      waitedRef.current += 1;
+      const timer = setTimeout(() => setTick((n) => n + 1), NAV_RETRY_MS);
+      return () => clearTimeout(timer);
+    }
+    const target = takeHeldShare();
+    waitedRef.current = 0;
+    if (!target) return;
     // 작성 중인 폼이 있으면 묻는다(확인창이 이미 떠 있으면 내용만 마지막 공유로 바뀐다).
     if (isFormPath(pathnameRef.current)) {
       Keyboard.dismiss();
@@ -164,7 +188,7 @@ export function ShareIntentHandler() {
     }
     setQueued(null);
     openShareTarget(navigationRef, target);
-  }, [hasShareIntent, shareIntent, resetShareIntent, navigationRef, tick]);
+  }, [canOpen, navigationRef, tick, pathname]);
 
   return (
     <ShareConfirmDialog
