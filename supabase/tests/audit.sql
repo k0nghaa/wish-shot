@@ -5,6 +5,7 @@
 --       (SQL Editor 는 여러 문장을 넣으면 마지막 결과만 보여 주므로 한 문장으로 묶었다.)
 -- 출력: 구조 정보(권한·정책·설정)와 집계(개수·크기)만 나온다. 사용자 내용·식별자는 나오지 않는다.
 -- 판정: 이 파일에는 적지 않는다. 결과를 점검표(docs/phases/phase-16-rls-storage-audit.md 의 A~D·F, E2 참고)와 대조한다.
+--       예외 G1(계정 로그인 0008·0009 적용 뒤): 기대값을 이 파일이 판정해 value 끝에 OK/FAIL 로 적는다 — FAIL·MISSING 이 0행이어야 한다.
 -- 범위: public·ops 스키마, storage 버킷·정책. Data API 노출 스키마 목록(C1)은 대시보드에서 따로 본다.
 -- =============================================================================
 
@@ -315,6 +316,81 @@ report(sort1, sort2, check_id, target, item, value) as (
   join pg_class c on c.oid = con.conrelid
   join pg_namespace n on n.oid = c.relnamespace
   where con.contype = 'f' and n.nspname in ('public', 'ops')
+
+  -- ── G1. 계정 로그인(0008·0009) 기대값 — value 끝이 'OK' 면 기대와 같고 'FAIL' 이면 어긋남 ─────
+  -- 기대: profiles = anon·service_role 권한 없음, authenticated 는 SELECT 만, RLS 켬, 정책 1개(본인 SELECT).
+  --       새 ops 표 4개 = API 롤 접근 없음 + RLS 켬. 새 함수 13개 = security definer + search_path '' 고정 +
+  --       anon·PUBLIC 실행 불가, 닉네임 3개만 authenticated 실행, 서버용 7개만 service_role 실행, ops 내부 3개는 아무도 불가.
+  --       service_role 은 items·categories·analysis_logs 의 CRUD 만(합치기 함수용, 0009 7번), 그 밖 권한 없음.
+  union all
+  select 130, 'profiles', 'G1', 'public.profiles', 'expect',
+         case when to_regclass('public.profiles') is null then 'MISSING -> FAIL (0008 미적용?)'
+         else format('anon=%s authenticated_select=%s authenticated_write=%s service_role=%s rls=%s policies=%s -> %s',
+                has_table_privilege('anon', 'public.profiles', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+                has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
+                has_table_privilege('authenticated', 'public.profiles', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+                has_table_privilege('service_role', 'public.profiles', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+                (select c.relrowsecurity from pg_class c where c.oid = 'public.profiles'::regclass),
+                (select count(*) from pg_policies pp where pp.schemaname = 'public' and pp.tablename = 'profiles'),
+                case when not has_table_privilege('anon', 'public.profiles', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+                      and has_table_privilege('authenticated', 'public.profiles', 'SELECT')
+                      and not has_table_privilege('authenticated', 'public.profiles', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+                      and not has_table_privilege('service_role', 'public.profiles', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+                      and (select c.relrowsecurity from pg_class c where c.oid = 'public.profiles'::regclass)
+                      and (select count(*) from pg_policies pp where pp.schemaname = 'public' and pp.tablename = 'profiles') = 1
+                     then 'OK' else 'FAIL' end)
+         end
+
+  union all
+  select 131, t.tbl, 'G1', t.tbl, 'expect',
+         case when to_regclass(t.tbl) is null then 'MISSING -> FAIL (0009 미적용?)'
+         else format('anon=%s authenticated=%s service_role=%s rls=%s -> %s',
+                has_table_privilege('anon', t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+                has_table_privilege('authenticated', t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+                has_table_privilege('service_role', t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+                (select c.relrowsecurity from pg_class c where c.oid = to_regclass(t.tbl)),
+                case when not has_table_privilege('anon', t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+                      and not has_table_privilege('authenticated', t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+                      and not has_table_privilege('service_role', t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+                      and (select c.relrowsecurity from pg_class c where c.oid = to_regclass(t.tbl))
+                     then 'OK' else 'FAIL' end)
+         end
+  from (values ('ops.deletion_reason_counts'), ('ops.deletion_reason_texts'), ('ops.posthog_delete_retries'), ('ops.deletion_progress')) as t(tbl)
+
+  union all
+  select 132, x.fname, 'G1', 'function:' || x.fname, 'expect',
+         case when f.oid is null then 'MISSING -> FAIL (0008·0009 미적용?)'
+         else format('definer=%s config=%s PUBLIC=%s anon=%s authenticated=%s service_role=%s -> %s',
+                f.prosecdef, coalesce(array_to_string(f.proconfig, ' '), '(없음)'),
+                has_function_privilege('public', f.oid, 'EXECUTE'),
+                has_function_privilege('anon', f.oid, 'EXECUTE'),
+                has_function_privilege('authenticated', f.oid, 'EXECUTE'),
+                has_function_privilege('service_role', f.oid, 'EXECUTE'),
+                case when f.prosecdef and 'search_path=""' = any (f.proconfig)
+                      and not has_function_privilege('public', f.oid, 'EXECUTE')
+                      and not has_function_privilege('anon', f.oid, 'EXECUTE')
+                      and has_function_privilege('authenticated', f.oid, 'EXECUTE') = x.exp_authenticated
+                      and has_function_privilege('service_role', f.oid, 'EXECUTE') = x.exp_service_role
+                     then 'OK' else 'FAIL' end)
+         end
+  from (values ('ensure_profile', true, false), ('check_nickname', true, false), ('set_nickname', true, false),
+               ('nickname_verdict', false, false), ('nickname_suggestions', false, false), ('require_signed_in', false, false),
+               ('lookup_signup_identity', false, true), ('detach_failure_records', false, true),
+               ('finalize_account_deletion', false, true), ('list_posthog_delete_retries', false, true),
+               ('resolve_posthog_delete_retry', false, true), ('get_deletion_progress', false, true), ('mark_deletion_unlinked', false, true)) as x(fname, exp_authenticated, exp_service_role)
+  left join funcs f on split_part(split_part(f.sig, '(', 1), '.', 2) = x.fname
+
+  union all
+  select 133, t.tbl, 'G1', t.tbl, 'expect:service_role',
+         format('crud=%s other=%s -> %s',
+                (has_table_privilege('service_role', t.tbl, 'SELECT') and has_table_privilege('service_role', t.tbl, 'INSERT')
+                 and has_table_privilege('service_role', t.tbl, 'UPDATE') and has_table_privilege('service_role', t.tbl, 'DELETE')),
+                has_table_privilege('service_role', t.tbl, 'TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+                case when has_table_privilege('service_role', t.tbl, 'SELECT') and has_table_privilege('service_role', t.tbl, 'INSERT')
+                      and has_table_privilege('service_role', t.tbl, 'UPDATE') and has_table_privilege('service_role', t.tbl, 'DELETE')
+                      and not has_table_privilege('service_role', t.tbl, 'TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+                     then 'OK' else 'FAIL' end)
+  from (values ('public.items'), ('public.categories'), ('public.analysis_logs')) as t(tbl)
 )
 select check_id, target, item, value
 from report

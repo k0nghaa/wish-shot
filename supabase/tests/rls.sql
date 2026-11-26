@@ -6,7 +6,7 @@
 -- 두 개의 층을 나눠서 본다:
 --   - GRANT(테이블 접근): has_table_privilege() 로 확인 (테스트 2)
 --   - RLS(행 단위 필터): 다른 uid 로 위장해 0행 나오는지 확인 (테스트 1, 3)
--- 테스트 4·5 는 블록(do ~ 마지막 select)을 한 번에 실행한다. 마지막에 "통과"가 나오면 통과,
+-- 테스트 4·5·6 은 블록(do ~ 마지막 select)을 한 번에 실행한다. 마지막에 "통과"가 나오면 통과,
 --   하나라도 어긋나면 검사 번호가 담긴 오류로 멈춘다. 가짜 사용자·행을 만들어 시험한 뒤
 --   블록 안에서 모두 되돌린다(남는 것 없음, quota.sql 과 같은 방식).
 -- =============================================================================
@@ -323,3 +323,124 @@ end
 $$;
 
 select 'rls.sql 테스트 5: 모든 검사 통과(시험 데이터는 롤백되어 남지 않음)' as result;
+
+-- -----------------------------------------------------------------------------
+-- 테스트 6 (0008·0009 적용 확인) — profiles 격리·권한, 새 ops 표 비노출, 새 함수 권한·search_path
+-- 0008_profiles·0009_account_server 적용 뒤 실행한다. 닉네임 규칙·삭제 마무리 등 동작 검증은 supabase/tests/accounts.sql.
+-- -----------------------------------------------------------------------------
+do $$
+declare
+  u_a     uuid := gen_random_uuid();
+  u_b     uuid := gen_random_uuid();
+  r       record;
+  n       integer;
+  outcome text;
+begin
+  begin
+    insert into auth.users (id, aud, role, is_anonymous)
+    values (u_a, 'authenticated', 'authenticated', false),
+           (u_b, 'authenticated', 'authenticated', false);
+    insert into public.profiles (user_id, nickname, nickname_key)
+    values (u_a, '시험가', '시험가'), (u_b, '시험나', '시험나');
+
+    -- ── 6-1 profiles 테이블 권한: anon 은 아무 권한 없음, authenticated 는 읽기만, service_role 도 없음 ──
+    assert not has_table_privilege('anon', 'public.profiles', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+      '6-1: anon 이 profiles 권한을 가졌다';
+    assert has_table_privilege('authenticated', 'public.profiles', 'SELECT'), '6-1: authenticated 읽기 권한이 있어야 한다';
+    assert not has_table_privilege('authenticated', 'public.profiles', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+      '6-1: authenticated 가 profiles 를 직접 쓸 수 있다';
+    assert not has_table_privilege('service_role', 'public.profiles', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+      '6-1: service_role 이 profiles 권한을 가졌다';
+    assert (select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), '6-1: profiles RLS 가 켜져 있어야 한다';
+    assert (select count(*) from pg_policies where schemaname = 'public' and tablename = 'profiles') = 1
+       and exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles'
+                    and cmd = 'SELECT' and roles = '{authenticated}'),
+      '6-1: profiles 정책은 authenticated SELECT 하나여야 한다';
+
+    -- ── 6-2 남의 profiles 를 읽지 못하고, 직접 update 도 못 한다 ──
+    perform set_config('request.jwt.claims', json_build_object('sub', u_a, 'role', 'authenticated')::text, true);
+    set local role authenticated;
+    select count(*) into n from public.profiles;
+    assert n = 1, format('6-2: 본인 행만 보여야 한다(보이는 행 %s)', n);
+    select count(*) into n from public.profiles where user_id = u_b;
+    assert n = 0, '6-2: 남의 profiles 가 보인다';
+    begin
+      update public.profiles set nickname = '해킹' where user_id = u_a;
+      raise exception '6-2: 직접 update 가 통과했다';
+    exception when insufficient_privilege then null; end;
+    reset role;
+    -- 임의 uid 로 위장하면 0행
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', '00000000-0000-0000-0000-000000000000', 'role', 'authenticated')::text, true);
+    set local role authenticated;
+    select count(*) into n from public.profiles;
+    assert n = 0, '6-2: 임의 uid 로 profiles 가 보인다';
+    reset role;
+
+    -- ── 6-3 새 ops 표: API 롤 접근 없음 + RLS 켬 + 정책 없음 ──
+    for r in
+      select tbl, rl
+      from unnest(array['ops.deletion_reason_counts', 'ops.deletion_reason_texts', 'ops.posthog_delete_retries', 'ops.deletion_progress']) tbl
+      cross join unnest(array['anon', 'authenticated', 'service_role']) rl
+    loop
+      assert not has_table_privilege(r.rl, r.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+        format('6-3: %s 가 %s 에 접근할 수 있다', r.rl, r.tbl);
+    end loop;
+    assert (select count(*) from pg_class
+             where oid in ('ops.deletion_reason_counts'::regclass, 'ops.deletion_reason_texts'::regclass,
+                           'ops.posthog_delete_retries'::regclass, 'ops.deletion_progress'::regclass) and relrowsecurity) = 4, '6-3: 새 ops 표 4개의 RLS';
+    assert (select count(*) from pg_policies where schemaname = 'ops') = 0, '6-3: ops 에 정책이 없어야 한다';
+
+    -- ── 6-4 새 함수: security definer + search_path 고정 + 실행 권한 ──
+    for r in
+      select p.oid, p.oid::regprocedure::text as sig, p.prosecdef, p.proconfig
+        from pg_proc p
+       where p.pronamespace in ('public'::regnamespace, 'ops'::regnamespace)
+         and p.proname in ('ensure_profile', 'check_nickname', 'set_nickname', 'nickname_verdict', 'nickname_suggestions',
+                           'require_signed_in', 'lookup_signup_identity', 'detach_failure_records',
+                           'finalize_account_deletion', 'list_posthog_delete_retries', 'resolve_posthog_delete_retry',
+                           'get_deletion_progress', 'mark_deletion_unlinked')
+    loop
+      assert r.prosecdef, format('6-4: %s 는 security definer 여야 한다', r.sig);
+      assert 'search_path=""' = any (r.proconfig), format('6-4: %s 의 search_path 가 빈 값으로 고정돼 있어야 한다', r.sig);
+      assert not has_function_privilege('public', r.oid, 'EXECUTE') and not has_function_privilege('anon', r.oid, 'EXECUTE'),
+        format('6-4: %s 를 anon·PUBLIC 이 실행할 수 있다', r.sig);
+    end loop;
+    assert (select count(*) from pg_proc
+             where pronamespace in ('public'::regnamespace, 'ops'::regnamespace)
+               and proname in ('ensure_profile', 'check_nickname', 'set_nickname', 'nickname_verdict', 'nickname_suggestions',
+                               'require_signed_in', 'lookup_signup_identity', 'detach_failure_records',
+                               'finalize_account_deletion', 'list_posthog_delete_retries', 'resolve_posthog_delete_retry',
+                           'get_deletion_progress', 'mark_deletion_unlinked')) = 13,
+      '6-4: 새 함수 13개가 모두 있어야 한다';
+    -- 서버용 함수는 service_role 전용: authenticated 가 부르면 안 된다
+    for r in select unnest(array[
+        'public.lookup_signup_identity(text,text,text)', 'public.detach_failure_records(uuid)',
+        'public.finalize_account_deletion(uuid,text,text,boolean)', 'public.list_posthog_delete_retries(integer)',
+        'public.resolve_posthog_delete_retry(uuid,boolean)', 'public.get_deletion_progress(uuid)',
+        'public.mark_deletion_unlinked(uuid)']) as fn
+    loop
+      assert has_function_privilege('service_role', r.fn, 'EXECUTE') and not has_function_privilege('authenticated', r.fn, 'EXECUTE'),
+        format('6-4: %s 는 service_role 전용이어야 한다', r.fn);
+    end loop;
+    -- 닉네임 함수 3개는 authenticated 만
+    assert has_function_privilege('authenticated', 'public.ensure_profile()', 'EXECUTE')
+       and has_function_privilege('authenticated', 'public.check_nickname(text)', 'EXECUTE')
+       and has_function_privilege('authenticated', 'public.set_nickname(text)', 'EXECUTE'),
+      '6-4: 닉네임 함수 3개는 authenticated 가 실행할 수 있어야 한다';
+
+    raise exception using message = 'rls_test6_passed';
+  exception
+    when assert_failure then
+      outcome := sqlerrm;
+    when others then
+      outcome := sqlerrm;
+  end;
+
+  if outcome is distinct from 'rls_test6_passed' then
+    raise exception 'rls.sql 테스트 6 실패 — %', outcome;
+  end if;
+end
+$$;
+
+select 'rls.sql 테스트 6: 모든 검사 통과(시험 데이터는 롤백되어 남지 않음)' as result;
